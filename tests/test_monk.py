@@ -33,6 +33,16 @@ def test_spread_samples_flag_confirmation():
     assert out["confidence"] < 0.6
 
 
+def test_low_confidence_single_photo_trips_confirm():
+    # Real-photo-derived patches (forehead lit, cheeks shadowed): a valid MST7 reading
+    # whose confidence is below the 0.65 floor -> needs_confirm, even though dispersion
+    # stays under CONFIRM_THRESHOLD. This is the single-photo case aggregation rescues.
+    out = classify([(186, 128, 87), (106, 70, 48), (144, 88, 61)])
+    assert out["value"] == 7
+    assert out["confidence"] < 0.65
+    assert out["needs_confirm"] is True
+
+
 def test_near_swatch_snaps_to_nearest():
     # A colour just off MST7 should still land on 7.
     out = classify([(126, 89, 64)])

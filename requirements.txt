@@ -1,7 +1,10 @@
 fastapi
 uvicorn[standard]
 python-multipart
-numpy
+numpy>=1.24,<2.0
 pillow
-opencv-python-headless
-mediapipe
+# Pinned: the intended MediaPipe FaceMesh path needs the legacy solutions API, which
+# was REMOVED in later builds (a broken build silently degraded slice 1 to the weak
+# Haar fallback). 0.10.x keeps solutions AND ships the Tasks API for the future migration.
+opencv-python-headless==4.10.0.84
+mediapipe==0.10.14

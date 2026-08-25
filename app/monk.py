@@ -34,6 +34,11 @@ MONK_SWATCHES: dict[int, RGB] = {
 # Dispersion (in LAB units) above which we ask the user to confirm — spec 4.1.
 CONFIRM_THRESHOLD = 15.0
 
+# Per-photo confidence floor (spec §6). Below this we also ask the user to confirm,
+# even when dispersion is under CONFIRM_THRESHOLD — a shaky single-photo reading is
+# exactly what the 5-photo aggregation is meant to rescue.
+CONFIDENCE_FLOOR = 0.65
+
 # D65 reference white.
 _XN, _YN, _ZN = 95.047, 100.0, 108.883
 
@@ -106,7 +111,8 @@ def classify(samples: Sequence[RGB]) -> dict:
     dispersion = _dispersion(labs)
     # Confidence: tight agreement -> high; scale down toward the confirm threshold.
     confidence = max(0.30, min(0.99, 1.0 - dispersion / 30.0))
-    needs_confirm = dispersion > CONFIRM_THRESHOLD
+    # Confirm on high spread OR a sub-floor single-photo confidence (spec §6).
+    needs_confirm = dispersion > CONFIRM_THRESHOLD or confidence < CONFIDENCE_FLOOR
 
     return {
         "value": value,                          # Monk index 1..10

@@ -93,18 +93,26 @@ def _samples_haar(img_bgr) -> List[RGB]:
 def extract_skin_samples(img_bgr) -> dict:
     """
     img_bgr: an OpenCV BGR image (numpy array).
-    Returns {'samples': [RGB,...], 'detector': str, 'ok': bool}.
+    Returns {'samples': [RGB,...], 'detector': str, 'ok': bool, 'detector_error': str|None}.
     Empty samples => no usable face (feeds the eligibility cascade's retake path).
+
+    detector_error surfaces WHY the preferred MediaPipe path fell back — without it a
+    broken/unpinned mediapipe build degrades silently to the weak Haar fallback (that
+    exact failure happened once, invisibly). See requirements.txt for the pin.
     """
     detector = "mediapipe"
+    detector_error = None
     try:
         samples = _samples_mediapipe(img_bgr)
-    except Exception:
+    except Exception as e:
         samples = []
+        detector_error = f"mediapipe: {type(e).__name__}: {e}"
     if not samples:
         detector = "haar-fallback"
         try:
             samples = _samples_haar(img_bgr)
-        except Exception:
+        except Exception as e:
             samples = []
-    return {"samples": samples, "detector": detector, "ok": len(samples) >= 2}
+            detector_error = (detector_error or "") + f" | haar: {type(e).__name__}: {e}"
+    return {"samples": samples, "detector": detector, "ok": len(samples) >= 2,
+            "detector_error": detector_error}
