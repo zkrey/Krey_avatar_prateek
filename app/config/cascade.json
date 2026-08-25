@@ -1,0 +1,11 @@
+{
+  "version": "cascade-thresholds-v0-UNCALIBRATED",
+  "_note": "PLACEHOLDER thresholds. Spec §6 bias caveat: calibrate on the best consented Indian set (pilot/synthetic pre-launch, real users + NIFT post-launch). An over-aggressive quality gate is a discrimination vector — the fail path must stay gentle retake-coaching, never a wall, except genuine safety blocks.",
+  "stage0": {
+    "min_quality_confidence": 0.35
+  },
+  "stage1": {
+    "min_quality_confidence": 0.50,
+    "min_relevance_confidence": 0.50
+  }
+}
