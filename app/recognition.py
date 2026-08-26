@@ -73,8 +73,16 @@ def recognition_from_body_models(record: Mapping, config: Optional[dict] = None)
     skin = record.get("skin_tone")
     if skin and skin.get("confidence") is not None:
         attrs["skin_tone"] = skin["confidence"]
+    hair = record.get("hair_colour")
+    if hair and hair.get("confidence") is not None:
+        attrs["hair_colour"] = hair["confidence"]
+    eye = record.get("eye_colour")
+    if eye and eye.get("confidence") is not None:
+        attrs["eye_colour"] = eye["confidence"]
+    texture = record.get("hair_texture")
+    if texture and texture.get("available") and texture.get("confidence") is not None:
+        attrs["hair_texture"] = texture["confidence"]   # stub omits itself until built
     ledger = record.get("accuracy_ledger")
     if ledger and ledger.get("landmark_coverage") is not None:
         attrs["landmark_coverage"] = ledger["landmark_coverage"]
-    # hair_colour / hair_texture / eye_colour: slices not built yet -> omitted.
     return avatar_confidence(attrs, config)

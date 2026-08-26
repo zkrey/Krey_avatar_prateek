@@ -31,6 +31,9 @@ def empty_body_models() -> dict:
     return {
         "schema_version": SCHEMA_VERSION,
         "skin_tone": None,
+        "hair_colour": None,
+        "hair_texture": None,
+        "eye_colour": None,
         "measurements": None,
         "body_shape": None,
         "accuracy_ledger": None,
@@ -44,17 +47,17 @@ def assemble_body_models(
     body_shape: Optional[Mapping] = None,
     accuracy_ledger: Optional[Mapping] = None,
     avatar_confidence: Optional[Mapping] = None,
+    hair_colour: Optional[Mapping] = None,
+    hair_texture: Optional[Mapping] = None,
+    eye_colour: Optional[Mapping] = None,
 ) -> dict:
     """Compose whatever slices are available into one body_models record."""
     record = empty_body_models()
-    if skin_tone is not None:
-        record["skin_tone"] = dict(skin_tone)
-    if measurements is not None:
-        record["measurements"] = dict(measurements)
-    if body_shape is not None:
-        record["body_shape"] = dict(body_shape)
-    if accuracy_ledger is not None:
-        record["accuracy_ledger"] = dict(accuracy_ledger)
-    if avatar_confidence is not None:
-        record["avatar_confidence"] = dict(avatar_confidence)
+    for key, val in (("skin_tone", skin_tone), ("hair_colour", hair_colour),
+                     ("hair_texture", hair_texture), ("eye_colour", eye_colour),
+                     ("measurements", measurements), ("body_shape", body_shape),
+                     ("accuracy_ledger", accuracy_ledger),
+                     ("avatar_confidence", avatar_confidence)):
+        if val is not None:
+            record[key] = dict(val)
     return record

@@ -63,6 +63,21 @@ def test_body_models_record_carries_avatar_confidence_slot():
     assert rec["avatar_confidence"] == {"overall": 0.9}
 
 
+def test_hair_and_eye_slices_lift_coverage_to_ninety_percent():
+    # skin + landmarks alone = 55% of the §6 signal; adding hair_colour + eye_colour
+    # takes it to 90% (only hair_texture, the unbuilt classifier, remains).
+    record = assemble_body_models(
+        skin_tone={"confidence": 0.8},
+        hair_colour={"confidence": 0.8},
+        eye_colour={"confidence": 0.8},
+        hair_texture={"available": False, "confidence": None},   # stub omits itself
+        accuracy_ledger={"landmark_coverage": 0.8},
+    )
+    out = recognition_from_body_models(record)
+    assert out["weight_coverage"] == 0.9 and out["overall"] == 0.8
+    assert out["attributes_missing"] == ["hair_texture"]
+
+
 if __name__ == "__main__":
     import subprocess
     raise SystemExit(subprocess.call(["pytest", "-q", __file__]))
