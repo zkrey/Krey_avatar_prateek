@@ -115,3 +115,15 @@ develop and prove against; **before commercial launch, swap to a licence-cleared
 AWS Rekognition / Azure Face / Face++). Same licence-gate discipline as SMPL-X / YOLO.
 Estimated age is a noisy per-face cross-check only; the real ageing signal is the EXIF
 timestamp.
+
+## Paid / premium face-detection tier (revisit with team)
+
+Founder note: keep a **paid high-quality face-reader** on the roadmap as a tiering lever,
+not just a licence fix. Where the economics justify per-call cost:
+  - **Subscription tier:** premium users get the paid high-accuracy detector/embedder.
+  - **B2B / in-store:** magic-mirror & retailer SDK can carry a paid face API (accuracy
+    and SLA matter more, volume is controlled).
+Free/open model stays the default for M1 consumer scale. Decision to make WITH the team
+once we reach the quality-tier stage: which paid vendor (AWS Rekognition / Azure Face /
+Face++ / a licensed ArcFace), price per call, and where the tier line sits. This also
+resolves the InsightFace non-commercial licence flag for the paid surfaces.
