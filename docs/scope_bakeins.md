@@ -64,5 +64,12 @@ The sub-project spec **locked** M1 render = generative (Path B) + **rule-compute
 per-garment 3D asset doesn't scale to open inventory and was the original blocker. If Sohan's
 Blender/3D work is intended as the **M1 fit engine**, it conflicts with that locked decision and
 duplicates the rule fit-score. If it's intended as the **M2 fit-truth / premium** engine, it's
-complementary — it just fills the same fit contract later. His code is not on GitHub yet, so this
-must be confirmed with him before either path is treated as M1-critical.
+complementary — it just fills the same fit contract later.
+
+**RESOLVED → M2.** Sohan's 3D work is deferred to M2, **gated on the M1 rule fit-score reaching
+~85% precision with a fast on-phone render** (so the UX doesn't collapse). His repo
+`zkrey/blendertemplateclothing` currently holds only two Blender clothing-template scenes
+(men/women `.blend`); no SMPL-X / pipeline / NN code yet. Integration seams: (1) `body_models`
+measurements → SMPL-X shape betas; (2) shrink-wrap garment-vs-body distances → the `fit_score`
+contract as `method:"mesh-fit-v1"`. Licences to confirm before deep work: **SMPL-X** (commercial
+licence), **YOLO** (AGPL — prefer YOLOX / RT-DETR), and the **DLR** model (unidentified — get the link).
