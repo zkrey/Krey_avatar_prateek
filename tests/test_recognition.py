@@ -78,6 +78,16 @@ def test_hair_and_eye_slices_lift_coverage_to_ninety_percent():
     assert out["attributes_missing"] == ["hair_texture"]
 
 
+def test_texture_available_closes_coverage_to_full():
+    record = assemble_body_models(
+        skin_tone={"confidence": 0.8}, hair_colour={"confidence": 0.8},
+        eye_colour={"confidence": 0.8}, accuracy_ledger={"landmark_coverage": 0.8},
+        hair_texture={"available": True, "confidence": 0.8},   # now measured
+    )
+    out = recognition_from_body_models(record)
+    assert out["weight_coverage"] == 1.0 and out["attributes_missing"] == []
+
+
 if __name__ == "__main__":
     import subprocess
     raise SystemExit(subprocess.call(["pytest", "-q", __file__]))

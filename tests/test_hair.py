@@ -36,10 +36,23 @@ def test_top_candidates_are_sorted_and_capped():
     assert deltas == sorted(deltas)
 
 
-def test_texture_is_an_honest_unavailable_stub():
+def test_texture_is_unavailable_without_features():
     out = classify_hair_texture()
     assert out["available"] is False and out["value"] is None
-    assert tuple(out["candidates"]) == HAIR_TEXTURES
+
+
+def test_texture_classifier_bins_the_four_types():
+    # (coherence high, curl low) = straight ... (coherence low, curl high) = coily
+    cases = {
+        "straight": {"coherence": 0.90, "curl_frequency": 0.05},
+        "wavy":     {"coherence": 0.55, "curl_frequency": 0.25},
+        "curly":    {"coherence": 0.30, "curl_frequency": 0.50},
+        "coily":    {"coherence": 0.15, "curl_frequency": 0.90},
+    }
+    for expected, feats in cases.items():
+        out = classify_hair_texture(feats)
+        assert out["available"] is True and out["value"] == expected
+        assert out["value"] in HAIR_TEXTURES and out["top_candidates"][0]["label"] == expected
 
 
 def test_empty_samples_raise():

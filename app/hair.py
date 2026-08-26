@@ -12,10 +12,25 @@ clean pixels) is lazy/model-backed and lives with the other pipelines; this modu
 deterministic, unit-testable core. Reuses the Monk LAB machinery (no duplication).
 """
 from __future__ import annotations
-from typing import Sequence, Tuple
+from typing import Sequence, Tuple, Optional, Mapping
+import json
+import os
 from app.monk import rgb_to_lab, delta_e76, _median_lab, _dispersion
 
 RGB = Tuple[int, int, int]
+_TEXTURE_CONFIG = os.path.join(os.path.dirname(__file__), "config", "texture.json")
+_texture_rules: Optional[dict] = None
+
+
+def load_texture_rules(path: Optional[str] = None) -> dict:
+    global _texture_rules
+    if path is not None:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    if _texture_rules is None:
+        with open(_TEXTURE_CONFIG, encoding="utf-8") as f:
+            _texture_rules = json.load(f)
+    return _texture_rules
 
 # Representative natural hair colours (spec §4.2 categories).
 HAIR_COLOURS: dict[str, RGB] = {
@@ -69,18 +84,76 @@ def classify_hair_colour(samples: Sequence[RGB]) -> dict:
     }
 
 
-def classify_hair_texture(_samples=None) -> dict:
+def classify_hair_texture(features: Optional[Mapping[str, float]] = None,
+                          rules: Optional[dict] = None) -> dict:
     """
-    Stub: hair texture needs a small classifier / VLM (spec §8) — it is NOT colour maths,
-    so it cannot be done deterministically. Returns the contract with available=False so
-    the recognition score honestly treats texture as not-yet-measured.
+    Heuristic hair-texture classifier (spec §8 baseline; GPU-free).
+    `features` = {coherence, curl_frequency} (both ~0..1) from the hair region — see
+    `texture_features_from_region`. Combines them into a 0..1 texture_index and bins it
+    into straight/wavy/curly/coily. With no features it stays an honest unavailable stub,
+    so recognition treats texture as not-yet-measured.
+
+    This is a modest v0 baseline; the spec's upgrade path is a small classifier / VLM.
     """
+    if features is None:
+        return {"value": None, "available": False, "candidates": list(HAIR_TEXTURES),
+                "confidence": None, "needs_confirm": False, "model": "heuristic-texture-v0",
+                "note": "no hair-region features supplied (needs the mask pipeline / a model)"}
+
+    r = rules or load_texture_rules()
+    wf, wc = r["weights"]["curl_frequency"], r["weights"]["coherence"]
+    coh = max(0.0, min(1.0, float(features["coherence"])))
+    freq = max(0.0, min(1.0, float(features["curl_frequency"])))
+    index = (freq * wf + (1.0 - coh) * wc) / (wf + wc)          # 0 straight … 1 coily
+
+    bins = r["bins"]
+    if index <= bins["straight"]:
+        value = "straight"
+    elif index <= bins["wavy"]:
+        value = "wavy"
+    elif index <= bins["curly"]:
+        value = "curly"
+    else:
+        value = "coily"
+
+    centers = r["centers"]
+    d = abs(index - centers[value])
+    confidence = round(max(0.30, min(0.95, 0.95 - 1.5 * d)), 3)
+    needs_confirm = confidence < r["confidence_floor"]
+    top = [{"label": k, "distance": round(abs(index - centers[k]), 3)}
+           for k in sorted(centers, key=lambda k: abs(index - centers[k]))]
     return {
-        "value": None,
-        "available": False,
-        "candidates": list(HAIR_TEXTURES),
-        "confidence": None,
-        "needs_confirm": False,
-        "model": "needs-classifier",
-        "note": "texture classifier not built; hair_texture omitted from recognition until it is",
+        "value": value,
+        "available": True,
+        "confidence": confidence,
+        "needs_confirm": needs_confirm,
+        "top_candidates": top,
+        "features": {"coherence": round(coh, 3), "curl_frequency": round(freq, 3),
+                     "texture_index": round(index, 3)},
+        "model": "heuristic-texture-v0",
     }
+
+
+def texture_features_from_region(region_bgr, rules: Optional[dict] = None) -> dict:
+    """
+    Classical-CV features from a hair-region image (lazy; needs cv2/numpy). Strand-direction
+    COHERENCE via the structure tensor (high=straight) and CURL_FREQUENCY via the fraction
+    of high-frequency energy (high=coily). v0 heuristic — validate/calibrate on real hair.
+    """
+    import numpy as np
+    import cv2
+    gray = cv2.cvtColor(region_bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    gx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
+    jxx, jyy, jxy = float(np.mean(gx * gx)), float(np.mean(gy * gy)), float(np.mean(gx * gy))
+    denom = jxx + jyy + 1e-6
+    coherence = float(np.sqrt((jxx - jyy) ** 2 + 4 * jxy ** 2) / denom)   # 0..1
+    # high-frequency energy fraction as a curl proxy
+    f = np.fft.fftshift(np.fft.fft2(gray - gray.mean()))
+    mag = np.abs(f)
+    h, w = mag.shape
+    yy, xx = np.ogrid[:h, :w]
+    rr = np.sqrt((yy - h / 2) ** 2 + (xx - w / 2) ** 2)
+    high = float(mag[rr > 0.25 * min(h, w)].sum())
+    curl_frequency = min(1.0, high / (mag.sum() + 1e-6))
+    return {"coherence": min(1.0, coherence), "curl_frequency": curl_frequency}

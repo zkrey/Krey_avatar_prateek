@@ -1,0 +1,8 @@
+{
+  "version": "hair-texture-rules-v0-UNCALIBRATED-heuristic",
+  "_note": "Classical-CV heuristic baseline (GPU-free): from the hair region we derive strand-direction COHERENCE (high=straight) and CURL_FREQUENCY (high=coily), combine into a 0..1 texture_index and bin it. Modest accuracy on purpose — spec §8 upgrade path is a small classifier / VLM once validated on the hair-style dataset. Placeholders; calibrate later.",
+  "weights": {"curl_frequency": 1.0, "coherence": 1.0},
+  "bins": {"straight": 0.30, "wavy": 0.55, "curly": 0.80},
+  "centers": {"straight": 0.15, "wavy": 0.42, "curly": 0.67, "coily": 0.90},
+  "confidence_floor": 0.60
+}
