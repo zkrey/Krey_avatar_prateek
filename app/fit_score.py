@@ -23,7 +23,9 @@ import os
 
 METHOD = "rule-fit-v0"
 _CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config", "fit.json")
+_CHARTS_PATH = os.path.join(os.path.dirname(__file__), "config", "size_charts.json")
 _cache: Optional[dict] = None
+_charts_cache: Optional[dict] = None
 
 
 def load_rules(path: Optional[str] = None) -> dict:
@@ -35,6 +37,27 @@ def load_rules(path: Optional[str] = None) -> dict:
         with open(_CONFIG_PATH, encoding="utf-8") as f:
             _cache = json.load(f)
     return _cache
+
+
+def load_size_charts(path: Optional[str] = None) -> dict:
+    """Sample garment size charts (garment finished girths). Real charts are per product;
+    calibration of the ease/preference rules is data-driven post-launch (fit.json)."""
+    global _charts_cache
+    if path is not None:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    if _charts_cache is None:
+        with open(_CHARTS_PATH, encoding="utf-8") as f:
+            _charts_cache = json.load(f)
+    return _charts_cache
+
+
+def garment_from_chart(name: str, path: Optional[str] = None) -> dict:
+    """Return a garment dict ({cut, fabric_stretch, size_chart}) ready for recommend_size."""
+    charts = load_size_charts(path)["charts"]
+    if name not in charts:
+        raise KeyError(f"unknown size chart {name!r}; have {sorted(charts)}")
+    return charts[name]
 
 
 def from_body_models(measurements_slice: Mapping) -> tuple[dict, dict]:

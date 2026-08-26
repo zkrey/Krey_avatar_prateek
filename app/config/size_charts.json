@@ -1,0 +1,34 @@
+{
+  "version": "size-charts-v0-sample",
+  "_note": "Sample GARMENT finished girths (cm) — the garment's own circumference, NOT body measurements (room = garment - body). Real charts are per brand/product, and per scanned garment for scan-a-product; these are illustrative for demos/tests and are NOT calibrated to any brand. Calibration is data-driven post-launch: fit-feedback + returns tune the ease/preference offsets in fit.json, which is versioned/swappable.",
+  "charts": {
+    "womens_top_regular": {
+      "cut": "regular", "fabric_stretch": "low",
+      "size_chart": {
+        "XS": {"chest": 88, "waist": 74, "hip": 92},
+        "S":  {"chest": 94, "waist": 80, "hip": 98},
+        "M":  {"chest": 100, "waist": 86, "hip": 104},
+        "L":  {"chest": 106, "waist": 92, "hip": 110},
+        "XL": {"chest": 112, "waist": 98, "hip": 116}
+      }
+    },
+    "mens_top_regular": {
+      "cut": "regular", "fabric_stretch": "none",
+      "size_chart": {
+        "S":  {"chest": 100, "waist": 90, "hip": 100},
+        "M":  {"chest": 106, "waist": 96, "hip": 106},
+        "L":  {"chest": 112, "waist": 102, "hip": 112},
+        "XL": {"chest": 118, "waist": 108, "hip": 118}
+      }
+    },
+    "womens_bottom_regular": {
+      "cut": "regular", "fabric_stretch": "low",
+      "size_chart": {
+        "S":  {"waist": 72, "hip": 96},
+        "M":  {"waist": 78, "hip": 102},
+        "L":  {"waist": 84, "hip": 108},
+        "XL": {"waist": 90, "hip": 114}
+      }
+    }
+  }
+}

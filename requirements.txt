@@ -8,3 +8,6 @@ pillow
 # Haar fallback). 0.10.x keeps solutions AND ships the Tasks API for the future migration.
 opencv-python-headless==4.10.0.84
 mediapipe==0.10.14
+
+# test-only: FastAPI TestClient
+httpx

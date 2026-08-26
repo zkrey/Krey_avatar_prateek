@@ -122,6 +122,18 @@ def test_grade_sizes_describes_how_each_size_sits():
     assert grades["L"]["sits_as"] == "relaxed"          # the roomy option to pick on purpose
 
 
+def test_recommend_from_a_real_size_chart():
+    from app.fit_score import garment_from_chart, load_size_charts
+    assert "sample" in load_size_charts()["version"]
+    garment = garment_from_chart("womens_top_regular")
+    body = {"chest": 94.6, "waist": 78.4, "hip": 98.0}      # the real measured body
+    true = recommend_size(body, garment, fit_preference="true")
+    baggy = recommend_size(body, garment, fit_preference="oversized")
+    assert true["best_size"] in garment["size_chart"]
+    sizes = list(garment["size_chart"])                     # a roomier preference never
+    assert sizes.index(baggy["best_size"]) >= sizes.index(true["best_size"])  # picks smaller
+
+
 if __name__ == "__main__":
     import subprocess
     raise SystemExit(subprocess.call(["pytest", "-q", __file__]))
