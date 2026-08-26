@@ -9,7 +9,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import numpy as np
 from app.face_pipeline import (
-    hair_samples_from_mask, iris_samples_from_landmarks, sample_hair_and_eyes,
+    hair_samples_from_mask, iris_samples_from_landmarks, sample_face,
+    gate_from_face_count, iris_points, skin_samples_from_landmarks,
+    LEFT_IRIS, RIGHT_IRIS,
 )
 
 
@@ -73,12 +75,41 @@ def test_iris_degenerate_geometry_is_empty():
     assert iris_samples_from_landmarks(img, [(5, 5)] * 5) == []          # zero radius
 
 
-def test_sample_hair_and_eyes_degrades_to_empties_without_models(monkeypatch):
-    # no MODELS_DIR models present -> pipeline returns empties, never raises.
+def test_single_face_gate():
+    assert gate_from_face_count(0) == "no_face"
+    assert gate_from_face_count(1) == "ok"
+    assert gate_from_face_count(2) == "multiple_faces"
+    assert gate_from_face_count(5) == "multiple_faces"
+
+
+def test_iris_points_pulls_the_two_eye_sets():
+    lm = [(float(i), float(i)) for i in range(478)]     # full mesh incl. iris
+    left, right = iris_points(lm)
+    assert [lm[i] for i in LEFT_IRIS] == left
+    assert [lm[i] for i in RIGHT_IRIS] == right
+
+
+def test_iris_points_empty_when_no_iris_landmarks():
+    lm = [(0.0, 0.0)] * 468                              # mesh without the iris head
+    assert iris_points(lm) == ([], [])
+
+
+def test_skin_samples_come_from_landmark_patches():
+    from app.skin_tone import _FOREHEAD, _LEFT_CHEEK, _RIGHT_CHEEK
+    img = np.full((200, 200, 3), (120, 150, 190), np.uint8)   # uniform skin (BGR)
+    lm = [(100.0, 100.0)] * 478                                # all patches on skin
+    samples = skin_samples_from_landmarks(img, lm)
+    assert samples and all(s == (190, 150, 120) for s in samples)   # BGR -> RGB
+
+
+def test_sample_face_no_model_is_no_face_and_never_raises(monkeypatch):
+    # no MODELS_DIR models present -> gate no_face, all sample lists empty, no crash.
     monkeypatch.setenv("MODELS_DIR", "/nonexistent-models-dir")
     img = np.zeros((32, 32, 3), np.uint8)
-    hair, iris, region = sample_hair_and_eyes(img)
-    assert hair == [] and iris == [] and region is None
+    sig = sample_face(img)
+    assert sig["gate"] == "no_face" and sig["n_faces"] == 0
+    assert sig["skin_samples"] == [] and sig["hair_samples"] == []
+    assert sig["iris_samples"] == [] and sig["hair_region"] is None
 
 
 if __name__ == "__main__":

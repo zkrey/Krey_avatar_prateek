@@ -3,10 +3,10 @@ Face-extraction orchestrator — composes the face attribute slices into the bod
 face portion + the §6 recognition score, from whatever clean samples are available.
 
 `assemble_face` is pure/deterministic given samples, so it is fully unit-testable without
-a photo. The image samplers that PRODUCE the samples live in the pipeline: skin uses
-`skin_tone.extract_skin_samples` (built); hair (MediaPipe hair_segmenter -> mask) and iris
-(face_landmarker -> eye crops) samplers are model-backed and are a documented hook here
-(`sample_hair_and_eyes`) until those models are wired — same pattern as the pose model.
+a photo. The image samplers that PRODUCE the samples live in the pipeline
+(`face_pipeline`): one MediaPipe face_landmarker pass drives the single-face gate + skin
+patches + iris crops, and the hair_segmenter yields the hair mask. `sample_face` wraps
+that pipeline (lazily, so this module stays pure to import).
 """
 from __future__ import annotations
 from typing import Optional, Sequence, Tuple
@@ -41,12 +41,14 @@ def face_slices_present(record: dict) -> list:
             if record.get(k) and record[k].get("value") is not None]
 
 
-def sample_hair_and_eyes(img_bgr):
+def sample_face(img_bgr) -> dict:
     """
-    Returns (hair_samples, iris_samples, hair_region_bgr) via the model-backed pipeline
-    (MediaPipe hair_segmenter + face_landmarker). Imported lazily so this module stays
-    pure/GPU-free to import; when a model is absent the pipeline returns empties and the
-    face endpoint composes whatever IS available (skin), degrading cleanly.
+    Run the model-backed pipeline (MediaPipe face_landmarker + hair_segmenter) and return
+    the single-face gate + clean skin/hair/iris samples:
+        {gate, n_faces, skin_samples, hair_samples, iris_samples, hair_region}
+    Imported lazily so this module stays pure/GPU-free to import. `gate` is the decision:
+    'ok' (one clear face) yields samples; 'no_face' / 'multiple_faces' come back empty so
+    the endpoint asks for a retake instead of trusting a group photo.
     """
-    from app.face_pipeline import sample_hair_and_eyes as _impl
+    from app.face_pipeline import sample_face as _impl
     return _impl(img_bgr)

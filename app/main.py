@@ -127,21 +127,29 @@ async def extract_face(
     if img is None:
         raise HTTPException(400, "could not decode image")
 
-    found = extract_skin_samples(img)
-    skin_samples = found["samples"] if found["ok"] else None
-    hair_samples, iris_samples, hair_region = face.sample_hair_and_eyes(img)
-    hair_features = (face.hair.texture_features_from_region(hair_region)
-                     if hair_region is not None else None)
+    # Single-clear-face gate FIRST: no face / multiple faces -> retake, trust nothing.
+    sig = face.sample_face(img)
+    if sig["gate"] != "ok":
+        analytics.input_cascade(spine, passed=False, stage=0, quality_flags=[sig["gate"]])
+        return {
+            "eligibility": {"passed": False, "stage": 0, "quality_flags": [sig["gate"]]},
+            "n_faces": sig["n_faces"],
+            "body_models": None,
+        }
 
-    record = face.assemble_face(skin_samples=skin_samples, hair_samples=hair_samples,
-                                iris_samples=iris_samples, hair_features=hair_features)
+    hair_features = (face.hair.texture_features_from_region(sig["hair_region"])
+                     if sig["hair_region"] is not None else None)
+    record = face.assemble_face(skin_samples=sig["skin_samples"] or None,
+                                hair_samples=sig["hair_samples"] or None,
+                                iris_samples=sig["iris_samples"] or None,
+                                hair_features=hair_features)
 
     present = face.face_slices_present(record)
     if not present:
-        # Nothing usable in the frame -> Stage-0 retake signal.
-        analytics.input_cascade(spine, passed=False, stage=0, quality_flags=["no_face"])
+        analytics.input_cascade(spine, passed=False, stage=0, quality_flags=["no_attributes"])
         return {
-            "eligibility": {"passed": False, "stage": 0, "quality_flags": ["no_face"]},
+            "eligibility": {"passed": False, "stage": 0, "quality_flags": ["no_attributes"]},
+            "n_faces": sig["n_faces"],
             "body_models": None,
         }
 
@@ -150,6 +158,7 @@ async def extract_face(
     return {
         "eligibility": {"passed": True, "stage": 2, "quality_flags": []},
         "slices_present": present,
+        "n_faces": sig["n_faces"],
         "body_models": record,
     }
 

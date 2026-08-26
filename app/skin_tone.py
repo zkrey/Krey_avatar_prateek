@@ -47,24 +47,14 @@ def _sample_at(img_bgr, x: int, y: int) -> RGB | None:
 
 
 def _samples_mediapipe(img_bgr) -> List[RGB]:
-    import mediapipe as mp  # lazy
-    import cv2
-    h, w = img_bgr.shape[:2]
-    rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-    with mp.solutions.face_mesh.FaceMesh(
-        static_image_mode=True, max_num_faces=1, refine_landmarks=False
-    ) as fm:
-        res = fm.process(rgb)
-    if not res.multi_face_landmarks:
+    # Modern MediaPipe Tasks FaceLandmarker (the legacy mp.solutions.face_mesh path is
+    # gone in current builds). Shares the one landmarker used for iris/gate so skin and
+    # eyes come off the same face detection.
+    from app.face_pipeline import run_face_landmarker, skin_samples_from_landmarks
+    faces = run_face_landmarker(img_bgr, num_faces=1)
+    if not faces:
         return []
-    lm = res.multi_face_landmarks[0].landmark
-    out: List[RGB] = []
-    for group in (_FOREHEAD, _LEFT_CHEEK, _RIGHT_CHEEK):
-        for i in group:
-            s = _sample_at(img_bgr, int(lm[i].x * w), int(lm[i].y * h))
-            if s:
-                out.append(s)
-    return out
+    return skin_samples_from_landmarks(img_bgr, faces[0])
 
 
 def _samples_haar(img_bgr) -> List[RGB]:

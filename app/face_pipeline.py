@@ -146,8 +146,15 @@ def hair_mask(img_bgr, model_path: Optional[str] = None):
     return hair.numpy_view().astype(np.float32)
 
 
-def iris_landmarks_px(img_bgr, model_path: Optional[str] = None) -> Tuple[list, list]:
-    """(left_iris, right_iris) pixel points via FaceLandmarker. ([], []) if model absent."""
+def run_face_landmarker(img_bgr, num_faces: int = 3, min_conf: float = 0.5,
+                        model_path: Optional[str] = None, max_side: int = 1600) -> list:
+    """
+    Detect faces and return one list of (x_px, y_px) landmark points PER face, in the
+    ORIGINAL image's pixel coordinates. Detects up to `num_faces` so the caller can gate
+    on 'exactly one face'. Big frames are downscaled for detection only (MediaPipe's face
+    detector is tuned for selfie-scale faces); normalized landmarks map back to full res.
+    Returns [] when the model is absent or no face is found.
+    """
     import cv2
     import mediapipe as mp
     from mediapipe.tasks import python as mp_python
@@ -155,49 +162,84 @@ def iris_landmarks_px(img_bgr, model_path: Optional[str] = None) -> Tuple[list, 
 
     path = model_path or _face_model_path()
     if not os.path.exists(path):
-        return [], []
+        return []
     h, w = img_bgr.shape[:2]
-    rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+    scale = min(1.0, max_side / max(h, w))
+    det = cv2.resize(img_bgr, (int(w * scale), int(h * scale))) if scale < 1.0 else img_bgr
+    rgb = cv2.cvtColor(det, cv2.COLOR_BGR2RGB)
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb))
     options = mp_vision.FaceLandmarkerOptions(
         base_options=mp_python.BaseOptions(model_asset_path=path),
         running_mode=mp_vision.RunningMode.IMAGE,
-        num_faces=1,
+        num_faces=num_faces,
+        min_face_detection_confidence=min_conf,
     )
     with mp_vision.FaceLandmarker.create_from_options(options) as fl:
         result = fl.detect(mp_image)
-    if not result.face_landmarks:
+    # normalized landmarks -> ORIGINAL pixel coords (w, h), independent of the det scale.
+    return [[(lm.x * w, lm.y * h) for lm in face] for face in result.face_landmarks]
+
+
+def gate_from_face_count(n_faces: int) -> str:
+    """Single-clear-face gate: 0 -> no_face, 1 -> ok, >1 -> multiple_faces. Pure."""
+    if n_faces <= 0:
+        return "no_face"
+    if n_faces > 1:
+        return "multiple_faces"
+    return "ok"
+
+
+def iris_points(landmarks_px: Sequence[Tuple[float, float]]) -> Tuple[list, list]:
+    """(left_iris, right_iris) 5-point sets from a full landmark list. Pure. ([],[]) if no iris."""
+    if len(landmarks_px) <= max(RIGHT_IRIS):    # model built without the iris/attention head
         return [], []
-    lm = result.face_landmarks[0]
-    if len(lm) <= max(RIGHT_IRIS):          # model built without the iris/attention head
-        return [], []
-    left = [(lm[i].x * w, lm[i].y * h) for i in LEFT_IRIS]
-    right = [(lm[i].x * w, lm[i].y * h) for i in RIGHT_IRIS]
-    return left, right
+    return ([landmarks_px[i] for i in LEFT_IRIS], [landmarks_px[i] for i in RIGHT_IRIS])
 
 
-def sample_hair_and_eyes(img_bgr):
+def skin_samples_from_landmarks(img_bgr, landmarks_px: Sequence[Tuple[float, float]]) -> List[RGB]:
+    """Clean forehead + cheek skin RGBs from a full landmark list. Pure (reuses skin_tone)."""
+    from app.skin_tone import _FOREHEAD, _LEFT_CHEEK, _RIGHT_CHEEK, _sample_at
+    out: List[RGB] = []
+    for group in (_FOREHEAD, _LEFT_CHEEK, _RIGHT_CHEEK):
+        for i in group:
+            if i < len(landmarks_px):
+                x, y = landmarks_px[i]
+                s = _sample_at(img_bgr, int(x), int(y))
+                if s:
+                    out.append(s)
+    return out
+
+
+def sample_face(img_bgr) -> dict:
     """
-    Run both models and return (hair_samples, iris_samples, hair_region_bgr) for the face
-    endpoint. Each model is independent and failure-isolated: a missing/broken model just
-    yields empties for its slice, so the endpoint still composes whatever IS available.
+    One face-landmark pass (gate + skin + iris) plus the hair segmenter, returning
+    everything the face endpoint needs:
+        {gate, n_faces, skin_samples, hair_samples, iris_samples, hair_region}
+    The gate is the decision: only a single clear face yields extracted samples. On
+    no_face / multiple_faces we DON'T trust hair either (a group photo's hair is a
+    blend of several heads), so samples come back empty and the endpoint asks for a
+    retake. Every model call is failure-isolated so a broken model can't crash the route.
     """
-    hair_samples: List[RGB] = []
-    hair_region = None
-    iris_samples: List[RGB] = []
+    result = {"gate": "no_face", "n_faces": 0, "skin_samples": [],
+              "hair_samples": [], "iris_samples": [], "hair_region": None}
+    try:
+        faces = run_face_landmarker(img_bgr)
+    except Exception:
+        faces = []
+    result["n_faces"] = len(faces)
+    result["gate"] = gate_from_face_count(len(faces))
+    if result["gate"] != "ok":
+        return result                       # bad input -> retake; trust nothing
 
+    lm = faces[0]
+    result["skin_samples"] = skin_samples_from_landmarks(img_bgr, lm)
+    left, right = iris_points(lm)
+    result["iris_samples"] = (iris_samples_from_landmarks(img_bgr, left)
+                              + iris_samples_from_landmarks(img_bgr, right))
     try:
         mask = hair_mask(img_bgr)
         if mask is not None:
-            hair_samples, hair_region = hair_samples_from_mask(img_bgr, mask)
+            result["hair_samples"], result["hair_region"] = hair_samples_from_mask(img_bgr, mask)
     except Exception:
         pass
-
-    try:
-        left, right = iris_landmarks_px(img_bgr)
-        iris_samples = (iris_samples_from_landmarks(img_bgr, left)
-                        + iris_samples_from_landmarks(img_bgr, right))
-    except Exception:
-        pass
-
-    return hair_samples, iris_samples, hair_region
+    return result
