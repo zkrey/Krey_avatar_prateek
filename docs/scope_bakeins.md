@@ -73,3 +73,32 @@ complementary — it just fills the same fit contract later.
 measurements → SMPL-X shape betas; (2) shrink-wrap garment-vs-body distances → the `fit_score`
 contract as `method:"mesh-fit-v1"`. Licences to confirm before deep work: **SMPL-X** (commercial
 licence), **YOLO** (AGPL — prefer YOLOX / RT-DETR), and the **DLR** model (unidentified — get the link).
+
+## Capture session: identity vs. current-appearance (timestamps + ageing)
+
+The 5-photo capture is not just redundancy — it runs **two aggregations on the same set**:
+
+- **Identity (stable):** pool the face fingerprint across ALL frames (old + new) to lock
+  "same person" at high confidence. This is what lets us salvage a multi-face / messy
+  frame — find the recurring face, treat it as the user — instead of hard-rejecting.
+  Reject only when there is genuinely no consistent face; otherwise soft one-tap reconfirm.
+- **Current appearance (time-varying):** attributes that DRIFT with age/lifestyle —
+  above all **body build**, and to a lesser extent hair — must be **recency-weighted**.
+  The freshest photo (latest timestamp) anchors the "current build"; older frames
+  corroborate identity but count less toward how the twin looks *now*.
+
+Mechanics to honour:
+1. **Read EXIF `DateTimeOriginal`** per photo; order the set by recency. This is the
+   ageing signal — validates the user isn't building a twin from only decade-old photos,
+   and drives the recency weighting above.
+2. **Fallbacks (important):** EXIF is frequently stripped — WhatsApp, screenshots,
+   social re-saves lose it. When a timestamp is missing: fall back to file mtime if
+   plausible, else treat the photo as undated (corroborates identity, does NOT anchor
+   "current"). Never silently assume "now."
+3. **Build needs a body in frame.** Face selfies alone can't give build — that comes from
+   the measurement (body) slice. So "current build" = most-recent frame that actually
+   contains a torso, recency-weighted. Keep the face-session and body-session timestamps
+   linked on the body_models record.
+4. **Future refresh:** when the user later connects social networks, the same
+   recency-weighted appearance update runs on newly dated photos to keep the twin current.
+   Design the aggregator so a later photo can update appearance without re-proving identity.
