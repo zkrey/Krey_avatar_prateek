@@ -240,7 +240,18 @@ def compute_measurements(
     frame = run_pose_landmarker(image_bgr, model_path)
     if not frame.detected:
         return {"status": "error", "reason": "no_person_detected"}
+    return measure_from_frame(frame, declared_height_cm, declared_weight_kg, sex, declared_body_type)
 
+
+def measure_from_frame(
+    frame: PoseFrame,
+    declared_height_cm: float,
+    declared_weight_kg: float,
+    sex: int,
+    declared_body_type: Optional[str] = None,
+) -> dict:
+    """Measure from an ALREADY-detected pose frame (lets the caller gate first, and lets
+    the capture session reuse one pose pass per photo). Same contract as compute_measurements."""
     px_height = estimate_pixel_height(frame)
     scale = core.scale_from_pixel_height(px_height, declared_height_cm)  # declared height anchor
     if scale is None:

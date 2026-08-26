@@ -253,6 +253,31 @@ def landmark_coverage(visibilities: Mapping[str, float], min_visibility: float =
     }
 
 
+# Landmarks that must be visible for a measurable STANDING body (head-to-ankle).
+_BODY_ESSENTIAL = ("left_shoulder", "right_shoulder", "left_hip", "right_hip",
+                   "left_knee", "right_knee", "left_ankle", "right_ankle")
+
+
+def body_measurable(visibilities: Mapping[str, float], min_visibility: float = 0.5,
+                    min_essential: int = 7) -> dict:
+    """
+    Body analog of the single-face gate: is this a clean full standing body we can
+    measure, or a headshot / half-body / occluded frame we should skip? Requires the
+    torso-to-ankle landmarks (shoulders, hips, knees, ankles) — a face-only or
+    waist-up frame has no legs and can't be scaled or measured below the waist.
+    """
+    present = [n for n in _BODY_ESSENTIAL if visibilities.get(n, 0.0) >= min_visibility]
+    cov = landmark_coverage(visibilities, min_visibility)
+    measurable = len(present) >= min_essential
+    return {
+        "measurable": measurable,
+        "reason": "ok" if measurable else "incomplete_body",   # not a full standing body
+        "essential_present": len(present),
+        "essential_total": len(_BODY_ESSENTIAL),
+        "coverage": cov["coverage"],
+    }
+
+
 def build_accuracy_ledger(
     measurements: Mapping[str, Mapping],
     coverage: Mapping,
