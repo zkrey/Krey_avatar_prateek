@@ -122,6 +122,24 @@ def test_numeric_fusion_is_a_weighted_mean_not_a_vote():
     assert darker["value"] > lighter["value"]                          # different shade kept
 
 
+def test_numeric_robust_rejects_a_lighting_outlier():
+    # five consistent frames + one wild dark frame (the real failure mode).
+    obs = [{"value": v, "confidence": 0.8} for v in (5.9, 6.0, 6.1, 6.0, 5.9)]
+    obs.append({"value": 8.5, "confidence": 0.8})           # bad-lit outlier
+    robust = cc.aggregate_numeric(obs, robust=True)
+    plain = cc.aggregate_numeric(obs, robust=False)
+    assert robust["n_dropped_outliers"] == 1 and plain["n_dropped_outliers"] == 0
+    assert robust["value"] < plain["value"]                 # outlier no longer drags it
+    assert robust["spread"] < plain["spread"]
+
+
+def test_numeric_robust_keeps_genuine_spread():
+    # a real range with no single outlier is preserved (not over-trimmed).
+    obs = [{"value": v, "confidence": 0.8} for v in (5.6, 5.9, 6.2, 6.5, 6.8)]
+    out = cc.aggregate_numeric(obs, robust=True)
+    assert out["n_dropped_outliers"] == 0
+
+
 def test_numeric_high_spread_flags_confirm():
     out = cc.aggregate_numeric([{"value": 5.0, "confidence": 0.7},
                                 {"value": 7.5, "confidence": 0.7}])

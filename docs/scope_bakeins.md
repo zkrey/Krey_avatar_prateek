@@ -127,3 +127,22 @@ Free/open model stays the default for M1 consumer scale. Decision to make WITH t
 once we reach the quality-tier stage: which paid vendor (AWS Rekognition / Azure Face /
 Face++ / a licensed ArcFace), price per call, and where the tier line sits. This also
 resolves the InsightFace non-commercial licence flag for the paid surfaces.
+
+## Skin-tone illumination robustness — what worked, what didn't (measured)
+
+Two people of visibly different complexion both bucketed Monk 6 (the coarse-label bug,
+fixed by carrying continuous tone). The per-frame skin swing that remained was then
+attacked two ways, measured on the founder's two real collections:
+
+- **Per-frame white balance — did NOT help.** grey_world and white_patch on a face crop
+  INCREASED the spread (skin-dominated crop has no reliable neutral; they fight the
+  skin's real warmth) and shifted the mean. A sclera-referenced version was within noise
+  (std 0.26->0.23) and only fired when eye-white was visible (~60-75% of frames). Kept as
+  a tested tool (`app/whitebalance.py`) but NOT wired into the default pipeline.
+- **Outlier-robust aggregation — worked.** The real cause was outlier FRAMES (one dark
+  L*~32 shot), not a uniform cast. Rejecting frames >3 MAD from the median tone
+  (`aggregate_numeric(robust=True)`) halved the spread (her 2.22->1.33) while keeping the
+  two people distinct (you 5.68 vs her 6.17). This is wired for skin.
+
+Lesson for other attributes: prefer robust aggregation over per-frame colour correction
+unless a genuine, locatable neutral reference exists.

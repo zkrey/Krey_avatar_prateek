@@ -187,23 +187,49 @@ def _to_date(iso: Optional[str]) -> Optional[date]:
         return None
 
 
+def _median(xs: Sequence[float]) -> float:
+    s = sorted(xs)
+    n = len(s)
+    return s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2
+
+
 def aggregate_numeric(observations: Sequence[Mapping], mode: str = "stable",
                       dates: Optional[Sequence[Optional[str]]] = None,
-                      half_life_days: int = DEFAULT_HALF_LIFE_DAYS) -> Optional[dict]:
+                      half_life_days: int = DEFAULT_HALF_LIFE_DAYS,
+                      robust: bool = True, mad_k: float = 3.0) -> Optional[dict]:
     """
     Fuse a CONTINUOUS attribute (e.g. the fractional Monk tone) across frames — a weighted
     mean, not a vote, so a real half-shade difference between people survives instead of
     collapsing to the same bucket. Weight = confidence (stable) or confidence*recency
     (recent). Returns the fused value, its spread, and a rounded display bucket.
+
+    robust=True rejects lighting outliers first (a frame > mad_k median-absolute-deviations
+    from the median tone — e.g. one dark shot), so a single bad-lit frame can't drag the
+    result. Measured on real captures this halved the spread while keeping two people's
+    shades distinct; per-frame white balance did NOT help (see app/whitebalance.py).
     """
     obs = [o for o in observations if o and o.get("value") is not None]
     if not obs:
         return None
+    idx = [i for i, o in enumerate(observations) if o and o.get("value") is not None]
+
+    n_dropped = 0
+    if robust and len(obs) >= 4:
+        vals = [float(o["value"]) for o in obs]
+        med = _median(vals)
+        mad = _median([abs(v - med) for v in vals])
+        if mad > 1e-6:
+            keep = [k for k, v in enumerate(vals) if abs(v - med) <= mad_k * mad]
+            if keep:
+                n_dropped = len(obs) - len(keep)
+                obs = [obs[k] for k in keep]
+                idx = [idx[k] for k in keep]
+
     if mode == "recent":
         if dates is None:
             raise ValueError("mode 'recent' needs per-frame dates")
         rw_all = recency_weights(dates, half_life_days)
-        rw = [rw_all[i] for i, o in enumerate(observations) if o and o.get("value") is not None]
+        rw = [rw_all[i] for i in idx]
     else:
         rw = [1.0] * len(obs)
 
@@ -222,6 +248,7 @@ def aggregate_numeric(observations: Sequence[Mapping], mode: str = "stable",
         "display_bucket": int(round(mean)),
         "spread": round(spread, 2),
         "n_frames": len(obs),
+        "n_dropped_outliers": n_dropped,
         "mode": mode,
         "needs_confirm": spread > 1.0,        # >1 whole bucket of disagreement -> confirm
     }
