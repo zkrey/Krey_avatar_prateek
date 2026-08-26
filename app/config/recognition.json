@@ -1,0 +1,12 @@
+{
+  "version": "recognition-weights-v0-provisional",
+  "_note": "Overall avatar-confidence weights (Capture Pipeline Spec §6) — the backend's 'is this recognisably them' score. TWIN LIKENESS only, never product fit. Provisional: recalibrate once real user data shows which attribute mismatches make users reject their avatar. Stored versioned/swappable per spec. Never surfaced to the user.",
+  "weights": {
+    "skin_tone": 0.30,
+    "hair_colour": 0.25,
+    "landmark_coverage": 0.25,
+    "eye_colour": 0.10,
+    "hair_texture": 0.10
+  },
+  "recapture_floor": 0.60
+}

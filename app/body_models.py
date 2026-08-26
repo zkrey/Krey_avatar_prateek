@@ -34,6 +34,7 @@ def empty_body_models() -> dict:
         "measurements": None,
         "body_shape": None,
         "accuracy_ledger": None,
+        "avatar_confidence": None,   # §6 recognition score (backend-only) — see app/recognition.py
     }
 
 
@@ -42,6 +43,7 @@ def assemble_body_models(
     measurements: Optional[Mapping] = None,
     body_shape: Optional[Mapping] = None,
     accuracy_ledger: Optional[Mapping] = None,
+    avatar_confidence: Optional[Mapping] = None,
 ) -> dict:
     """Compose whatever slices are available into one body_models record."""
     record = empty_body_models()
@@ -53,4 +55,6 @@ def assemble_body_models(
         record["body_shape"] = dict(body_shape)
     if accuracy_ledger is not None:
         record["accuracy_ledger"] = dict(accuracy_ledger)
+    if avatar_confidence is not None:
+        record["avatar_confidence"] = dict(avatar_confidence)
     return record
