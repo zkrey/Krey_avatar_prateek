@@ -27,6 +27,7 @@ import numpy as np
 from app import monk
 from app.skin_tone import extract_skin_samples
 from app import measurements as body
+from app import face
 from app.analytics import Analytics, Spine
 from app.recognition import recognition_from_body_models
 
@@ -55,7 +56,8 @@ def _spine(session_id, user_id, guest_id, surface, region, app_version, device_o
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "twin-extraction", "slices": ["skin-tone-v0", "measure-v0"]}
+    return {"status": "ok", "service": "twin-extraction",
+            "slices": ["skin-tone-v0", "measure-v0", "face-v0"]}
 
 
 @app.post("/twin/extract-skin")
@@ -95,6 +97,60 @@ async def extract_skin(
         "eligibility": {"passed": True, "stage": 2, "quality_flags": []},
         "monk_tone": monk_tone,
         "detector": found["detector"],
+    }
+
+
+@app.post("/twin/extract-face")
+async def extract_face(
+    file: UploadFile = File(...),          # front-face photo
+    session_id: Optional[str] = Form(None),
+    user_id: Optional[str] = Form(None),
+    guest_id: Optional[str] = Form(None),
+    surface: Optional[str] = Form(None),
+    region: Optional[str] = Form(None),
+    app_version: Optional[str] = Form(None),
+    device_os: Optional[str] = Form(None),
+):
+    """
+    Compose the FACE portion of body_models — skin_tone (built) + hair/eye slices
+    (model-backed, degrade cleanly to a stub until the hair/iris samplers are wired).
+    One photo in; skin + whatever face attributes we can read + the §6 recognition
+    score out. Eligibility stays at the single canRender chokepoint, not here.
+    """
+    import cv2  # lazy: keeps module import light
+
+    spine = _spine(session_id, user_id, guest_id, surface, region, app_version, device_os, None)
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "empty file")
+    img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        raise HTTPException(400, "could not decode image")
+
+    found = extract_skin_samples(img)
+    skin_samples = found["samples"] if found["ok"] else None
+    hair_samples, iris_samples, hair_region = face.sample_hair_and_eyes(img)
+    hair_features = (face.hair.texture_features_from_region(hair_region)
+                     if hair_region is not None else None)
+
+    record = face.assemble_face(skin_samples=skin_samples, hair_samples=hair_samples,
+                                iris_samples=iris_samples, hair_features=hair_features)
+
+    present = face.face_slices_present(record)
+    if not present:
+        # Nothing usable in the frame -> Stage-0 retake signal.
+        analytics.input_cascade(spine, passed=False, stage=0, quality_flags=["no_face"])
+        return {
+            "eligibility": {"passed": False, "stage": 0, "quality_flags": ["no_face"]},
+            "body_models": None,
+        }
+
+    analytics.twin_extracted(spine, slice="face", model="face-compose-v0",
+                             confidence=record["avatar_confidence"]["overall"])
+    return {
+        "eligibility": {"passed": True, "stage": 2, "quality_flags": []},
+        "slices_present": present,
+        "body_models": record,
     }
 
 
