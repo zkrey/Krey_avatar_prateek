@@ -4,9 +4,16 @@ Deterministic verification of the fit-score rule engine (spec §5). No render, n
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.fit_score import score_size, recommend_size, from_body_models, load_rules, METHOD
+from app.fit_score import (
+    score_size, recommend_size, grade_sizes, from_body_models, load_rules, METHOD,
+)
 
 BODY = {"chest": 90.0, "waist": 76.0, "hip": 96.0}
+CHART = {
+    "S": {"chest": 94.0, "waist": 80.0, "hip": 100.0},
+    "M": {"chest": 100.0, "waist": 86.0, "hip": 106.0},
+    "L": {"chest": 106.0, "waist": 92.0, "hip": 112.0},
+}
 
 
 def test_rules_load_from_config_and_method_tag():
@@ -87,6 +94,32 @@ def test_from_body_models_reuses_slice2_measurements():
                          confidence=conf)
     assert out["verdict"] in ("fits", "snug", "size_up", "size_down")
     assert out["confidence"] > 0.0
+
+
+def test_fit_preference_shifts_the_recommended_size():
+    body = {"chest": 90.0, "waist": 78.0, "hip": 96.0}
+    g = {"cut": "regular", "fabric_stretch": "none", "size_chart": CHART}
+    # Same body, same garment — the preference alone moves the pick S -> M -> L.
+    assert recommend_size(body, g, fit_preference="fitted")["best_size"] == "S"
+    assert recommend_size(body, g, fit_preference="true")["best_size"] == "M"
+    assert recommend_size(body, g, fit_preference="oversized")["best_size"] == "L"
+
+
+def test_oversized_preference_turns_a_true_fit_into_size_up():
+    # A garment at the neutral ideal ease 'fits' by default, but reads as too small for
+    # someone who wants oversized -> size_up (they'd reach for the bigger size).
+    garment = {"chest": 98.0, "waist": 84.0, "hip": 104.0}   # 8 cm ease on BODY
+    assert score_size(BODY, garment)["verdict"] == "fits"
+    up = score_size(BODY, garment, fit_preference="oversized")
+    assert up["verdict"] == "size_up" and up["fit_preference"] == "oversized"
+
+
+def test_grade_sizes_describes_how_each_size_sits():
+    body = {"chest": 92.0, "waist": 78.0, "hip": 98.0}       # M sits ~ideal on this body
+    grades = {g["size"]: g for g in grade_sizes(body, {"cut": "regular", "size_chart": CHART})}
+    assert grades["S"]["sits_as"] == "tight"
+    assert grades["M"]["sits_as"] == "true to size"
+    assert grades["L"]["sits_as"] == "relaxed"          # the roomy option to pick on purpose
 
 
 if __name__ == "__main__":

@@ -49,6 +49,15 @@ is defined so a future **3D-mesh fit-truth** engine (Path A, deferred to M2 prem
 can produce the SAME shape and slot in behind the same interface. Rule engine = `method:"rule-fit-v0"`;
 a mesh engine would be e.g. `method:"mesh-fit-v1"`. Callers depend on the contract, not the method.
 
+## Fit is measurement × PREFERENCE (not one "correct" size)
+Users wear a size by preference, not just measurement (measured M but wears L — baggy taste,
+weight fluctuation). So the fit-score carries a `fit_preference` (fitted|true|relaxed|oversized)
+that shifts the target ease, **applied per garment** — so outfit combinations (baggy top + baggy
+bottom, fitted top + relaxed bottom) are just per-piece preferences. `grade_sizes()` grades every
+size (tight / true to size / relaxed / oversized) to power a "try a size up/down" view where the
+user picks the look on purpose. Declared preference now (cold-start); learned from what they keep/
+wear later (V2 revealed taste). Offsets live in `app/config/fit.json` (uncalibrated placeholders).
+
 ## Reconciliation flag — Sohan's 3D-mesh + Blender fit work
 The sub-project spec **locked** M1 render = generative (Path B) + **rule-computed** fit-score, and
 **deferred** 3D mesh + cloth-sim + Blender (Path A) to M2 (premium / made-to-measure), because a

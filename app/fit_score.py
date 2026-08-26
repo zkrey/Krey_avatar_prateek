@@ -53,17 +53,22 @@ def score_size(
     garment_cm: Mapping[str, float],
     cut: str = "regular",
     fabric_stretch: str = "none",
+    fit_preference: str = "true",
     confidence: Optional[Mapping[str, float]] = None,
     garment_source: Optional[str] = None,
     rules: Optional[dict] = None,
 ) -> dict:
     """
     Score one garment SIZE against a body. `garment_cm` is that size's girths (cm).
-    `garment_source` is catalog|wardrobe|scan (baked in for scan-a-product / B2B) —
-    it is echoed, never changes the fit maths.
+    `fit_preference` (fitted|true|relaxed|oversized) shifts the target ease — the same
+    body may prefer a roomier size (measured M, wears L). It is per-garment, so outfit
+    combinations (baggy top + baggy bottom) are just per-piece preferences.
+    `garment_source` (catalog|wardrobe|scan) is echoed, never changes the maths.
     """
     r = rules or load_rules()
-    band = r["cut_ease_cm"].get(cut, r["cut_ease_cm"]["regular"])
+    base = r["cut_ease_cm"].get(cut, r["cut_ease_cm"]["regular"])
+    pref = r.get("fit_preference_ease_cm", {}).get(fit_preference, 0)
+    band = {"min": base["min"] + pref, "ideal": base["ideal"] + pref, "max": base["max"] + pref}
     give = r["stretch_give_cm"].get(fabric_stretch, 0)
     snug_tol = r["snug_tolerance_cm"]
 
@@ -112,6 +117,7 @@ def score_size(
         "regions": regions,
         "binding_region": binding["area"],
         "confidence": conf,
+        "fit_preference": fit_preference,
         "garment_source": garment_source,
     }
 
@@ -119,19 +125,22 @@ def score_size(
 def recommend_size(
     body_cm: Mapping[str, float],
     garment: Mapping,
+    fit_preference: str = "true",
     confidence: Optional[Mapping[str, float]] = None,
     rules: Optional[dict] = None,
 ) -> dict:
     """
-    Pick the best size from a garment's size_chart. `garment` =
-    {cut, fabric_stretch, source?, size_chart: {SIZE: {area: girth_cm, ...}}}.
-    Best = the size whose girths sit closest to the cut's ideal ease.
+    Pick the best size from a garment's size_chart for the user's fit_preference.
+    `garment` = {cut, fabric_stretch, source?, size_chart: {SIZE: {area: girth_cm, ...}}}.
+    Best = the size whose girths sit closest to (cut ideal ease + preference offset), so
+    an 'oversized' preference recommends a bigger size than 'true'.
     """
     r = rules or load_rules()
     cut = garment.get("cut", "regular")
     stretch = garment.get("fabric_stretch", "none")
     source = garment.get("source")
-    ideal = r["cut_ease_cm"].get(cut, r["cut_ease_cm"]["regular"])["ideal"]
+    pref = r.get("fit_preference_ease_cm", {}).get(fit_preference, 0)
+    target = r["cut_ease_cm"].get(cut, r["cut_ease_cm"]["regular"])["ideal"] + pref
     give = r["stretch_give_cm"].get(stretch, 0)
 
     best_size, best_cost = None, None
@@ -139,16 +148,61 @@ def recommend_size(
         areas = set(body_cm) & set(girths)
         if not areas:
             continue
-        cost = sum(abs((girths[a] - body_cm[a] + give) - ideal) for a in areas)
+        cost = sum(abs((girths[a] - body_cm[a] + give) - target) for a in areas)
         if best_cost is None or cost < best_cost:
             best_size, best_cost = size, cost
 
     if best_size is None:
-        return {"method": METHOD, "verdict": None, "regions": [],
-                "binding_region": None, "confidence": 0.0, "garment_source": source,
+        return {"method": METHOD, "verdict": None, "regions": [], "binding_region": None,
+                "confidence": 0.0, "fit_preference": fit_preference, "garment_source": source,
                 "best_size": None, "note": "no comparable regions between body and chart"}
 
     scored = score_size(body_cm, garment["size_chart"][best_size], cut, stretch,
-                        confidence, source, rules=r)
+                        fit_preference, confidence, source, rules=r)
     scored["best_size"] = best_size
     return scored
+
+
+def _sits_as(avg_room_cm: float, band: Mapping) -> str:
+    """How a size looks on the body, independent of preference (describes the look)."""
+    if avg_room_cm < band["min"]:
+        return "tight"
+    if avg_room_cm <= band["ideal"]:
+        return "true to size"
+    if avg_room_cm <= band["max"]:
+        return "relaxed"
+    return "oversized"
+
+
+def grade_sizes(
+    body_cm: Mapping[str, float],
+    garment: Mapping,
+    confidence: Optional[Mapping[str, float]] = None,
+    rules: Optional[dict] = None,
+) -> list:
+    """
+    Grade EVERY size in the chart for how it sits on this body — powers 'try a size
+    up/down'. Returns per size: {size, sits_as, verdict, confidence, avg_room_cm}.
+    `sits_as` (tight / true to size / relaxed / oversized) is preference-independent — it
+    describes the look, so a user can pick the baggy or the fitted one on purpose. Outfit
+    combinations are just grade_sizes run per garment.
+    """
+    r = rules or load_rules()
+    cut = garment.get("cut", "regular")
+    stretch = garment.get("fabric_stretch", "none")
+    source = garment.get("source")
+    band = r["cut_ease_cm"].get(cut, r["cut_ease_cm"]["regular"])
+    give = r["stretch_give_cm"].get(stretch, 0)
+
+    out = []
+    for size, girths in garment["size_chart"].items():
+        areas = sorted(set(body_cm) & set(girths))
+        if not areas:
+            continue
+        rooms = [girths[a] - body_cm[a] + give for a in areas]
+        avg_room = sum(rooms) / len(rooms)
+        sc = score_size(body_cm, girths, cut, stretch, "true", confidence, source, rules=r)
+        out.append({"size": size, "sits_as": _sits_as(avg_room, band),
+                    "verdict": sc["verdict"], "confidence": sc["confidence"],
+                    "avg_room_cm": round(avg_room, 1)})
+    return out

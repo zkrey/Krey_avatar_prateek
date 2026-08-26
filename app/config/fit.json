@@ -11,5 +11,12 @@
     "low": 3,
     "high": 8
   },
-  "snug_tolerance_cm": 3
+  "snug_tolerance_cm": 3,
+  "_pref_note": "Fit is measurement x PREFERENCE. These offsets (cm) shift the target ease per the user's desired fit, applied per-garment so combinations (baggy top + baggy bottom, fitted top + relaxed bottom) fall out. Declared now (cold-start); learned from what they actually keep/wear later (V2). Placeholders — calibrate on real preference data.",
+  "fit_preference_ease_cm": {
+    "fitted": -4,
+    "true": 0,
+    "relaxed": 6,
+    "oversized": 12
+  }
 }
