@@ -102,3 +102,16 @@ Mechanics to honour:
 4. **Future refresh:** when the user later connects social networks, the same
    recency-weighted appearance update runs on newly dated photos to keep the twin current.
    Design the aggregator so a later photo can update appearance without re-proving identity.
+
+## Face-recognition model licence (identity matching)
+
+Identity matching (clustering the same face across the capture session) needs a
+purpose-built face-recognition embedding — a general image embedder is far too weak
+(measured 0.06 separation vs 0.60 for ArcFace on the founder's own decade of photos).
+Development uses **InsightFace `buffalo_l`** (SCRFD detect + ArcFace embed + age/gender).
+**Licence flag: InsightFace pretrained models are research / non-commercial.** Fine to
+develop and prove against; **before commercial launch, swap to a licence-cleared model**
+(commercially-licensed ArcFace weights, a self-trained embedder, or a paid face API —
+AWS Rekognition / Azure Face / Face++). Same licence-gate discipline as SMPL-X / YOLO.
+Estimated age is a noisy per-face cross-check only; the real ageing signal is the EXIF
+timestamp.

@@ -210,15 +210,28 @@ def skin_samples_from_landmarks(img_bgr, landmarks_px: Sequence[Tuple[float, flo
     return out
 
 
-def sample_face(img_bgr) -> dict:
+def _largest_face(faces: list):
+    """The face with the biggest landmark bounding box (the closest / most prominent)."""
+    def area(lm):
+        xs = [x for x, y in lm]; ys = [y for x, y in lm]
+        return (max(xs) - min(xs)) * (max(ys) - min(ys))
+    return max(faces, key=area)
+
+
+def sample_face(img_bgr, enforce_single: bool = True) -> dict:
     """
     One face-landmark pass (gate + skin + iris) plus the hair segmenter, returning
     everything the face endpoint needs:
         {gate, n_faces, skin_samples, hair_samples, iris_samples, hair_region}
-    The gate is the decision: only a single clear face yields extracted samples. On
-    no_face / multiple_faces we DON'T trust hair either (a group photo's hair is a
-    blend of several heads), so samples come back empty and the endpoint asks for a
-    retake. Every model call is failure-isolated so a broken model can't crash the route.
+
+    enforce_single=True (the endpoint): the gate is the decision — only ONE clear face
+    yields samples; no_face / multiple_faces come back empty and the caller asks for a
+    retake (a group photo's hair is a blend of several heads, so we trust nothing).
+
+    enforce_single=False (capture aggregator): identity is ALREADY resolved upstream and
+    the crop is centred on the known user, so a bystander caught in the padding must not
+    veto the read — we take the largest face and proceed. Every model call is
+    failure-isolated so a broken model can't crash the caller.
     """
     result = {"gate": "no_face", "n_faces": 0, "skin_samples": [],
               "hair_samples": [], "iris_samples": [], "hair_region": None}
@@ -228,10 +241,12 @@ def sample_face(img_bgr) -> dict:
         faces = []
     result["n_faces"] = len(faces)
     result["gate"] = gate_from_face_count(len(faces))
-    if result["gate"] != "ok":
+    if not faces:
+        return result
+    if result["gate"] != "ok" and enforce_single:
         return result                       # bad input -> retake; trust nothing
 
-    lm = faces[0]
+    lm = faces[0] if len(faces) == 1 else _largest_face(faces)
     result["skin_samples"] = skin_samples_from_landmarks(img_bgr, lm)
     left, right = iris_points(lm)
     result["iris_samples"] = (iris_samples_from_landmarks(img_bgr, left)

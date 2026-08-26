@@ -3,11 +3,17 @@ uvicorn[standard]
 python-multipart
 numpy>=1.24,<2.0
 pillow
-# Pinned: the intended MediaPipe FaceMesh path needs the legacy solutions API, which
-# was REMOVED in later builds (a broken build silently degraded slice 1 to the weak
-# Haar fallback). 0.10.x keeps solutions AND ships the Tasks API for the future migration.
+# MediaPipe Tasks API (pose_landmarker, face_landmarker, hair_segmenter, image_segmenter).
+# The legacy mp.solutions API was removed in later builds, so skin/face detection was
+# migrated to Tasks; 0.10.x is a known-good pin for it.
 opencv-python-headless==4.10.0.84
 mediapipe==0.10.14
+
+# Identity matching across the capture session (InsightFace SCRFD detect + ArcFace embed).
+# LICENCE: buffalo_l pretrained weights are research/non-commercial — swap for a
+# licence-cleared model before commercial launch (see docs/scope_bakeins.md).
+insightface
+onnxruntime
 
 # test-only: FastAPI TestClient
 httpx
