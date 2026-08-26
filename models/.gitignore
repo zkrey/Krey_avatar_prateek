@@ -1,0 +1,5 @@
+# Model binaries are fetched, never committed (large, freely re-downloadable).
+# Keep this folder in git as the default MODELS_DIR; ignore everything else in it.
+*
+!.gitignore
+!README.md

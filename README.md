@@ -84,10 +84,23 @@ curl -F "file=@body.jpg" -F height=170 -F weight=65 -F sex=2 \
      http://127.0.0.1:8000/twin/extract-measurements
 ```
 
-**Pose model (slice 2 runtime only):** requires Google MediaPipe's
-`pose_landmarker_heavy.task` (Apache-2.0, ~30 MB — not bundled in the repo). Point
-`MODELS_DIR` at the folder containing it. Without it, `/twin/extract-measurements`
-returns a clear 503; the deterministic tests do not need it.
+**Runtime models (not bundled):** Service A uses three Google MediaPipe models
+(Apache-2.0). They are large binaries, freely re-downloadable, and kept out of git.
+Fetch them once per machine:
+
+```bash
+./scripts/fetch_models.sh          # downloads into ./models (the default MODELS_DIR)
+```
+
+| File | Endpoint | Purpose |
+|------|----------|---------|
+| `pose_landmarker_heavy.task` (~30 MB) | `/twin/extract-measurements` | body pose landmarks |
+| `hair_segmenter.tflite` (~0.8 MB) | `/twin/extract-face` | hair mask → colour + texture |
+| `face_landmarker.task` (~3.7 MB) | `/twin/extract-face` | iris landmarks → eye colour |
+
+Point `MODELS_DIR` elsewhere if you keep them outside the repo. When a model is
+absent its slice degrades cleanly (measurements → clear 503; face → composes whatever
+else it can); the deterministic tests need none of them.
 
 ## Verified
 
