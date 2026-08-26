@@ -43,9 +43,10 @@ def face_slices_present(record: dict) -> list:
 
 def sample_hair_and_eyes(img_bgr):
     """
-    HOOK (not yet wired): returns (hair_samples, iris_samples, hair_region_bgr).
-    The real implementation needs MediaPipe's hair_segmenter.tflite (hair mask -> clean
-    hair pixels) and face_landmarker.task (iris crops -> clean iris pixels). Returns empties
-    for now so the face endpoint composes whatever IS available (skin) and degrades cleanly.
+    Returns (hair_samples, iris_samples, hair_region_bgr) via the model-backed pipeline
+    (MediaPipe hair_segmenter + face_landmarker). Imported lazily so this module stays
+    pure/GPU-free to import; when a model is absent the pipeline returns empties and the
+    face endpoint composes whatever IS available (skin), degrading cleanly.
     """
-    return [], [], None
+    from app.face_pipeline import sample_hair_and_eyes as _impl
+    return _impl(img_bgr)
