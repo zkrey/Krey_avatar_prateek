@@ -1,0 +1,15 @@
+{
+  "version": "fit-rules-v0-UNCALIBRATED",
+  "_note": "Placeholder ease/stretch rules for the fit-score. Calibrate on real garment returns/fit-feedback post-launch. 'ease' = garment girth minus body girth (cm). Guardrail (spec §5): the fit-score tells the truth — a borderline-tight region is reported snug, never rounded up to 'fits'.",
+  "cut_ease_cm": {
+    "slim":    {"min": 1,  "ideal": 4,  "max": 8},
+    "regular": {"min": 4,  "ideal": 8,  "max": 14},
+    "relaxed": {"min": 8,  "ideal": 14, "max": 24}
+  },
+  "stretch_give_cm": {
+    "none": 0,
+    "low": 3,
+    "high": 8
+  },
+  "snug_tolerance_cm": 3
+}
