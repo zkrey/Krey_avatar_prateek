@@ -110,6 +110,28 @@ def test_recent_mode_lets_fresh_frame_override_stale_majority():
     assert recent["value"] == "athletic"      # recency flips it to the current build
 
 
+def test_numeric_fusion_is_a_weighted_mean_not_a_vote():
+    # two people both bucket to Monk 6, but one's continuous tone sits darker.
+    lighter = cc.aggregate_numeric([{"value": 5.7, "confidence": 0.8},
+                                    {"value": 5.8, "confidence": 0.8},
+                                    {"value": 5.9, "confidence": 0.8}])
+    darker = cc.aggregate_numeric([{"value": 6.2, "confidence": 0.8},
+                                   {"value": 6.4, "confidence": 0.8},
+                                   {"value": 6.3, "confidence": 0.8}])
+    assert lighter["display_bucket"] == darker["display_bucket"] == 6   # same label
+    assert darker["value"] > lighter["value"]                          # different shade kept
+
+
+def test_numeric_high_spread_flags_confirm():
+    out = cc.aggregate_numeric([{"value": 5.0, "confidence": 0.7},
+                                {"value": 7.5, "confidence": 0.7}])
+    assert out["spread"] >= 2.0 and out["needs_confirm"] is True
+
+
+def test_numeric_empty_is_none():
+    assert cc.aggregate_numeric([]) is None
+
+
 def test_aggregate_empty_is_none():
     assert cc.aggregate_categorical([]) is None
     assert cc.aggregate_categorical([{"value": None, "confidence": 0.9}]) is None

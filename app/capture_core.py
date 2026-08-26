@@ -187,6 +187,46 @@ def _to_date(iso: Optional[str]) -> Optional[date]:
         return None
 
 
+def aggregate_numeric(observations: Sequence[Mapping], mode: str = "stable",
+                      dates: Optional[Sequence[Optional[str]]] = None,
+                      half_life_days: int = DEFAULT_HALF_LIFE_DAYS) -> Optional[dict]:
+    """
+    Fuse a CONTINUOUS attribute (e.g. the fractional Monk tone) across frames — a weighted
+    mean, not a vote, so a real half-shade difference between people survives instead of
+    collapsing to the same bucket. Weight = confidence (stable) or confidence*recency
+    (recent). Returns the fused value, its spread, and a rounded display bucket.
+    """
+    obs = [o for o in observations if o and o.get("value") is not None]
+    if not obs:
+        return None
+    if mode == "recent":
+        if dates is None:
+            raise ValueError("mode 'recent' needs per-frame dates")
+        rw_all = recency_weights(dates, half_life_days)
+        rw = [rw_all[i] for i, o in enumerate(observations) if o and o.get("value") is not None]
+    else:
+        rw = [1.0] * len(obs)
+
+    num = den = 0.0
+    for o, w in zip(obs, rw):
+        weight = float(o.get("confidence", 0.5)) * w
+        num += float(o["value"]) * weight
+        den += weight
+    if den <= 0:
+        return None
+    mean = num / den
+    vals = [float(o["value"]) for o in obs]
+    spread = (max(vals) - min(vals))
+    return {
+        "value": round(mean, 2),
+        "display_bucket": int(round(mean)),
+        "spread": round(spread, 2),
+        "n_frames": len(obs),
+        "mode": mode,
+        "needs_confirm": spread > 1.0,        # >1 whole bucket of disagreement -> confirm
+    }
+
+
 def aggregate_categorical(observations: Sequence[Mapping], mode: str = "stable",
                           dates: Optional[Sequence[Optional[str]]] = None,
                           half_life_days: int = DEFAULT_HALF_LIFE_DAYS) -> Optional[dict]:

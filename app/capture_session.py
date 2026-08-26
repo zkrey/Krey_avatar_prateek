@@ -127,9 +127,11 @@ def analyze_capture(image_paths: List[str], read_attributes: bool = True) -> dic
             if rec:
                 for attr in _ATTR_MODE:
                     node = rec.get(attr) or {}
-                    val = node.get("value")
-                    slot[attr] = val
-                    per_attr[attr].append({"value": val, "confidence": node.get("confidence") or 0.0,
+                    # skin fuses on the CONTINUOUS tone so a real sub-bucket difference
+                    # survives; the per-frame slot still shows the friendly bucket.
+                    agg_val = node.get("monk_continuous") if attr == "skin_tone" else node.get("value")
+                    slot[attr] = node.get("value")
+                    per_attr[attr].append({"value": agg_val, "confidence": node.get("confidence") or 0.0,
                                            "date": f["date"]})
             frames.append(slot)
 
@@ -137,9 +139,12 @@ def analyze_capture(image_paths: List[str], read_attributes: bool = True) -> dic
     for attr, mode in _ATTR_MODE.items():
         obs = per_attr[attr]
         d = [o["date"] for o in obs]
-        agg = cc.aggregate_categorical(obs, mode=mode, dates=d) if mode == "recent" \
-            else cc.aggregate_categorical(obs, mode="stable")
-        appearance[attr] = agg
+        if attr == "skin_tone":
+            appearance[attr] = cc.aggregate_numeric(obs, mode="stable")   # continuous Monk tone
+        elif mode == "recent":
+            appearance[attr] = cc.aggregate_categorical(obs, mode="recent", dates=d)
+        else:
+            appearance[attr] = cc.aggregate_categorical(obs, mode="stable")
 
     return {
         "decision": decision,

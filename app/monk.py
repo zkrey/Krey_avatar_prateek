@@ -94,10 +94,37 @@ def _dispersion(labs: Sequence[Tuple[float, float, float]]) -> float:
     return math.sqrt(sum(var))  # magnitude of the per-channel std vector
 
 
+def _continuous_monk(reading_L: float) -> float:
+    """
+    Fractional Monk position (e.g. 5.9 vs 6.6) by interpolating the reading's L* against
+    the swatch lightness curve. The integer `value` rounds to the nearest bucket, which is
+    coarse — two genuinely different shades can share a bucket. This keeps the sub-bucket
+    difference so it survives into render and aggregation (bucket is a display label only).
+    """
+    idxs = sorted(_SWATCH_LAB)                       # 1..10
+    Ls = [_SWATCH_LAB[i][0] for i in idxs]           # swatch L*, decreasing with index
+    if reading_L >= Ls[0]:
+        return float(idxs[0])
+    if reading_L <= Ls[-1]:
+        return float(idxs[-1])
+    for k in range(len(idxs) - 1):
+        L_hi, L_lo = Ls[k], Ls[k + 1]
+        if L_lo <= reading_L <= L_hi:
+            frac = (L_hi - reading_L) / (L_hi - L_lo + 1e-9)
+            return round(idxs[k] + frac * (idxs[k + 1] - idxs[k]), 2)
+    return float(min(_SWATCH_LAB, key=lambda i: abs(_SWATCH_LAB[i][0] - reading_L)))
+
+
+def _median_rgb(samples: Sequence[RGB]) -> RGB:
+    return tuple(int(sorted(s[ch] for s in samples)[len(samples) // 2]) for ch in range(3))
+
+
 def classify(samples: Sequence[RGB]) -> dict:
     """
     samples: list of clean skin-pixel RGBs (one representative pixel per patch).
     Returns a body_models-shaped skin-tone record (spec section 4, Service A contract).
+    Carries BOTH the coarse Monk bucket (`value`) and the continuous tone the render
+    engine should actually use (`lab`, `rgb`, `monk_continuous`).
     """
     if not samples:
         raise ValueError("no skin samples provided")
@@ -115,7 +142,10 @@ def classify(samples: Sequence[RGB]) -> dict:
     needs_confirm = dispersion > CONFIRM_THRESHOLD or confidence < CONFIDENCE_FLOOR
 
     return {
-        "value": value,                          # Monk index 1..10
+        "value": value,                          # Monk bucket 1..10 (coarse display label)
+        "monk_continuous": _continuous_monk(reading[0]),  # fractional shade (render/aggregation)
+        "lab": [round(c, 1) for c in reading],   # measured skin colour — what render draws with
+        "rgb": list(_median_rgb(samples)),
         "confidence": round(confidence, 3),
         "confirmed_by_user": False,
         "delta_e": delta,                        # distance to bucket centre
