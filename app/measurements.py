@@ -114,6 +114,55 @@ def run_pose_landmarker(image_bgr, model_path: Optional[str] = None) -> PoseFram
     return PoseFrame((h, w), landmarks_px, visibility, mask, True, detect_conf)
 
 
+def run_pose_landmarker_multi(image_bgr, max_poses: int = 5,
+                              model_path: Optional[str] = None) -> list:
+    """
+    Multi-person variant: one PoseFrame per detected person (each with its own landmarks,
+    visibility and segmentation mask). Lets the caller pick the USER's pose in a group
+    frame instead of measuring whoever is most prominent. Returns [] if none detected.
+    """
+    import numpy as np
+    import cv2
+    import mediapipe as mp
+    from mediapipe.tasks import python as mp_python
+    from mediapipe.tasks.python import vision as mp_vision
+
+    model_path = model_path or _model_path()
+    h, w = image_bgr.shape[:2]
+    rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb))
+
+    options = mp_vision.PoseLandmarkerOptions(
+        base_options=mp_python.BaseOptions(model_asset_path=model_path),
+        running_mode=mp_vision.RunningMode.IMAGE,
+        num_poses=max_poses,
+        min_pose_detection_confidence=0.5,
+        min_pose_presence_confidence=0.5,
+        output_segmentation_masks=True,
+    )
+    landmarker = mp_vision.PoseLandmarker.create_from_options(options)
+    try:
+        result = landmarker.detect(mp_image)
+    finally:
+        landmarker.close()
+
+    frames = []
+    for i, lm_list in enumerate(result.pose_landmarks or []):
+        landmarks_px, visibility = {}, {}
+        for idx, name in {**_MP_TO_COCO, **_MP_EXTRA}.items():
+            lm = lm_list[idx]
+            landmarks_px[name] = (lm.x * w, lm.y * h)
+            visibility[name] = float(getattr(lm, "visibility", 1.0))
+        if result.segmentation_masks and i < len(result.segmentation_masks):
+            mask = result.segmentation_masks[i].numpy_view().astype(np.float32)
+        else:
+            mask = np.zeros((h, w), np.float32)
+        coco_vis = [visibility[n] for n in core.COCO_17 if n in visibility]
+        detect_conf = float(sum(coco_vis) / len(coco_vis)) if coco_vis else 0.0
+        frames.append(PoseFrame((h, w), landmarks_px, visibility, mask, True, detect_conf))
+    return frames
+
+
 def estimate_pixel_height(frame: PoseFrame, mask_threshold: float = 0.5) -> Optional[float]:
     """Top-of-mask to lowest heel/ankle (MediaPipe has no head-top landmark)."""
     import numpy as np

@@ -63,6 +63,28 @@ def test_reconcile_empty_is_empty():
     assert bs.reconcile_measurements([]) == {}
 
 
+# ---- identity-anchored pose selection -------------------------------------------------
+def test_pose_inside_user_face_box_is_picked():
+    # user's face box around (100,100); three poses' heads, one inside the box.
+    heads = [(300, 300), (105, 102), (500, 90)]      # pose 1 is the user
+    assert bs.select_pose_for_face(heads, (80, 80, 130, 140)) == 1
+
+
+def test_nearest_head_within_reach_when_none_inside():
+    heads = [(160, 110), (600, 600)]                 # none inside, pose 0 is close
+    assert bs.select_pose_for_face(heads, (80, 80, 130, 140)) == 0
+
+
+def test_no_pose_when_user_far_from_every_head():
+    heads = [(900, 900), (950, 20)]                  # all far from the box
+    assert bs.select_pose_for_face(heads, (80, 80, 130, 140)) is None
+
+
+def test_no_face_box_no_selection():
+    assert bs.select_pose_for_face([(100, 100)], None) is None
+    assert bs.select_pose_for_face([], (0, 0, 10, 10)) is None
+
+
 # ---- decision ladder ------------------------------------------------------------------
 def test_body_decision_ladder():
     assert bs.body_capture_decision(0, 0.9) == "retake_no_body"
