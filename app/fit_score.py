@@ -71,6 +71,13 @@ def from_body_models(measurements_slice: Mapping) -> tuple[dict, dict]:
     return body_cm, conf
 
 
+def _band_for(r: dict, cut: str, level: str) -> dict:
+    """Ease band (cm) for a cut at a fit level (fitted|true|relaxed|oversized)."""
+    base = r["cut_ease_cm"].get(cut, r["cut_ease_cm"]["regular"])
+    pref = r.get("fit_preference_ease_cm", {}).get(level, 0)
+    return {"min": base["min"] + pref, "ideal": base["ideal"] + pref, "max": base["max"] + pref}
+
+
 def score_size(
     body_cm: Mapping[str, float],
     garment_cm: Mapping[str, float],
@@ -80,23 +87,25 @@ def score_size(
     confidence: Optional[Mapping[str, float]] = None,
     garment_source: Optional[str] = None,
     rules: Optional[dict] = None,
+    region_preferences: Optional[Mapping[str, str]] = None,
 ) -> dict:
     """
     Score one garment SIZE against a body. `garment_cm` is that size's girths (cm).
     `fit_preference` (fitted|true|relaxed|oversized) shifts the target ease — the same
     body may prefer a roomier size (measured M, wears L). It is per-garment, so outfit
     combinations (baggy top + baggy bottom) are just per-piece preferences.
-    `garment_source` (catalog|wardrobe|scan) is echoed, never changes the maths.
+    `region_preferences` (from a StyleProfile) overrides the preference PER AREA — relaxed
+    through a soft waist, true on the shoulders — so a size can flatter where it matters
+    while still telling the truth about fit. `garment_source` is echoed, never maths.
     """
     r = rules or load_rules()
-    base = r["cut_ease_cm"].get(cut, r["cut_ease_cm"]["regular"])
-    pref = r.get("fit_preference_ease_cm", {}).get(fit_preference, 0)
-    band = {"min": base["min"] + pref, "ideal": base["ideal"] + pref, "max": base["max"] + pref}
     give = r["stretch_give_cm"].get(fabric_stretch, 0)
     snug_tol = r["snug_tolerance_cm"]
+    rp = region_preferences or {}
 
     regions = []
     for area in sorted(set(body_cm) & set(garment_cm)):
+        band = _band_for(r, cut, rp.get(area, fit_preference))
         room = garment_cm[area] - body_cm[area] + give   # +ve = garment roomier than body
         if room < band["min"]:
             shortfall = band["min"] - room
@@ -151,27 +160,33 @@ def recommend_size(
     fit_preference: str = "true",
     confidence: Optional[Mapping[str, float]] = None,
     rules: Optional[dict] = None,
+    region_preferences: Optional[Mapping[str, str]] = None,
 ) -> dict:
     """
     Pick the best size from a garment's size_chart for the user's fit_preference.
     `garment` = {cut, fabric_stretch, source?, size_chart: {SIZE: {area: girth_cm, ...}}}.
-    Best = the size whose girths sit closest to (cut ideal ease + preference offset), so
-    an 'oversized' preference recommends a bigger size than 'true'.
+    Best = the size whose girths sit closest to the target ease. With `region_preferences`
+    the target is PER AREA (roomier waist, true shoulders), so the recommendation flatters
+    where the user wants it — the StyleProfile's whole point.
     """
     r = rules or load_rules()
     cut = garment.get("cut", "regular")
     stretch = garment.get("fabric_stretch", "none")
     source = garment.get("source")
-    pref = r.get("fit_preference_ease_cm", {}).get(fit_preference, 0)
-    target = r["cut_ease_cm"].get(cut, r["cut_ease_cm"]["regular"])["ideal"] + pref
     give = r["stretch_give_cm"].get(stretch, 0)
+    base_ideal = r["cut_ease_cm"].get(cut, r["cut_ease_cm"]["regular"])["ideal"]
+    pref_ease = r.get("fit_preference_ease_cm", {})
+    rp = region_preferences or {}
+
+    def target_for(area: str) -> float:
+        return base_ideal + pref_ease.get(rp.get(area, fit_preference), 0)
 
     best_size, best_cost = None, None
     for size, girths in garment["size_chart"].items():
         areas = set(body_cm) & set(girths)
         if not areas:
             continue
-        cost = sum(abs((girths[a] - body_cm[a] + give) - target) for a in areas)
+        cost = sum(abs((girths[a] - body_cm[a] + give) - target_for(a)) for a in areas)
         if best_cost is None or cost < best_cost:
             best_size, best_cost = size, cost
 
@@ -181,9 +196,43 @@ def recommend_size(
                 "best_size": None, "note": "no comparable regions between body and chart"}
 
     scored = score_size(body_cm, garment["size_chart"][best_size], cut, stretch,
-                        fit_preference, confidence, source, rules=r)
+                        fit_preference, confidence, source, rules=r, region_preferences=rp)
     scored["best_size"] = best_size
     return scored
+
+
+def recommend_for_style(
+    body_cm: Mapping[str, float],
+    garment: Mapping,
+    style_profile: Optional[Mapping] = None,
+    confidence: Optional[Mapping[str, float]] = None,
+    rules: Optional[dict] = None,
+) -> dict:
+    """
+    Recommend the user's BEST-MATCH size using their StyleProfile — region-aware ease
+    resolved from the profile (fit_feel + per-region prefs + private sensitivity nudges)
+    — and attach a user-facing `why` that names the flattering intent WITHOUT exposing any
+    insecurity ("relaxed through the middle, true on the shoulders").
+    """
+    from app.style_profile import resolve_region_preferences, DEFAULT_FEEL
+    areas = sorted(set(body_cm) & set().union(*[set(g) for g in garment["size_chart"].values()]))
+    region_prefs = resolve_region_preferences(style_profile, areas)
+    feel = (style_profile or {}).get("fit_feel", DEFAULT_FEEL)
+    out = recommend_size(body_cm, garment, fit_preference=feel, confidence=confidence,
+                         rules=rules, region_preferences=region_prefs)
+    out["region_preferences"] = region_prefs
+    out["why"] = _style_why(region_prefs)
+    return out
+
+
+def _style_why(region_prefs: Mapping[str, str]) -> str:
+    """Human 'why' for the size — groups areas by how they sit. Never names insecurities."""
+    words = {"fitted": "fitted", "true": "true", "relaxed": "easy", "oversized": "loose"}
+    by_level: dict = {}
+    for area, lv in region_prefs.items():
+        by_level.setdefault(words.get(lv, lv), []).append(area)
+    parts = [f"{w} through the {', '.join(sorted(areas))}" for w, areas in by_level.items()]
+    return "; ".join(parts) if parts else "true to size"
 
 
 def _sits_as(avg_room_cm: float, band: Mapping) -> str:

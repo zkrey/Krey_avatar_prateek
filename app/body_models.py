@@ -38,6 +38,7 @@ def empty_body_models() -> dict:
         "body_shape": None,
         "accuracy_ledger": None,
         "avatar_confidence": None,   # §6 recognition score (backend-only) — see app/recognition.py
+        "style_profile": None,       # how the user WANTS to be dressed — see app/style_profile.py
     }
 
 
@@ -50,6 +51,7 @@ def assemble_body_models(
     hair_colour: Optional[Mapping] = None,
     hair_texture: Optional[Mapping] = None,
     eye_colour: Optional[Mapping] = None,
+    style_profile: Optional[Mapping] = None,
 ) -> dict:
     """Compose whatever slices are available into one body_models record."""
     record = empty_body_models()
@@ -57,7 +59,8 @@ def assemble_body_models(
                      ("hair_texture", hair_texture), ("eye_colour", eye_colour),
                      ("measurements", measurements), ("body_shape", body_shape),
                      ("accuracy_ledger", accuracy_ledger),
-                     ("avatar_confidence", avatar_confidence)):
+                     ("avatar_confidence", avatar_confidence),
+                     ("style_profile", style_profile)):
         if val is not None:
             record[key] = dict(val)
     return record
