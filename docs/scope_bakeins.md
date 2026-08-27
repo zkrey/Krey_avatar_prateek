@@ -146,3 +146,25 @@ attacked two ways, measured on the founder's two real collections:
 
 Lesson for other attributes: prefer robust aggregation over per-frame colour correction
 unless a genuine, locatable neutral reference exists.
+
+## Body measurement: two findings from the first real body capture
+
+Ran the identity-anchored body pipeline on the founder's own single-person full-body
+photos (height placeholder). Two things surfaced:
+
+1. **Casual full-body photos still measure with huge variance.** Anchoring worked (7/8
+   frames measured the user, one correctly gated `incomplete_body`), and the consolidated
+   values were plausible (waist ~81, chest ~103 cm, BMI 23.5, Rectangle) — BUT per-frame
+   spreads were 45-59 cm, so every field flagged needs_confirm and the decision was
+   `reconfirm`, confidence ~0.33. Cause: different distance / pose / clothing / partial
+   framing per photo, which the height-scale anchor can't normalise. **Implication:**
+   fit-grade measurement needs a GUIDED capture (fixed distance, straight-on, arms
+   slightly out, fitted/minimal clothing, full body in frame), not "pick any photos".
+   Casual-photo aggregation gives a central estimate with wide error bars, not exact fit.
+   This is the measurement analog of "face aggregates from casual photos; build does not".
+
+2. **MediaPipe segmentation-mask native abort on certain frames.** One image
+   (1600x721) hard-aborts the process inside MediaPipe's pose segmentation-mask output
+   (`Check failed: 1 == ChannelSize()`), even single-pose; masks-off avoids it. It's a
+   SIGABRT, not catchable in-process. **Hardening needed:** run the pose pass per image
+   in an isolated subprocess so one bad frame is skipped, not fatal to the whole capture.
