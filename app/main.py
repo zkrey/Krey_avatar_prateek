@@ -414,3 +414,49 @@ def fit_recommend_ep(payload: dict = Body(...)):
     return fit_score.recommend_for_style(
         {k: float(v) for k, v in body_cm.items()}, garment,
         style_profile=payload.get("style_profile"), confidence=payload.get("confidence"))
+
+
+@app.post("/capture/instagram")
+def capture_instagram_ep(payload: dict = Body(...)):
+    """
+    Instagram source: pull a Business/Creator account's images (Graph API) and run them
+    through the SAME auto-picker as an upload set — owner found by face-dominance, everyone
+    else discarded. Gated like every biometric ingestion; raw images discarded after.
+    Requires the caller to supply a valid `access_token` + `ig_user_id` (you provision the
+    Meta app + App Review); no credentials live in the code.
+    """
+    spine = _spine(payload.get("session_id"), payload.get("user_id"), payload.get("guest_id"),
+                   payload.get("surface"), payload.get("region"), payload.get("app_version"),
+                   payload.get("device_os"), None)
+    gate = _biometric_gate(bool(payload.get("account_present")), bool(payload.get("dob_verified")),
+                           payload.get("birthdate"), payload.get("jurisdiction"))
+    analytics.eligibility(spine, allowed=gate.allowed, reason=gate.reason)
+    if not gate.allowed:
+        raise HTTPException(403, {"reason": gate.reason, "is_minor": gate.is_minor})
+
+    ig_user_id, token = payload.get("ig_user_id"), payload.get("access_token")
+    if not ig_user_id or not token:
+        raise HTTPException(400, "need ig_user_id and access_token (Business/Creator + App Review)")
+
+    from app import instagram_source as ig
+    raws = ig.ingest_from_instagram(ig_user_id, token, ig.graph_media_fetcher,
+                                    ig.http_downloader, limit=int(payload.get("limit", 50)))
+    if not raws:
+        return {"eligibility": {"passed": True, "reason": "ok"}, "decision": "retake_no_images",
+                "source": "instagram", "n_sourced": 0}
+    paths, d = _save_uploads(raws)
+    try:
+        from app import capture_session as cs
+        result = cs.analyze_capture(paths)
+    finally:
+        _discard(paths, d)
+
+    conf = (result.get("identity") or {}).get("overall")
+    analytics.twin_extracted(spine, slice="capture", model="capture-aggregate-v0", confidence=conf)
+    return {
+        "eligibility": {"passed": True, "reason": "ok"},
+        "source": "instagram", "n_sourced": len(raws),
+        "decision": result["decision"], "identity": result["identity"],
+        "timeline": result["timeline"], "appearance": result["appearance"],
+        "n_faces_total": result["n_faces_total"], "n_user_faces": result["n_user_faces"],
+    }
