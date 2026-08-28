@@ -94,6 +94,35 @@ def test_body_decision_ladder():
     assert bs.body_capture_decision(4, 0.4) == "reconfirm"   # frames ok but confidence low
 
 
+# ---- subprocess crash isolation -------------------------------------------------------
+import sys
+
+def _payload():
+    return {"path": "/tmp/x.jpg", "height": 175, "weight": 72, "sex": 1}
+
+def test_worker_crash_becomes_a_skip_row_not_a_raise():
+    # simulate MediaPipe's native SIGABRT: the child exits non-zero with no stdout.
+    crash = [sys.executable, "-c", "import sys; sys.exit(134)"]
+    row = bs._run_pose_worker(_payload(), argv=crash)
+    assert row["measurable"] is False and row["reason"] == "pose_crashed"
+
+def test_worker_valid_output_is_parsed():
+    ok = [sys.executable, "-c",
+          'import sys; sys.stdin.read(); print(\'{"measurable": true, "reason": "ok"}\')']
+    row = bs._run_pose_worker(_payload(), argv=ok)
+    assert row["measurable"] is True and row["reason"] == "ok"
+
+def test_worker_timeout_becomes_a_skip_row():
+    slow = [sys.executable, "-c", "import time; time.sleep(5)"]
+    row = bs._run_pose_worker(_payload(), argv=slow, timeout=1)
+    assert row["measurable"] is False and row["reason"] == "pose_timeout"
+
+def test_worker_garbled_output_is_handled():
+    junk = [sys.executable, "-c", "import sys; sys.stdin.read(); print('not json')"]
+    row = bs._run_pose_worker(_payload(), argv=junk)
+    assert row["measurable"] is False and row["reason"] == "pose_bad_output"
+
+
 if __name__ == "__main__":
     import subprocess
     raise SystemExit(subprocess.call(["pytest", "-q", __file__]))

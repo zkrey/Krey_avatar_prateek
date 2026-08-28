@@ -109,6 +109,7 @@ def analyze_body(
     declared_body_type: Optional[str] = None,
     model_path: Optional[str] = None,
     user_reference: Optional[Sequence[float]] = None,
+    isolate: bool = True,
 ) -> dict:
     """
     Consolidate build across full-body frames. Returns:
@@ -118,30 +119,23 @@ def analyze_body(
     With `user_reference` (the user's face embedding), a group frame is IDENTITY-ANCHORED:
     the user's face is located and the pose whose head sits there is measured, instead of
     whoever is most prominent. Without it, the single most-prominent pose is used.
+
+    isolate=True (default) runs each frame's pose pass in a SUBPROCESS, so MediaPipe's
+    occasional native abort on a bad frame (a SIGABRT no try/except can catch) kills only
+    that frame — the capture continues. Set False to measure in-process (tests / trusted
+    input).
     """
     import os
-    import cv2
-    from app import measurements as body
 
     per_frame, good = [], []
     for path in sorted(image_paths):
-        img = cv2.imread(path)
-        if img is None:
+        row = (_measure_one_isolated if isolate else _measure_one)(
+            path, declared_height_cm, declared_weight_kg, sex, declared_body_type,
+            model_path, list(user_reference) if user_reference is not None else None)
+        if row is None:
             continue
-        date = cc.parse_capture_date(_exif_datetime(path), os.path.basename(path))
-        frame, anchor_note = _pose_for_user(img, model_path, user_reference, body)
-        gate = core.body_measurable(frame.visibility) if (frame and frame.detected) else \
-            {"measurable": False, "reason": anchor_note or "no_person_detected", "coverage": 0.0}
-        row = {"photo": os.path.basename(path), "date": date,
-               "measurable": gate["measurable"], "reason": gate["reason"],
-               "coverage": gate["coverage"], "anchored": bool(user_reference)}
-        if gate["measurable"]:
-            res = body.measure_from_frame(frame, declared_height_cm, declared_weight_kg,
-                                          sex, declared_body_type)
-            if res["status"] == "ok":
-                row["measurements"] = res["measurements"]
-                row["_shape"] = res["body_shape"]
-                good.append(row)
+        if row.get("measurements") is not None:
+            good.append(row)
         per_frame.append(row)
 
     dates = [g["date"] for g in good]
@@ -196,6 +190,62 @@ def _pose_for_user(img, model_path, user_reference, body):
     if idx is None:
         return None, "user_body_not_found"
     return poses[idx], None
+
+
+def _measure_one(path, height, weight, sex, body_type, model_path, user_reference) -> Optional[dict]:
+    """Measure ONE frame in-process: read -> pose (owner-anchored if a reference is given)
+    -> gate -> measure. Returns a JSON-serializable row (measurable rows carry
+    `measurements`); None if the file can't be read. This is the unit the subprocess wraps."""
+    import os
+    import cv2
+    from app import measurements as body
+    img = cv2.imread(path)
+    if img is None:
+        return None
+    date = cc.parse_capture_date(_exif_datetime(path), os.path.basename(path))
+    base = {"photo": os.path.basename(path), "date": date, "anchored": bool(user_reference)}
+    frame, note = _pose_for_user(img, model_path, user_reference, body)
+    if not (frame and frame.detected):
+        return {**base, "measurable": False, "reason": note or "no_person_detected", "coverage": 0.0}
+    gate = core.body_measurable(frame.visibility)
+    row = {**base, "measurable": gate["measurable"], "reason": gate["reason"],
+           "coverage": gate["coverage"]}
+    if gate["measurable"]:
+        res = body.measure_from_frame(frame, height, weight, sex, body_type)
+        if res["status"] == "ok":
+            row["measurements"] = res["measurements"]
+            row["_shape"] = res["body_shape"]
+    return row
+
+
+def _run_pose_worker(payload: dict, argv: Optional[list] = None, timeout: int = 90) -> dict:
+    """
+    Run one frame's pose+measure in a subprocess (app._pose_worker). A MediaPipe native
+    abort (SIGABRT — uncatchable in-process) then dies as a non-zero exit we DETECT here,
+    yielding a skip row instead of taking down the whole capture. Also guards timeouts and
+    garbled output. `argv` is injectable for tests.
+    """
+    import os, sys, json, subprocess
+    argv = argv or [sys.executable, "-m", "app._pose_worker"]
+    miss = {"photo": os.path.basename(payload.get("path", "")), "date": None,
+            "measurable": False, "coverage": 0.0}
+    try:
+        p = subprocess.run(argv, input=json.dumps(payload), capture_output=True,
+                           text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return {**miss, "reason": "pose_timeout"}
+    if p.returncode != 0 or not p.stdout.strip():
+        return {**miss, "reason": "pose_crashed"}
+    try:
+        return json.loads(p.stdout.strip().splitlines()[-1])
+    except (json.JSONDecodeError, IndexError):
+        return {**miss, "reason": "pose_bad_output"}
+
+
+def _measure_one_isolated(path, height, weight, sex, body_type, model_path, user_reference) -> dict:
+    return _run_pose_worker({"path": path, "height": height, "weight": weight, "sex": sex,
+                             "body_type": body_type, "model_path": model_path,
+                             "user_reference": user_reference})
 
 
 def _exif_datetime(path: str) -> Optional[str]:
