@@ -142,6 +142,26 @@ def identity_confidence(intra_sims: Sequence[float], n_frames: int,
     }
 
 
+def select_best_frames(candidates: Sequence[Mapping], target: int = 6,
+                       min_quality: float = 0.0) -> list:
+    """
+    From the OWNER's frames, auto-pick the best few for the twin — so a lazy album dump
+    (dozens of the user's photos) reduces to a strong handful instead of processing them
+    all. `candidates` = [{index, quality, date}]. Highest quality wins, but the freshest
+    usable frame is always kept (appearance must reflect how they look NOW). Returns the
+    indices to keep. Pure — the caller does the extraction on just these.
+    """
+    usable = [c for c in candidates if c.get("quality", 0.0) >= min_quality] or list(candidates)
+    if len(usable) <= target:
+        return sorted(c["index"] for c in usable)
+    chosen = sorted(usable, key=lambda c: -c.get("quality", 0.0))[:target]
+    newest = max(usable, key=lambda c: (c.get("date") or "", c.get("quality", 0.0)))
+    ids = [c["index"] for c in chosen]
+    if newest["index"] not in ids:
+        chosen[-1] = newest                         # swap the weakest pick for the freshest
+    return sorted(c["index"] for c in chosen)
+
+
 def capture_decision(identity_overall: float, n_user_frames: int) -> str:
     """Soft-confirm ladder: retake only as a last resort (matches the UX doctrine)."""
     if n_user_frames <= 0:

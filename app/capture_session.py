@@ -66,7 +66,8 @@ def _attributes_for_crop(crop_bgr) -> Optional[dict]:
                               hair_features=feats)
 
 
-def analyze_capture(image_paths: List[str], read_attributes: bool = True) -> dict:
+def analyze_capture(image_paths: List[str], read_attributes: bool = True,
+                    max_frames: int = 8) -> dict:
     """
     Consolidate a capture session into one user profile. Returns:
       {decision, identity, timeline, appearance, frames}
@@ -107,6 +108,16 @@ def analyze_capture(image_paths: List[str], read_attributes: bool = True) -> dic
     ident = cc.identity_confidence(intra, n_frames=len(user_idx), n_dates=len(set(known)))
     decision = cc.capture_decision(ident["overall"], len(user_idx))
 
+    # Auto-pick the owner's best frames for the expensive attribute reads, so a lazy album
+    # dump (dozens of the user's photos) reduces to a strong handful. Identity/timeline keep
+    # ALL the owner's evidence above; only extraction runs on the selection.
+    def _q(i):
+        (x0, y0, x1, y1), (H, W) = faces[i]["bbox"], faces[i]["shape"]
+        return faces[i]["det"] * ((x1 - x0) * (y1 - y0)) / float(max(1, H * W))
+    picks = cc.select_best_frames(
+        [{"index": i, "quality": _q(i), "date": faces[i]["date"]} for i in user_idx],
+        target=max_frames)
+
     timeline = {
         "oldest": known[0] if known else None,
         "newest": known[-1] if known else None,
@@ -117,7 +128,7 @@ def analyze_capture(image_paths: List[str], read_attributes: bool = True) -> dic
 
     frames, per_attr = [], {k: [] for k in _ATTR_MODE}
     if read_attributes:
-        for i in user_idx:
+        for i in picks:
             f = faces[i]
             x0, y0, x1, y1 = f["bbox"]; H, W = f["shape"]
             pad = int(0.6 * max(x1 - x0, y1 - y0))       # include hair + a margin
@@ -154,4 +165,13 @@ def analyze_capture(image_paths: List[str], read_attributes: bool = True) -> dic
         "frames": frames,
         "n_faces_total": len(faces),
         "n_user_faces": len(user_idx),
+        # owner-only retention: only the owner is profiled; everyone else in the pile is
+        # never returned and is discarded with the raw pixels. Auto-select trims the owner's
+        # own frames to the best few actually read.
+        "retention": {
+            "owner_faces": len(user_idx),
+            "owner_faces_used": len(picks),
+            "other_faces_discarded": len(faces) - len(user_idx),
+            "policy": "owner-only",
+        },
     }

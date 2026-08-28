@@ -66,6 +66,29 @@ def test_identity_confidence_low_for_thin_evidence():
     assert out["overall"] < 0.6
 
 
+def test_select_best_frames_keeps_the_strongest():
+    cands = [{"index": i, "quality": q, "date": "2020-01-01"}
+             for i, q in enumerate([0.1, 0.9, 0.4, 0.8, 0.2])]
+    picks = cc.select_best_frames(cands, target=2)
+    assert set(picks) == {1, 3}                       # the two highest-quality
+
+
+def test_select_all_when_few():
+    cands = [{"index": 0, "quality": 0.5, "date": None}, {"index": 1, "quality": 0.6, "date": None}]
+    assert cc.select_best_frames(cands, target=8) == [0, 1]
+
+
+def test_select_always_keeps_the_freshest_frame():
+    # frame 4 is the freshest but not top-quality; it must still be kept (current look).
+    cands = [{"index": 0, "quality": 0.9, "date": "2016-01-01"},
+             {"index": 1, "quality": 0.85, "date": "2017-01-01"},
+             {"index": 2, "quality": 0.8, "date": "2018-01-01"},
+             {"index": 3, "quality": 0.7, "date": "2019-01-01"},
+             {"index": 4, "quality": 0.5, "date": "2026-08-01"}]
+    picks = cc.select_best_frames(cands, target=3)
+    assert 4 in picks and 0 in picks                  # freshest kept + top quality kept
+
+
 def test_capture_decision_ladder():
     assert cc.capture_decision(0.8, 5) == "accept"
     assert cc.capture_decision(0.45, 3) == "reconfirm"      # one-tap, not re-upload

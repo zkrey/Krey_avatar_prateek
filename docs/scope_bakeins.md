@@ -168,3 +168,25 @@ photos (height placeholder). Two things surfaced:
    (`Check failed: 1 == ChannelSize()`), even single-pose; masks-off avoids it. It's a
    SIGABRT, not catchable in-process. **Hardening needed:** run the pose pass per image
    in an isolated subprocess so one bad frame is skipped, not fatal to the whole capture.
+
+## The regular-user lazy path (on-device album) — device vs server split
+
+Personal IG/Photos auto-fetch is dead (platform APIs removed it). The lazy path that
+survives for regular users is on-device album access. Division of labour:
+
+DEVICE (mobile app — not this backend):
+  - One OS photo-library permission tap (normal mobile gesture).
+  - Use the OS's own face grouping (iOS Photos / Android ML Kit) OR a small on-device model
+    to gather the user's face cluster (or a one-tap "this is me" on a cluster).
+  - Upload only that cluster / a sample — other people's photos ideally never leave the phone.
+
+SERVER (built): the same capture pipeline does the picking —
+  - owner found by face-dominance; auto-select the owner's BEST frames
+    (capture_core.select_best_frames: top quality, freshest always kept) for the reads;
+  - OWNER-ONLY RETENTION: only the owner is profiled; every other identity is discarded
+    with the raw pixels and never returned (analyze_capture retention block reports counts);
+  - recency-weighted, outlier-robust attribute fusion as before.
+
+So "user does nothing, Krey picks" is real: even if the device uploads a broad chunk, the
+server keeps only the owner's best frames and bins the rest. The device-side model + the
+one-tap permission UI are the remaining MOBILE build; the backend half is done.
