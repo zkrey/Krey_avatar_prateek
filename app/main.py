@@ -31,13 +31,33 @@ from app.skin_tone import extract_skin_samples
 from app import measurements as body
 from app import face
 from app import eligibility, style_profile, fit_score
+from app import store as store_mod
+from app.body_models import assemble_body_models
 from app.analytics import Analytics, Spine
 from app.recognition import recognition_from_body_models
 
-app = FastAPI(title="Krey Avatar — Service A (twin extraction)", version="0.4.0")
+app = FastAPI(title="Krey Avatar — Service A (twin extraction)", version="0.5.0")
 
 # Default sink logs JSON lines; swap for the warehouse / Events service in production.
 analytics = Analytics()
+# Compact-record store (derive-and-discard). In-memory reference; swap for a DB backend.
+twin_store = store_mod.MemoryTwinStore()
+
+
+def _twin_from_appearance(appearance: Optional[dict]) -> dict:
+    """Assemble a compact body_models (face slices + recognition) from fused capture attrs."""
+    a = appearance or {}
+    def cslot(name):
+        n = a.get(name)
+        return {"value": n["value"], "confidence": n.get("confidence")} \
+            if n and n.get("value") is not None else None
+    ht = a.get("hair_texture")
+    hair_texture = ({"value": ht["value"], "available": True, "confidence": ht.get("confidence")}
+                    if ht and ht.get("value") is not None else None)
+    rec = assemble_body_models(skin_tone=cslot("skin_tone"), hair_colour=cslot("hair_colour"),
+                               hair_texture=hair_texture, eye_colour=cslot("eye_colour"))
+    rec["avatar_confidence"] = recognition_from_body_models(rec)
+    return rec
 
 
 def _spine(session_id, user_id, guest_id, surface, region, app_version, device_os, entry_point) -> Spine:
@@ -316,6 +336,10 @@ async def capture_session_ep(
 
     conf = (result.get("identity") or {}).get("overall")
     analytics.twin_extracted(spine, slice="capture", model="capture-aggregate-v0", confidence=conf)
+    saved = False
+    if spine.user_id and result.get("appearance"):          # persist only for an account
+        twin_store.save(spine.user_id, _twin_from_appearance(result["appearance"]), source="capture")
+        saved = True
     return {
         "eligibility": {"passed": True, "reason": "ok"},
         "decision": result["decision"],
@@ -324,6 +348,7 @@ async def capture_session_ep(
         "appearance": result["appearance"],
         "n_faces_total": result["n_faces_total"],
         "n_user_faces": result["n_user_faces"],
+        "saved": saved,
     }
 
 
@@ -372,6 +397,12 @@ async def body_measure_ep(
     ledger = result.get("accuracy_ledger")
     analytics.twin_extracted(spine, slice="measurements", model="rule-measure-v0",
                              confidence=(ledger or {}).get("body_confidence", 0.0))
+    saved = False
+    if spine.user_id and result.get("measurements"):        # persist only for an account
+        twin_store.save(spine.user_id, assemble_body_models(
+            measurements=result["measurements"], body_shape=result["body_shape"],
+            accuracy_ledger=ledger), source="body")
+        saved = True
     return {
         "eligibility": {"passed": True, "reason": "ok"},
         "decision": result["decision"],
@@ -380,7 +411,23 @@ async def body_measure_ep(
         "measurements": result["measurements"],
         "body_shape": result["body_shape"],
         "accuracy_ledger": ledger,
+        "saved": saved,
     }
+
+
+@app.get("/twins/{user_id}")
+def get_twin(user_id: str):
+    """Fetch the stored compact twin for an account (the derived record, never raw photos)."""
+    env = twin_store.get(user_id)
+    if not env:
+        raise HTTPException(404, "no twin stored for this user")
+    return env
+
+
+@app.delete("/twins/{user_id}")
+def delete_twin(user_id: str):
+    """Right-to-erasure (DPDP): delete the stored twin entirely."""
+    return {"erased": twin_store.delete(user_id)}
 
 
 @app.post("/style/profile")

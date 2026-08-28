@@ -89,6 +89,40 @@ def test_capture_discards_raw_photos(monkeypatch):
     assert seen["paths"] and not any(os.path.exists(p) for p in seen["paths"])  # gone after
 
 
+# ---- persistence (capture -> store -> fetch -> erase) ---------------------------------
+def test_capture_persists_for_account_and_can_be_fetched_and_erased(monkeypatch):
+    import app.capture_session as cs
+    monkeypatch.setattr(cs, "analyze_capture", lambda paths: {
+        "decision": "accept", "identity": {"overall": 0.84}, "timeline": {},
+        "appearance": {"eye_colour": {"value": "dark_brown", "confidence": 0.99},
+                       "skin_tone": {"value": 6, "confidence": 0.6}},
+        "n_faces_total": 12, "n_user_faces": 12, "frames": []})
+    r = client.post("/capture/session", files=_files(3),
+                    data={"account_present": "true", "dob_verified": "true",
+                          "birthdate": ADULT, "user_id": "persist-user"})
+    assert r.status_code == 200 and r.json()["saved"] is True
+
+    got = client.get("/twins/persist-user")
+    assert got.status_code == 200
+    rec = got.json()["record"]
+    assert rec["eye_colour"]["value"] == "dark_brown" and "avatar_confidence" in rec
+
+    assert client.delete("/twins/persist-user").json()["erased"] is True
+    assert client.get("/twins/persist-user").status_code == 404      # erased
+
+
+def test_guest_capture_does_not_persist(monkeypatch):
+    import app.capture_session as cs
+    monkeypatch.setattr(cs, "analyze_capture", lambda paths: {
+        "decision": "accept", "identity": {"overall": 0.8}, "timeline": {},
+        "appearance": {"eye_colour": {"value": "dark_brown", "confidence": 0.9}},
+        "n_faces_total": 5, "n_user_faces": 5, "frames": []})
+    # no user_id -> a guest -> nothing is stored (biometric persistence needs an account).
+    r = client.post("/capture/session", files=_files(2),
+                    data={"account_present": "true", "dob_verified": "true", "birthdate": ADULT})
+    assert r.status_code == 200 and r.json()["saved"] is False
+
+
 # ---- body-measure ---------------------------------------------------------------------
 def test_body_measure_503_without_pose_model(monkeypatch):
     monkeypatch.setenv("MODELS_DIR", "/nonexistent-models")
