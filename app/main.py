@@ -21,17 +21,20 @@ from __future__ import annotations
 import os
 import uuid
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Body
 import numpy as np
+
+from datetime import date, datetime
 
 from app import monk
 from app.skin_tone import extract_skin_samples
 from app import measurements as body
 from app import face
+from app import eligibility, style_profile, fit_score
 from app.analytics import Analytics, Spine
 from app.recognition import recognition_from_body_models
 
-app = FastAPI(title="Krey Avatar — Service A (twin extraction)", version="0.3.0")
+app = FastAPI(title="Krey Avatar — Service A (twin extraction)", version="0.4.0")
 
 # Default sink logs JSON lines; swap for the warehouse / Events service in production.
 analytics = Analytics()
@@ -54,10 +57,63 @@ def _spine(session_id, user_id, guest_id, surface, region, app_version, device_o
     )
 
 
+def _biometric_gate(account_present: bool, dob_verified: bool, birthdate: Optional[str],
+                    jurisdiction: Optional[str]):
+    """
+    The single canRender chokepoint, applied at every biometric-INGESTION entry (photos in).
+    Twin-building spends no tokens, so render_cost=0; the wall still enforces account +
+    verified DOB + the jurisdiction age policy (minors blocked) before any biometric is read.
+    Returns the Eligibility verdict; the caller 403s when not allowed. Same rule everywhere —
+    the policy lives only in app/eligibility.py, never re-implemented per endpoint.
+    """
+    bd = None
+    if birthdate:
+        try:
+            bd = date.fromisoformat(birthdate)
+        except ValueError:
+            bd = None
+    return eligibility.can_render(
+        account_present=account_present, dob_verified=dob_verified, birthdate=bd,
+        today=date.today(), token_balance=0, render_cost=0,
+        jurisdiction=jurisdiction or eligibility.M1_JURISDICTION,
+        input_eligibility_passed=True,
+    )
+
+
+def _save_uploads(raws) -> list:
+    """Write in-memory uploads to short-lived temp files (paths for the cv2 pipelines).
+    The caller MUST delete them after processing — derive-and-discard: raw biometrics are
+    never retained past the extraction that derives the compact record."""
+    import tempfile
+    paths = []
+    d = tempfile.mkdtemp(prefix="krey-capture-")
+    for i, raw in enumerate(raws):
+        p = os.path.join(d, f"img_{i}.jpg")
+        with open(p, "wb") as f:
+            f.write(raw)
+        paths.append(p)
+    return paths, d
+
+
+def _discard(paths, d):
+    """Delete the raw photos + their temp dir. Best-effort; never raises."""
+    import shutil
+    for p in paths:
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+    try:
+        shutil.rmtree(d, ignore_errors=True)
+    except OSError:
+        pass
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "twin-extraction",
-            "slices": ["skin-tone-v0", "measure-v0", "face-v0"]}
+            "slices": ["skin-tone-v0", "measure-v0", "face-v0"],
+            "flows": ["capture-session", "body-measure", "fit-recommend", "style-profile"]}
 
 
 @app.post("/twin/extract-skin")
@@ -215,3 +271,146 @@ async def extract_measurements(
         "scale_px_per_cm": result["scale_px_per_cm"],
         "body_models": record,
     }
+
+
+# ===========================================================================
+# Consolidated flows — the real Service A surface (multi-photo + fit).
+# Each biometric-ingestion flow passes the single canRender chokepoint first,
+# then derives the compact record and DISCARDS the raw photos.
+# ===========================================================================
+@app.post("/capture/session")
+async def capture_session_ep(
+    files: list[UploadFile] = File(...),           # the capture set (e.g. 5 photos)
+    account_present: bool = Form(False),
+    dob_verified: bool = Form(False),
+    birthdate: Optional[str] = Form(None),         # ISO YYYY-MM-DD
+    jurisdiction: Optional[str] = Form(None),
+    session_id: Optional[str] = Form(None),
+    user_id: Optional[str] = Form(None),
+    guest_id: Optional[str] = Form(None),
+    surface: Optional[str] = Form(None),
+    region: Optional[str] = Form(None),
+    app_version: Optional[str] = Form(None),
+    device_os: Optional[str] = Form(None),
+):
+    """
+    Consolidate a capture set into one twin: detect + match identity, pick the owner,
+    fuse face attributes (recency-weighted, outlier-robust), and return the soft-confirm
+    decision. Gated at entry (biometric ingestion); raw photos are discarded after.
+    """
+    spine = _spine(session_id, user_id, guest_id, surface, region, app_version, device_os, None)
+    gate = _biometric_gate(account_present, dob_verified, birthdate, jurisdiction)
+    analytics.eligibility(spine, allowed=gate.allowed, reason=gate.reason)
+    if not gate.allowed:
+        raise HTTPException(403, {"reason": gate.reason, "is_minor": gate.is_minor})
+
+    raws = [r for r in [await f.read() for f in files] if r]
+    if not raws:
+        raise HTTPException(400, "no images")
+    paths, d = _save_uploads(raws)
+    try:
+        from app import capture_session as cs
+        result = cs.analyze_capture(paths)
+    finally:
+        _discard(paths, d)                          # derive-and-discard
+
+    conf = (result.get("identity") or {}).get("overall")
+    analytics.twin_extracted(spine, slice="capture", model="capture-aggregate-v0", confidence=conf)
+    return {
+        "eligibility": {"passed": True, "reason": "ok"},
+        "decision": result["decision"],
+        "identity": result["identity"],
+        "timeline": result["timeline"],
+        "appearance": result["appearance"],
+        "n_faces_total": result["n_faces_total"],
+        "n_user_faces": result["n_user_faces"],
+    }
+
+
+@app.post("/body/measure")
+async def body_measure_ep(
+    files: list[UploadFile] = File(...),           # full-body frames
+    height: float = Form(...),                     # declared height (cm) — scale anchor
+    weight: float = Form(...),
+    sex: int = Form(...),                          # 1 = male, 2 = female
+    body_type: Optional[str] = Form(None),
+    account_present: bool = Form(False),
+    dob_verified: bool = Form(False),
+    birthdate: Optional[str] = Form(None),
+    jurisdiction: Optional[str] = Form(None),
+    session_id: Optional[str] = Form(None),
+    user_id: Optional[str] = Form(None),
+    guest_id: Optional[str] = Form(None),
+    surface: Optional[str] = Form(None),
+    region: Optional[str] = Form(None),
+    app_version: Optional[str] = Form(None),
+    device_os: Optional[str] = Form(None),
+):
+    """Consolidate build across full-body frames (gated, recency-weighted, robust). Height
+    is the scale anchor. Non-measurable frames are dropped; raw photos discarded after."""
+    spine = _spine(session_id, user_id, guest_id, surface, region, app_version, device_os, None)
+    gate = _biometric_gate(account_present, dob_verified, birthdate, jurisdiction)
+    analytics.eligibility(spine, allowed=gate.allowed, reason=gate.reason)
+    if not gate.allowed:
+        raise HTTPException(403, {"reason": gate.reason, "is_minor": gate.is_minor})
+
+    if not os.path.exists(body._model_path()):
+        raise HTTPException(503, f"pose model not found at {body._model_path()} "
+                                 "(set MODELS_DIR to the folder holding pose_landmarker_heavy.task)")
+
+    raws = [r for r in [await f.read() for f in files] if r]
+    if not raws:
+        raise HTTPException(400, "no images")
+    paths, d = _save_uploads(raws)
+    try:
+        from app import body_session as bs
+        result = bs.analyze_body(paths, declared_height_cm=height, declared_weight_kg=weight,
+                                 sex=sex, declared_body_type=body_type)
+    finally:
+        _discard(paths, d)                          # derive-and-discard
+
+    ledger = result.get("accuracy_ledger")
+    analytics.twin_extracted(spine, slice="measurements", model="rule-measure-v0",
+                             confidence=(ledger or {}).get("body_confidence", 0.0))
+    return {
+        "eligibility": {"passed": True, "reason": "ok"},
+        "decision": result["decision"],
+        "n_measurable": result["n_measurable"],
+        "timeline": result["timeline"],
+        "measurements": result["measurements"],
+        "body_shape": result["body_shape"],
+        "accuracy_ledger": ledger,
+    }
+
+
+@app.post("/style/profile")
+def style_profile_ep(payload: dict = Body(...)):
+    """Assemble a StyleProfile from the quick-tap intake (fit_feel, sizes, region prefs).
+    No biometrics, no LLM — the free-text nuance layer plugs in via app/style_intake.py."""
+    prof = style_profile.assemble_style_profile(
+        fit_feel=payload.get("fit_feel"),
+        region_preferences=payload.get("region_preferences"),
+        comfort_offset=payload.get("comfort_offset"),
+        sensitivities=payload.get("sensitivities"),
+        confidence_notes=payload.get("confidence_notes"),
+        source=payload.get("source", "single_input"),
+    )
+    return {"style_profile": prof}
+
+
+@app.post("/fit/recommend")
+def fit_recommend_ep(payload: dict = Body(...)):
+    """
+    Best-match size for a garment, given the user's body + StyleProfile. GPU-free maths on
+    already-derived data (no biometric ingestion), so no render gate. Returns the size, the
+    per-region verdict, and a user-facing `why` that never names an insecurity.
+    """
+    body_cm = payload.get("body_cm")
+    if body_cm is None and payload.get("measurements"):
+        body_cm, _ = fit_score.from_body_models(payload["measurements"])
+    garment = payload.get("garment")
+    if not body_cm or not garment or "size_chart" not in garment:
+        raise HTTPException(400, "need body_cm (or measurements) and a garment with a size_chart")
+    return fit_score.recommend_for_style(
+        {k: float(v) for k, v in body_cm.items()}, garment,
+        style_profile=payload.get("style_profile"), confidence=payload.get("confidence"))
