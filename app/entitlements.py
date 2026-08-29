@@ -17,6 +17,11 @@ Which side of the wall any feature lands on is decided by The Habit Line (docs/D
 encoded here as `classify_feature`: give away what builds the habit, charge for value on top
 of it. The habit core can never be paid — a test pins that invariant.
 
+Access to the paid side is spent in TOKENS, not a hard cash paywall — tokens are earned
+(usage/sharing/referrals, `app/capture_tokens.py`) or bought, and reserved/committed at the
+render gate (`eligibility.TokenHold`). The plan levers here are best read as how fast the
+wallet refills and which lane you render in; the habit itself stays token-free (docs/DOCTRINE.md).
+
 This is the mechanism, not the pricing. Plan contents are DATA (`PLANS`) so the founder
 tunes every number without touching logic; real billing (Razorpay) and ₹ prices live
 elsewhere and are gated on explicit permission. This module only decides, given a plan and

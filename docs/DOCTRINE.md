@@ -64,6 +64,38 @@ value *above* the core: leverage (the quota/speed levers, unchanged) and, over t
 new-value layers — each one classified by the test, none of them a crippled piece of the
 habit.
 
+## The currency — tokens, a permeable wall
+
+Everything on the **paid** side (leverage + new value + premium) is accessed by spending
+**tokens**, not by a hard cash paywall. Two faucets fill a user's wallet:
+
+- **Earn** — gamified: usage, sharing, referrals, streaks. A user who can't (or won't) pay
+  can still reach premium by playing and sharing.
+- **Buy** — cash / token bundles (and subscriptions as a higher earn-drip + priority lane).
+
+This keeps the wall **permeable**, which is the whole point for a 20–28 GenZ audience: no
+one is hard-blocked, and because **sharing earns the currency**, the growth engine and the
+token faucet are the same act. Grind or pay — either way the user crosses.
+
+The Habit Line still governs: **the habit stays token-free.** Forcing tokens onto the fit
+answer or base try-on would reintroduce the forced cost we exist to remove, and break the
+flywheel. Tokens price only value *on top* of the habit. So the plan levers (quota, speed)
+are best read as *how fast your wallet refills and which lane you render in* — not a
+separate cash gate.
+
+Already in code: `app/capture_tokens.py` (earn — grants held, then resolved by the cascade,
+so garbage earns nothing), `app/eligibility.py` `TokenHold` + `insufficient_tokens` (spend —
+reserved up front, committed on a successful render, released on failure), and
+`analytics.token(direction="earned"|"spent")` (both faucets are events). The remaining build
+is the broader **earn sources** — share / referral / streak grants beyond capture — which
+reuse the same grant-and-resolve pattern.
+
+**Economics (deferred, flagged):** earned-token renders still cost us GPU, so the earn rate
+must be tuned against burn or gamified access blows the Free-Tier Subsidy. When we model it,
+split **bought-token renders** (revenue-funded, margin-positive) from **earned-token
+renders** (a subsidy cost) — the subsidy model gets that split as a new input. Not now; a
+later pass once the render's GPU-seconds are benchmarked.
+
 ## Where it's enforced
 
 `app/entitlements.py` holds the executable form: `FEATURE_LEDGER` classifies every known
