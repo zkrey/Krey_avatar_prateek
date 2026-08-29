@@ -128,29 +128,78 @@ def test_habit_core_is_always_free():
         assert ent.is_free_habit(feat) is True
 
 
-def test_fit_answer_and_try_on_never_paid():
-    # The two load-bearing habit-builders, named explicitly so a future edit can't quietly
-    # move them behind the wall without turning this red.
-    assert ent.is_free_habit("fit_answer") is True
-    assert ent.is_free_habit("try_on") is True
+def test_confidence_and_data_ops_never_paid():
+    # The load-bearing free items — confidence ("will this fit me?") + the ₹0 data ops —
+    # named explicitly so a future edit can't quietly move them behind the wall (Fix 1/2).
+    for feat in ("fit_answer", "save", "skip", "wear_log", "model_preview", "angle_swipe"):
+        assert ent.is_free_habit(feat) is True
+        assert ent.classify_feature(feat)["barrier"] == 0
 
 
-def test_leverage_is_paid():
-    for feat in ent._PAID_LEVERAGE:
+def test_metered_is_barrier1_paid():
+    for feat in ent._PAID_METERED:
         c = ent.classify_feature(feat)
-        assert c["paid"] is True and c["tier"] == ent.PAID_LEVERAGE
+        assert c["paid"] is True and c["tier"] == ent.PAID_METERED
+        assert c["barrier"] == 1
 
 
-def test_new_value_is_paid():
-    for feat in ent._PAID_NEW_VALUE:
+def test_proactive_is_barrier2_paid():
+    for feat in ent._PAID_PROACTIVE:
         c = ent.classify_feature(feat)
-        assert c["paid"] is True and c["tier"] == ent.PAID_NEW_VALUE
+        assert c["paid"] is True and c["tier"] == ent.PAID_PROACTIVE
+        assert c["barrier"] == 2
+
+
+def test_scan_a_fit_is_metered_not_proactive():
+    # Fix 4: scan-a-fit is reactive (a plain render from a different input), Barrier 1.
+    assert ent.classify_feature("scan_a_fit")["tier"] == ent.PAID_METERED
+
+
+def test_style_me_and_planner_are_subscription():
+    assert ent.classify_feature("style_me")["tier"] == ent.PAID_PROACTIVE
+    assert ent.classify_feature("planner")["tier"] == ent.PAID_PROACTIVE
 
 
 def test_unknown_feature_defaults_free():
     # "When in doubt, free" — mis-charging for a habit-builder is the costly error.
     c = ent.classify_feature("some_future_thing")
     assert c["paid"] is False and c["tier"] == ent.FREE_HABIT
+
+
+# ---- token map + earn map (SAMPLE amounts, backend-tunable) ---------------------------
+def test_token_map_defaults():
+    m = ent.token_map()
+    assert m["COST"] == 10 and m["DAILY_FREE_RENDERS"] == 5 and m["KREY_UNLIMITED_INR_YR"] == 999
+
+
+def test_token_map_env_override(monkeypatch):
+    # Numbers are SAMPLE — the backend must be able to retune without a code change.
+    monkeypatch.setenv("KREY_TOKEN_COST", "8")
+    assert ent.token_map()["COST"] == 8
+
+
+def test_token_map_ignores_bad_env(monkeypatch):
+    monkeypatch.setenv("KREY_TOKEN_COST", "not-a-number")
+    assert ent.token_map()["COST"] == 10          # falls back to the sample default
+
+
+def test_earn_map_has_inapp_and_promotion():
+    m = ent.earn_map()
+    families = {v["family"] for v in m.values()}
+    assert families == {"in_app", "promotion"}
+
+
+def test_earn_map_covers_the_named_promotion_sources():
+    # The founder's promotion earns, on top of in-app gamification.
+    m = ent.earn_map()
+    for src in ("referral_friend", "raaq", "broadcast", "pr_feature", "whatsapp_promo"):
+        assert m[src]["family"] == "promotion"
+        assert m[src]["amount"] > 0
+
+
+def test_earn_map_env_override(monkeypatch):
+    monkeypatch.setenv("KREY_EARN_REFERRAL_FRIEND", "75")
+    assert ent.earn_map()["referral_friend"]["amount"] == 75
 
 
 # ---- endpoint wiring ------------------------------------------------------------------

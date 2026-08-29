@@ -14,76 +14,162 @@ has felt the magic across a few looks), then firm enough that the wall itself co
 that exact moment, never before the wow (nagging a cold user kills the feeling).
 
 Which side of the wall any feature lands on is decided by The Habit Line (docs/DOCTRINE.md),
-encoded here as `classify_feature`: give away what builds the habit, charge for value on top
-of it. The habit core can never be paid — a test pins that invariant.
+encoded here as `classify_feature` with the two-barrier model: FREE_HABIT (below both
+barriers — confidence + ₹0 ops + the free daily render), PAID_METERED (Barrier 1: a produced
+render beyond the daily one — token-metered), PAID_PROACTIVE (Barrier 2: Krey works before
+you ask — subscription-native). The habit core can never be paid — a test pins that invariant.
 
-Access to the paid side is spent in TOKENS, not a hard cash paywall — tokens are earned
-(usage/sharing/referrals, `app/capture_tokens.py`) or bought, and reserved/committed at the
-render gate (`eligibility.TokenHold`). The plan levers here are best read as how fast the
-wallet refills and which lane you render in; the habit itself stays token-free (docs/DOCTRINE.md).
+Access to the paid side is spent in TOKENS, not a hard cash paywall — tokens are EARNED
+(`earn_map`: in-app gamification + promotion/advocacy — referral, RAAQ, broadcast, PR,
+WhatsApp owned-media) or bought, and reserved/committed at the render gate
+(`eligibility.TokenHold`). `token_map` holds SAMPLE amounts only — the real numbers live in
+the backend and finalise post-launch against measured GPU cost + the allowed free-tier
+subsidy; every amount is env-overridable so ops retune without a code change.
 
-This is the mechanism, not the pricing. Plan contents are DATA (`PLANS`) so the founder
-tunes every number without touching logic; real billing (Razorpay) and ₹ prices live
-elsewhere and are gated on explicit permission. This module only decides, given a plan and
-how much a user has played today: may they render now, in which lane, and is it the moment
-to offer more. It is read at the render gate alongside `eligibility.can_render` — the two
-are complementary: eligibility says *may this person render at all* (account + DOB); this
-says *may this plan render right now, and how fast*.
+This is the mechanism, not the pricing. The plan levers (`PLANS`: quota + lane) are best read
+as how fast the wallet refills and which lane you render in; real billing (Razorpay) and ₹
+prices live elsewhere and are gated on explicit permission. Read at the render gate alongside
+`eligibility.can_render` — eligibility says *may this person render at all* (account + DOB);
+this says *may this render happen now, at what token cost, and in which lane*.
 """
 from __future__ import annotations
+import os
 from typing import Optional
 
-# ── The Habit Line (docs/DOCTRINE.md) ─────────────────────────────────────────────────
-# Give away the thing that removes forced cost and builds the habit; charge for the thing
-# that creates new value on top of the habit. This is the barrier between free and paid.
-#   - free_habit    : builds the habit / removes forced cost -> ALWAYS free (hard invariant)
-#   - paid_leverage : the same habit made frictionless (unlimited quota, priority speed)
-#   - paid_new_value: value that only matters because the habit exists, genuinely additive
-# Applying the test to every feature keeps the wall principled instead of arbitrary.
-FREE_HABIT, PAID_LEVERAGE, PAID_NEW_VALUE = "free_habit", "paid_leverage", "paid_new_value"
+# ── The Habit Line + the two barriers (docs/DOCTRINE.md) ──────────────────────────────
+# Give away what removes forced cost and builds the habit; charge for the value created ON
+# TOP of it. The wall is drawn in two places:
+#   Barrier 1  Free -> Metered : at the CREATION line — a produced render beyond the free
+#                                daily one. Reactive, real GPU. Token-metered.
+#   Barrier 2  Metered -> Sub   : at the PROACTIVE line — Krey works before you ask (Style
+#                                Me, planner). Subscription-native (KREY UNLIMITED).
+# Everything answering "will this fit me?" and everything that costs ~₹0 stays BELOW both,
+# free and unlimited — even when it converts (the no-moving-up rule, guarded by a test).
+FREE_HABIT, PAID_METERED, PAID_PROACTIVE = "free_habit", "paid_metered", "paid_proactive"
 
-# The habit core — never behind the wall, whatever the conversion pressure. Guarded by a
-# test so the invariant lives in code, not just prose.
+# ── Token map — SAMPLE amounts, NOT final economic law ────────────────────────────────
+# Placeholders to reason with. The real numbers live in the BACKEND and are finalised once
+# the app ships, against measured per-render GPU cost + the free-tier subsidy we allow
+# (Slice 4 benchmark). Centralised here + env-overridable (KREY_TOKEN_<KEY>) so ops retune
+# the economy without a code change. Amounts in tokens; subscription in INR/year.
+_TOKEN_DEFAULTS = {
+    "GRANT": 100,                  # initial wallet on signup
+    "DAILY_FREE_RENDERS": 5,       # free produced renders per day (the taste)
+    "OWNCOST": 5,                  # render on your own garment (half — feeds the wear-log)
+    "COST": 10,                    # standard produced render
+    "LAZYCOST": 15,                # proactive multi-render (Style Me / planner)
+    "KREY_UNLIMITED_INR_YR": 999,  # Barrier-2 subscription (unvalidated until Slice 4)
+}
+
+
+def token_map() -> dict:
+    """Sample token amounts, overridable from the environment (KREY_TOKEN_<KEY>) so the
+    backend can retune the economy without a code change. Final values settle post-launch
+    against real GPU cost + allowed free-tier subsidy — these are NOT economic law."""
+    m = dict(_TOKEN_DEFAULTS)
+    for k in m:
+        env = os.environ.get(f"KREY_TOKEN_{k}")
+        if env is not None:
+            try:
+                m[k] = int(env)
+            except ValueError:
+                pass
+    return m
+
+
+# FREE — below both barriers: confidence ("will this fit me?"), ~₹0 ops, + the free daily
+# render. Never metered. fit_answer MUST be a standalone action, never only bundled inside a
+# render, or "will this fit me?" is paywalled behind COST (docs/DOCTRINE.md, Fix 1).
 _HABIT_CORE = {
-    "fit_answer":     "Does this fit me / what size — the habit itself, CPU, instant.",
-    "try_on":         "Seeing yourself in a garment — the behaviour we make universal.",
-    "twin_build":     "The twin, built once and kept — the price of entry, not a feature.",
-    "browse":         "The rail / browsing — where the habit is exercised.",
+    "fit_answer":     "Standalone 'will this fit me?' — rule engine, ₹0, UNLIMITED (never only inside a render — Fix 1).",
+    "model_preview":  "Garment on a stock model — cached, ₹0, confidence.",
+    "angle_swipe":    "Turntable / angle-swipe — cached, ₹0, confidence.",
+    "browse":         "Browse / discover — ₹0.",
+    "compare":        "Compare looks side by side — ₹0 confidence.",
+    "save":           "Save a look — ₹0; builds the data flywheel (Fix 2, free forever).",
+    "skip":           "Skip a look — ₹0; taste signal (Fix 2, free forever).",
+    "wear_log":       "Wear-log — ₹0; the asset we're acquiring (Fix 2, free forever).",
     "size_recommend": "Size recommendation — removes the forced cost of guessing.",
+    "twin_build":     "The twin, built once and kept — the price of entry.",
+    "daily_render":   "The first render each day — the free taste (DAILY_FREE_RENDERS).",
 }
-# Paid = value on top of the habit. Leverage is the same habit, more & faster; new-value
-# only matters because the habit is already in place, and adds something rather than
-# withholding core. New surfaces get added here after passing the test in docs/DOCTRINE.md.
-_PAID_LEVERAGE = {
-    "unlimited_renders": "The same habit without the daily wall (quota lever).",
-    "priority_speed":    "The same habit, warm/instant instead of cold (speed lever).",
+# PAID · Barrier 1 (Free -> Metered) — a PRODUCED render beyond the free daily one. Reactive
+# creation, real GPU. Token-metered (or covered by earned tokens / the subscription).
+_PAID_METERED = {
+    "standard_render":     "A render beyond the free daily one (COST). Reactive creation.",
+    "own_wardrobe_render": "Render on your own garment (OWNCOST, half — feeds the wear-log; tripwire: cut to free if it suppresses wardrobe-building, Fix 3).",
+    "scan_a_fit":          "Render from a scanned garment (COST, not LAZYCOST — it's reactive; the scan itself is free, Fix 4).",
 }
-_PAID_NEW_VALUE = {
-    "hd_share_export":   "Shareable HD renders — new value built on the habit (referral).",
-    "wardrobe_planning": "Plan/organise outfits — presupposes a formed try-on habit.",
-    "occasion_styling":  "Styling intelligence for occasions — additive, not core.",
-    "shop_the_look":     "Buy the look — new value layered on knowing the fit.",
-    # M2 premium — Sohan's 3D-mesh + Blender photoreal try-on (Path A), gated on the M1 rule
-    # fit-score reaching ~85% precision (docs/scope_bakeins.md). New value on top of the 2D
-    # habit, not a replacement for it; parked until M2.
-    "hyperreal_3d_render": "Photoreal 3D try-on (Sohan's mesh+Blender, M2 premium) — new value on the 2D habit.",
+# PAID · Barrier 2 (Metered -> Subscription) — PROACTIVE: Krey works before you ask.
+# Subscription-native (KREY UNLIMITED), not a per-use token.
+_PAID_PROACTIVE = {
+    "style_me":            "Krey styles you unprompted — proactive, subscription-native.",
+    "planner":             "A week / occasion plan — max proactive, subscription-native.",
+    "hyperreal_3d_render": "Photoreal 3D twin (Sohan's mesh+Blender, M2 premium) — new value on the 2D habit.",
+    "hd_share_export":     "HD watermark-free share — new value on top (referral).",
+    "wardrobe_planning":   "A managed closet — presupposes a formed habit.",
+    "occasion_styling":    "Occasion / weather styling — proactive, additive.",
+    "shop_the_look":       "Buy the look — new value layered on knowing the fit.",
 }
+_PAID = {**_PAID_METERED, **_PAID_PROACTIVE}
+_TIER_OF = {**{k: FREE_HABIT for k in _HABIT_CORE},
+            **{k: PAID_METERED for k in _PAID_METERED},
+            **{k: PAID_PROACTIVE for k in _PAID_PROACTIVE}}
+_BARRIER = {FREE_HABIT: 0, PAID_METERED: 1, PAID_PROACTIVE: 2}
 
 
 def classify_feature(feature: str) -> dict:
     """The single call every feature passes through to land on a side of the wall. Returns
-    the Habit-Line class + the reason. Unknown features default to FREE_HABIT — 'when in
-    doubt, free' (docs/DOCTRINE.md): mis-charging for a habit-builder is the costly error,
-    so the safe default protects the flywheel."""
+    the tier, which barrier it sits above (0 = free, 1 = metered, 2 = subscription), whether
+    it's paid, and the reason. Unknown features default to FREE_HABIT — 'when in doubt, free'
+    (docs/DOCTRINE.md): mis-charging for a habit-builder is the costly error, so the safe
+    default protects the flywheel."""
     f = (feature or "").strip().lower()
-    if f in _HABIT_CORE:
-        return {"feature": f, "tier": FREE_HABIT, "paid": False, "reason": _HABIT_CORE[f]}
-    if f in _PAID_LEVERAGE:
-        return {"feature": f, "tier": PAID_LEVERAGE, "paid": True, "reason": _PAID_LEVERAGE[f]}
-    if f in _PAID_NEW_VALUE:
-        return {"feature": f, "tier": PAID_NEW_VALUE, "paid": True, "reason": _PAID_NEW_VALUE[f]}
-    return {"feature": f, "tier": FREE_HABIT, "paid": False,
-            "reason": "unclassified — defaults free (when in doubt, free; protect the habit)"}
+    tier = _TIER_OF.get(f, FREE_HABIT)
+    reason = (_HABIT_CORE.get(f) or _PAID.get(f)
+              or "unclassified — defaults free (when in doubt, free; protect the habit)")
+    return {"feature": f, "tier": tier, "barrier": _BARRIER[tier],
+            "paid": tier != FREE_HABIT, "reason": reason}
+
+
+# ── Earn — how a wallet fills without paying (SAMPLE grants, backend-tunable) ──────────
+# Paid access is governed by tokens, and tokens are EARNED as well as bought, so the wall
+# stays permeable. Two families:
+#   in_app    — gamification within the product (usage, saving, capture, streaks).
+#   promotion — advocacy / owned-media that GROWS Krey, on top of the in-app earns:
+#               referral, RAAQ, broadcast, PR, WhatsApp owned-media app promotion.
+# Grants are SAMPLE, centralised + env-overridable (KREY_EARN_<SOURCE>); final values and
+# eligibility settle in the token pass. This captures the model, not the economy.
+_EARN_DEFAULTS = {
+    # in-app gamification
+    "daily_use":       (5,   "in_app",    "Opening + using Krey today."),
+    "save_look":       (1,   "in_app",    "Saving a look (the action is free; the token nudges the habit)."),
+    "capture_photos":  (100, "in_app",    "Completing the capture set (existing capture grant)."),
+    "streak":          (10,  "in_app",    "A usage streak."),
+    # promotion / advocacy — the additional earn options, on top of in-app gamification
+    "referral_friend": (50,  "promotion", "A referred friend who signs up + builds a twin."),
+    "raaq":            (10,  "promotion", "Posting / answering a RAAQ (rate-a-fit) that drives engagement."),
+    "broadcast":       (20,  "promotion", "Broadcasting a look to a channel / story."),
+    "pr_feature":      (50,  "promotion", "A PR / press mention credited to the user."),
+    "whatsapp_promo":  (20,  "promotion", "Sharing Krey via owned WhatsApp media (app promotion)."),
+}
+
+
+def earn_map() -> dict:
+    """Sample earn grants, overridable from the environment (KREY_EARN_<SOURCE>). Amounts
+    and eligibility finalise in the token pass; these capture the earn model, not the
+    economy. Returns {source: {amount, family, note}}."""
+    out = {}
+    for src, (amt, family, note) in _EARN_DEFAULTS.items():
+        env = os.environ.get(f"KREY_EARN_{src.upper()}")
+        val = amt
+        if env is not None:
+            try:
+                val = int(env)
+            except ValueError:
+                pass
+        out[src] = {"amount": val, "family": family, "note": note}
+    return out
 
 
 def is_free_habit(feature: str) -> bool:

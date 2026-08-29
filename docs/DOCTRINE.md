@@ -28,78 +28,102 @@ These build the habit and remove forced cost. They are the **same product for ev
 free is never a crippled core. A habit-builder is **never** moved behind the wall to juice
 conversion; doing so breaks the habit and kills the flywheel. This is a hard invariant.
 
-**PAID — value on top of the habit:**
-1. **Leverage** — the *same* habit made frictionless: unlimited renders (quota) and
-   priority/warm speed. The user isn't buying a feature they lacked; they're buying *more
-   and faster* of the habit they already love. These are the two levers already built
-   (`entitlements.PLANS` → quota + lane).
-2. **New value** — capabilities that only matter *because* the habit is in place, and that
-   add something genuinely new rather than withholding a piece of the core: shareable HD
-   exports, wardrobe/occasion planning, styling intelligence, shop-the-look, early drops,
-   and — as the M2 **premium** layer — Sohan's photoreal 3D try-on (mesh + Blender, Path A),
-   gated on the M1 rule fit-score reaching ~85% precision (docs/scope_bakeins.md). The 2D
-   try-on builds the habit and stays free; hyperreal 3D is new value on top of it, never a
-   replacement for it. Each new-value feature is admitted to the paid side **only if it
-   passes the test below** — never by carving a slice out of the free habit.
+**PAID — value on top of the habit, drawn at two barriers:**
 
-## The test (apply to every new feature)
+- **Barrier 1 · Free → Metered** — at the **creation line**. A *produced render beyond the
+  free daily one*: `standard_render`, `own_wardrobe_render`, `scan_a_fit`. Reactive, real
+  GPU, token-metered. Everything answering "will this fit me?" and everything ~₹0 stays
+  *below* this line, free and unlimited.
+- **Barrier 2 · Metered → Subscription** — at the **proactive line**. Krey doing work the
+  user didn't ask for: `style_me`, `planner`, and the M2 **premium** `hyperreal_3d_render`
+  (Sohan's mesh + Blender, gated on the M1 fit-score reaching ~85% — docs/scope_bakeins.md),
+  plus HD share, wardrobe, occasion styling, shop-the-look. Their home is the **subscription**
+  (KREY UNLIMITED), not a per-use token — proactivity is the compounding value.
 
-Ask one question: **does this build the habit, or create new value on top of it?**
+The 2D try-on builds the habit and stays free; hyperreal 3D is new value on top of it, never
+a replacement. Each paid feature is admitted **only if it passes the three seams below**.
 
-- Builds the habit / removes forced cost → **free**. No exceptions, even under conversion
-  pressure.
-- Creates new value that presupposes the habit → **paid** (leverage or new-value).
-- Can't tell → it's probably core to the habit; default it **free**. When in doubt, free.
+## The three seams (the classifier)
 
-The conversion moment is engineered, not gated: a free user hits the habit's *wow
-inflection*, then meets the leverage wall (quota/speed) or is offered a new-value layer —
-at the peak of wanting more, never before the habit has formed (`entitlements.upsell_signal`).
+An item is filed correctly only when all three agree with its price:
 
-## How this sits with the earlier rule
+| Seam | Free side | Paid side |
+|---|---|---|
+| **S1 · Confidence vs Creation** | "will this work on me?" | "make me the thing" |
+| **S2 · Reactive vs Proactive** | they ask, you answer | you work before they ask |
+| **S3 · Marginal cost to Krey** | ~₹0 to serve | real GPU-seconds |
 
-The earlier decision — *"same product for everyone; free and paid differ only on quota and
-speed"* — is not overturned; it is **the free side of this line**. The habit core is
-identical for all and given away. This doctrine adds the principled way to introduce paid
-value *above* the core: leverage (the quota/speed levers, unchanged) and, over time,
-new-value layers — each one classified by the test, none of them a crippled piece of the
-habit.
+Confidence is removed friction (never charge for it — the rent-seeking electrician);
+creation is a produced artifact (fair to charge). Reactive → free/metered; proactive →
+subscription. ₹0 → free; GPU → metered.
+
+## The no-moving-up rule (hard, not a dial)
+
+You may **never** move an item *up* from habit to paid to boost conversion. If "will this
+fit me?" ever costs money, you haven't monetised the habit — you've destroyed the thing
+building it and starved the data engine that feeds every paid feature downstream. The habit
+layer stays free **even when it converts**, because its output isn't revenue, it's the asset.
+`entitlements.classify_feature` defaults any unknown feature to free — when in doubt, free.
+
+The conversion moment is engineered on the **render wall**, phrased as *creation, never
+confidence*: "you've used your free renders today — want unlimited?" (fair, the toll is on
+the made thing), never "pay to see if it fits" (a toll on the anxiety we exist to remove).
+
+## Four fixes (build constraints for the token pass)
+
+1. **fit-score is a standalone, free, unlimited action** — never only bundled inside a
+   render, or "will this fit me?" is paywalled behind COST. It's the acquisition asset.
+2. **save / skip / wear-log free and unmetered, forever** — they are the data flywheel;
+   a token on them taxes the exact behaviour we cultivate.
+3. **own-wardrobe render is on a tripwire** — half-price today (it feeds the wear-log);
+   cut it to free if usage shows people avoiding it to save tokens. Doctrine outranks margin.
+4. **scan-a-fit is metered (COST), not proactive (LAZYCOST)** — it's reactive; the scan is
+   free, it's just a render from a different input.
 
 ## The currency — tokens, a permeable wall
 
-Everything on the **paid** side (leverage + new value + premium) is accessed by spending
-**tokens**, not by a hard cash paywall. Two faucets fill a user's wallet:
+Everything on the **paid** side (metered renders + subscription) is accessed by spending
+**tokens**, not a hard cash paywall. Two families of faucet fill a wallet:
 
-- **Earn** — gamified: usage, sharing, referrals, streaks. A user who can't (or won't) pay
-  can still reach premium by playing and sharing.
-- **Buy** — cash / token bundles (and subscriptions as a higher earn-drip + priority lane).
+- **Earn — in-app gamification:** usage, saving, capture, streaks.
+- **Earn — promotion / advocacy** (the additional options, on top of in-app): **referral**
+  of friends, **RAAQ**, **broadcast** of a look, **PR / press** credited to the user, and
+  **WhatsApp owned-media** app promotion. These grow Krey, so we pay the user in tokens.
+- **Buy:** cash / token bundles, and the **KREY UNLIMITED** subscription.
 
-This keeps the wall **permeable**, which is the whole point for a 20–28 GenZ audience: no
-one is hard-blocked, and because **sharing earns the currency**, the growth engine and the
-token faucet are the same act. Grind or pay — either way the user crosses.
+This keeps the wall **permeable**, which is the whole point for a 20–28 GenZ audience: no one
+is hard-blocked, and because advocacy *earns the currency*, the growth engine and the token
+faucet are the same act. Grind, promote, or pay — either way the user crosses.
 
-The Habit Line still governs: **the habit stays token-free.** Forcing tokens onto the fit
-answer or base try-on would reintroduce the forced cost we exist to remove, and break the
-flywheel. Tokens price only value *on top* of the habit. So the plan levers (quota, speed)
-are best read as *how fast your wallet refills and which lane you render in* — not a
-separate cash gate.
+The Habit Line still governs: **the habit stays token-free.** Tokens price only value *on
+top* of the habit, never the fit answer or the free daily render.
+
+**The numbers are SAMPLES, not economic law.** The locked reference map — `GRANT 100 /
+DAILY 5 / OWNCOST 5 / COST 10 / LAZYCOST 15 / KREY UNLIMITED ₹999·yr` — is a placeholder to
+reason with. Real values live in the **backend**, are **env-overridable** (`token_map()` /
+`earn_map()` read `KREY_TOKEN_*` / `KREY_EARN_*`), and are **finalised once the app ships**
+against measured per-render GPU cost + the free-tier subsidy we allow (Slice 4 benchmark).
+The ₹999 tier especially is a bet unvalidated until that benchmark.
 
 Already in code: `app/capture_tokens.py` (earn — grants held, then resolved by the cascade,
 so garbage earns nothing), `app/eligibility.py` `TokenHold` + `insufficient_tokens` (spend —
-reserved up front, committed on a successful render, released on failure), and
-`analytics.token(direction="earned"|"spent")` (both faucets are events). The remaining build
-is the broader **earn sources** — share / referral / streak grants beyond capture — which
-reuse the same grant-and-resolve pattern.
+reserved up front, committed on a successful render, released on failure),
+`analytics.token(direction="earned"|"spent")` (both faucets are events), and
+`entitlements.earn_map` (the earn-source taxonomy: in-app + promotion). The remaining build
+is the full **token pass** — wiring promotion grants (referral/RAAQ/broadcast/PR/WhatsApp)
+through the same grant-and-resolve pattern, plus the buy path and subscription tiers, settled
+together with the final numbers.
 
 **Economics (deferred, flagged):** earned-token renders still cost us GPU, so the earn rate
-must be tuned against burn or gamified access blows the Free-Tier Subsidy. When we model it,
-split **bought-token renders** (revenue-funded, margin-positive) from **earned-token
-renders** (a subsidy cost) — the subsidy model gets that split as a new input. Not now; a
-later pass once the render's GPU-seconds are benchmarked.
+must be tuned against burn or gamified access blows the free-tier subsidy. When we model it,
+split **bought-token renders** (revenue-funded) from **earned-token renders** (a subsidy
+cost) — the subsidy model gets that split as a new input. Later, once GPU-seconds are real.
 
 ## Where it's enforced
 
-`app/entitlements.py` holds the executable form: `FEATURE_LEDGER` classifies every known
-feature as `free_habit`, `paid_leverage`, or `paid_new_value` with a reason, and
-`classify_feature()` is the single call any new surface passes through. A test
-(`tests/test_entitlements.py`) asserts the habit-core features can **never** resolve to
-paid — the invariant, guarded in code, not just prose.
+`app/entitlements.py` holds the executable form: `classify_feature()` files every feature as
+`free_habit`, `paid_metered` (Barrier 1), or `paid_proactive` (Barrier 2) with its barrier
+number and reason — the single call any new surface passes through. `token_map()` and
+`earn_map()` hold the SAMPLE, env-overridable amounts. Tests (`tests/test_entitlements.py`)
+assert the confidence + ₹0 data ops can **never** resolve to paid — the no-moving-up rule,
+guarded in code, not just prose.
