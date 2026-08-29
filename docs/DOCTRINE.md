@@ -39,11 +39,17 @@ conversion; doing so breaks the habit and kills the flywheel. This is a hard inv
   (Sohan's mesh + Blender, gated on the M1 fit-score reaching ~85% — docs/scope_bakeins.md),
   plus HD share, wardrobe, occasion styling, shop-the-look. **Not** metered per use
   (proactive features fire many renders unpredictably; a flat pass caps GPU exposure for
-  both sides) — but **still token-governed**: a token **pass** (`UNLIMITED_PASS_TOKENS`)
-  unlocks unlimited + proactive for a period, *earned or bought*; **₹999/yr is the cash
-  shortcut to that same pass, not a separate cash-only door**. Nothing is looped out of the
-  token economy — cash only ever buys tokens (or the pass), so a non-payer can still grind
-  their way in and the wall stays permeable.
+  both sides) — but **still token-governed**: a token **pass** (`PASS_TOKENS`) unlocks the
+  raised tier for a period, *earned or bought*; **₹999/yr is the cash shortcut to that same
+  pass, not a separate cash-only door**. Nothing is looped out of the token economy — cash
+  only ever buys tokens (or the pass), so a non-payer can still grind their way in and the
+  wall stays permeable.
+
+  **The pass is not truly unlimited.** Like Claude Pro, it's a *raised, resetting cap* —
+  better than free, but it can still run out and it refreshes each period. The allowance
+  size and the reset window are an **open loop**, deliberately left unset (`PASS_PERIOD_
+  ALLOWANCE = 0`) until real usage shows how long users go in one sitting; they settle in
+  the token pass.
 
 The 2D try-on builds the habit and stays free; hyperreal 3D is new value on top of it, never
 a replacement. Each paid feature is admitted **only if it passes the three seams below**.

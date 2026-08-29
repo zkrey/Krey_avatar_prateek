@@ -18,7 +18,8 @@ encoded here as `classify_feature` with the two-barrier model: FREE_HABIT (below
 barriers — confidence + ₹0 ops + the free daily render), PAID_METERED (Barrier 1: a produced
 render beyond the daily one — token-metered per use), PAID_PROACTIVE (Barrier 2: Krey works
 before you ask — unlocked by a token PASS, earned or bought, not metered per use; ₹999/yr is
-the cash shortcut to that pass). The habit core can never be paid — a test pins that invariant.
+the cash shortcut. NOT truly unlimited — a raised, resetting cap like Claude Pro, whose size +
+reset window are an open loop). The habit core can never be paid — a test pins that invariant.
 
 Access to the paid side is spent in TOKENS, not a hard cash paywall — tokens are EARNED
 (`earn_map`: in-app gamification + promotion/advocacy — referral, RAAQ, broadcast, PR,
@@ -59,8 +60,13 @@ _TOKEN_DEFAULTS = {
     "OWNCOST": 5,                    # Barrier 1 · render on your own garment (half — feeds wear-log)
     "COST": 10,                      # Barrier 1 · standard produced render (per-use)
     "LAZYCOST": 15,                  # Barrier 2 · one proactive multi-render (Style Me / planner)
-    "UNLIMITED_PASS_TOKENS": 1200,   # Barrier 2 · a token PASS = unlimited+proactive for a period
-    "KREY_UNLIMITED_INR_YR": 999,    # ...the cash shortcut to that same pass (unvalidated until Slice 4)
+    "PASS_TOKENS": 1200,             # Barrier 2 · cost of the pass (unlocks the raised tier for a period)
+    "PASS_PERIOD_ALLOWANCE": 0,      # renders the pass grants before it resets — 0 = OPEN LOOP (see below)
+    "KREY_UNLIMITED_INR_YR": 999,    # the cash shortcut to that same pass (unvalidated until Slice 4)
+    # NOTE: Barrier 2 is NOT truly unlimited — like Claude Pro, it's a raised, RESETTING cap
+    # (better than free, still runs out and refreshes). PASS_PERIOD_ALLOWANCE + the reset
+    # window are an OPEN LOOP, left 0/unset until real usage shows how long users go in one
+    # sitting. Set them in the token pass once that length is understood.
 }
 
 
@@ -104,9 +110,11 @@ _PAID_METERED = {
 }
 # PAID · Barrier 2 (Metered -> Pass) — PROACTIVE: Krey works before you ask. NOT metered
 # per-use (proactive features fire many renders unpredictably — a flat pass caps GPU
-# exposure for both sides). Still TOKEN-GOVERNED: a token PASS (UNLIMITED_PASS_TOKENS)
-# unlocks unlimited+proactive for a period, earned OR bought; ₹999/yr is the cash shortcut
-# to that same pass, not a separate cash-only door. The wall stays permeable.
+# exposure for both sides). Still TOKEN-GOVERNED: a token PASS (PASS_TOKENS) unlocks the
+# raised tier for a period, earned OR bought; ₹999/yr is the cash shortcut to that same
+# pass, not a separate cash-only door. NOT truly unlimited — like Claude Pro it's a raised,
+# RESETTING cap (better than free, still runs out and refreshes); the allowance + reset
+# window are an OPEN LOOP (see token_map NOTE). The wall stays permeable.
 _PAID_PROACTIVE = {
     "style_me":            "Krey styles you unprompted — proactive; behind the token pass.",
     "planner":             "A week / occasion plan — max proactive; behind the token pass.",
