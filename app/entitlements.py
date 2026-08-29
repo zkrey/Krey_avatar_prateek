@@ -16,8 +16,9 @@ that exact moment, never before the wow (nagging a cold user kills the feeling).
 Which side of the wall any feature lands on is decided by The Habit Line (docs/DOCTRINE.md),
 encoded here as `classify_feature` with the two-barrier model: FREE_HABIT (below both
 barriers — confidence + ₹0 ops + the free daily render), PAID_METERED (Barrier 1: a produced
-render beyond the daily one — token-metered), PAID_PROACTIVE (Barrier 2: Krey works before
-you ask — subscription-native). The habit core can never be paid — a test pins that invariant.
+render beyond the daily one — token-metered per use), PAID_PROACTIVE (Barrier 2: Krey works
+before you ask — unlocked by a token PASS, earned or bought, not metered per use; ₹999/yr is
+the cash shortcut to that pass). The habit core can never be paid — a test pins that invariant.
 
 Access to the paid side is spent in TOKENS, not a hard cash paywall — tokens are EARNED
 (`earn_map`: in-app gamification + promotion/advocacy — referral, RAAQ, broadcast, PR,
@@ -53,12 +54,13 @@ FREE_HABIT, PAID_METERED, PAID_PROACTIVE = "free_habit", "paid_metered", "paid_p
 # (Slice 4 benchmark). Centralised here + env-overridable (KREY_TOKEN_<KEY>) so ops retune
 # the economy without a code change. Amounts in tokens; subscription in INR/year.
 _TOKEN_DEFAULTS = {
-    "GRANT": 100,                  # initial wallet on signup
-    "DAILY_FREE_RENDERS": 5,       # free produced renders per day (the taste)
-    "OWNCOST": 5,                  # render on your own garment (half — feeds the wear-log)
-    "COST": 10,                    # standard produced render
-    "LAZYCOST": 15,                # proactive multi-render (Style Me / planner)
-    "KREY_UNLIMITED_INR_YR": 999,  # Barrier-2 subscription (unvalidated until Slice 4)
+    "GRANT": 100,                    # initial wallet on signup
+    "DAILY_FREE_RENDERS": 5,         # free produced renders per day (the taste)
+    "OWNCOST": 5,                    # Barrier 1 · render on your own garment (half — feeds wear-log)
+    "COST": 10,                      # Barrier 1 · standard produced render (per-use)
+    "LAZYCOST": 15,                  # Barrier 2 · one proactive multi-render (Style Me / planner)
+    "UNLIMITED_PASS_TOKENS": 1200,   # Barrier 2 · a token PASS = unlimited+proactive for a period
+    "KREY_UNLIMITED_INR_YR": 999,    # ...the cash shortcut to that same pass (unvalidated until Slice 4)
 }
 
 
@@ -100,11 +102,14 @@ _PAID_METERED = {
     "own_wardrobe_render": "Render on your own garment (OWNCOST, half — feeds the wear-log; tripwire: cut to free if it suppresses wardrobe-building, Fix 3).",
     "scan_a_fit":          "Render from a scanned garment (COST, not LAZYCOST — it's reactive; the scan itself is free, Fix 4).",
 }
-# PAID · Barrier 2 (Metered -> Subscription) — PROACTIVE: Krey works before you ask.
-# Subscription-native (KREY UNLIMITED), not a per-use token.
+# PAID · Barrier 2 (Metered -> Pass) — PROACTIVE: Krey works before you ask. NOT metered
+# per-use (proactive features fire many renders unpredictably — a flat pass caps GPU
+# exposure for both sides). Still TOKEN-GOVERNED: a token PASS (UNLIMITED_PASS_TOKENS)
+# unlocks unlimited+proactive for a period, earned OR bought; ₹999/yr is the cash shortcut
+# to that same pass, not a separate cash-only door. The wall stays permeable.
 _PAID_PROACTIVE = {
-    "style_me":            "Krey styles you unprompted — proactive, subscription-native.",
-    "planner":             "A week / occasion plan — max proactive, subscription-native.",
+    "style_me":            "Krey styles you unprompted — proactive; behind the token pass.",
+    "planner":             "A week / occasion plan — max proactive; behind the token pass.",
     "hyperreal_3d_render": "Photoreal 3D twin (Sohan's mesh+Blender, M2 premium) — new value on the 2D habit.",
     "hd_share_export":     "HD watermark-free share — new value on top (referral).",
     "wardrobe_planning":   "A managed closet — presupposes a formed habit.",

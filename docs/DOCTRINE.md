@@ -34,11 +34,16 @@ conversion; doing so breaks the habit and kills the flywheel. This is a hard inv
   free daily one*: `standard_render`, `own_wardrobe_render`, `scan_a_fit`. Reactive, real
   GPU, token-metered. Everything answering "will this fit me?" and everything ~₹0 stays
   *below* this line, free and unlimited.
-- **Barrier 2 · Metered → Subscription** — at the **proactive line**. Krey doing work the
-  user didn't ask for: `style_me`, `planner`, and the M2 **premium** `hyperreal_3d_render`
+- **Barrier 2 · Metered → Pass** — at the **proactive line**. Krey doing work the user
+  didn't ask for: `style_me`, `planner`, and the M2 **premium** `hyperreal_3d_render`
   (Sohan's mesh + Blender, gated on the M1 fit-score reaching ~85% — docs/scope_bakeins.md),
-  plus HD share, wardrobe, occasion styling, shop-the-look. Their home is the **subscription**
-  (KREY UNLIMITED), not a per-use token — proactivity is the compounding value.
+  plus HD share, wardrobe, occasion styling, shop-the-look. **Not** metered per use
+  (proactive features fire many renders unpredictably; a flat pass caps GPU exposure for
+  both sides) — but **still token-governed**: a token **pass** (`UNLIMITED_PASS_TOKENS`)
+  unlocks unlimited + proactive for a period, *earned or bought*; **₹999/yr is the cash
+  shortcut to that same pass, not a separate cash-only door**. Nothing is looped out of the
+  token economy — cash only ever buys tokens (or the pass), so a non-payer can still grind
+  their way in and the wall stays permeable.
 
 The 2D try-on builds the habit and stays free; hyperreal 3D is new value on top of it, never
 a replacement. Each paid feature is admitted **only if it passes the three seams below**.
@@ -89,11 +94,15 @@ Everything on the **paid** side (metered renders + subscription) is accessed by 
 - **Earn — promotion / advocacy** (the additional options, on top of in-app): **referral**
   of friends, **RAAQ**, **broadcast** of a look, **PR / press** credited to the user, and
   **WhatsApp owned-media** app promotion. These grow Krey, so we pay the user in tokens.
-- **Buy:** cash / token bundles, and the **KREY UNLIMITED** subscription.
+- **Buy:** cash — but cash only ever buys **tokens** (bundles) or the **pass** as a shortcut.
+  It is not a separate door: ₹999/yr KREY UNLIMITED = buying the same token pass a grinder
+  earns. Every path runs through the one currency.
 
 This keeps the wall **permeable**, which is the whole point for a 20–28 GenZ audience: no one
 is hard-blocked, and because advocacy *earns the currency*, the growth engine and the token
-faucet are the same act. Grind, promote, or pay — either way the user crosses.
+faucet are the same act. Grind, promote, or pay — either way the user crosses. Both barriers
+are token-governed: Barrier 1 spends tokens **per render**; Barrier 2 spends a token **pass**
+for unlimited + proactive over a period. Cash is the fast lane, never the only lane.
 
 The Habit Line still governs: **the habit stays token-free.** Tokens price only value *on
 top* of the habit, never the fit answer or the free daily render.
