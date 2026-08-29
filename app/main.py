@@ -31,10 +31,10 @@ from app import feedback as feedback_mod
 from app.skin_tone import extract_skin_samples
 from app import measurements as body
 from app import face
-from app import eligibility, style_profile, fit_score
+from app import eligibility, style_profile, fit_score, entitlements
 from app import store as store_mod
 from app.body_models import assemble_body_models
-from app.analytics import Analytics, Spine
+from app.analytics import Analytics, Spine, ENTRY_POINTS as analytics_entry_points
 from app.recognition import recognition_from_body_models
 
 app = FastAPI(title="Krey Avatar — Service A (twin extraction)", version="0.5.0")
@@ -462,6 +462,37 @@ def fit_recommend_ep(payload: dict = Body(...)):
     return fit_score.recommend_for_style(
         {k: float(v) for k, v in body_cm.items()}, garment,
         style_profile=payload.get("style_profile"), confidence=payload.get("confidence"))
+
+
+@app.post("/render/authorize")
+def render_authorize_ep(payload: dict = Body(...)):
+    """
+    The play-loop gate. Before each try-on render the client asks: may this plan render
+    now, in which GPU lane, how many are left today, and is this the moment to offer more?
+
+    Same product for every plan — this decides only QUOTA and SPEED (the two subscription
+    levers). `used_today` is the caller's daily counter (from the store/DB); this endpoint
+    is pure policy, spends no GPU, and returns instantly. It sits ALONGSIDE the canRender
+    eligibility wall (account + DOB), which the actual render worker still enforces — this
+    says *may this plan render now, and how fast*, not *may this person render at all*.
+
+    The `upsell` block fires only after the wow inflection and only at the quota wall, so a
+    free user converts at the peak of the experience, never nagged before the magic lands.
+    """
+    plan = payload.get("plan")
+    used_today = int(payload.get("used_today") or 0)
+    decision = entitlements.authorize(plan, used_today)
+
+    # Record intent when a valid play surface is named (feeds the render funnel + unit econ).
+    entry_point = payload.get("entry_point")
+    if entry_point in analytics_entry_points:
+        spine = _spine(payload.get("session_id"), payload.get("user_id"), payload.get("guest_id"),
+                       payload.get("surface"), payload.get("region"), payload.get("app_version"),
+                       payload.get("device_os"), None)
+        analytics.render(spine, phase="requested", entry_point=entry_point,
+                         fail_reason=None if decision["allowed"] else "daily_quota_reached",
+                         source=decision["lane"])
+    return decision
 
 
 @app.post("/feedback")
