@@ -142,9 +142,15 @@ Cost/render = 16.59 s × $/s × ₹85
 - **Barrier-2 cap open loop:** at ~₹1.6/render, ₹999/yr only covers **~1.7 renders/day**.
   A truly-unlimited tier loses money on any heavy user — hard proof the pass must be a
   **resetting cap**, set to keep a heavy user's average near that break-even (until cost drops).
-- **The lever that moves it:** ~30 diffusion steps drive most of the 16.6 s. Distilling to
-  ~8 steps (LCM/Turbo) roughly **thirds** the cost → ~₹0.6/render → ₹999 break-even rises to
-  ~**4–5 renders/day**. So: **optimise steps before switching rendering on**, then re-price.
+- **The levers that move it (and their limits):** the 16.6 s is ~7 s preprocessing (body
+  parse / pose / garment prep — roughly FIXED) + ~6.7 s of 30 diffusion steps + overhead.
+  *Cutting steps only shrinks the diffusion half:* 30 → 8 steps ≈ ~11 s → ~₹1.1/render →
+  ₹999 break-even ~**2.5/day** (a ~1.5× win, not 3×). Bigger wins need a **leaner/distilled
+  model** (few steps AND light preprocessing) and, above all, **render caching** — a repeat
+  render served from CDN is ~free, the single biggest cost lever. This is model + infra
+  choice, not our backend code. Do it when the render worker (Service B) is built, then
+  re-price. Launch does not require it: the fit answer is instant and free, so a slower
+  render sits behind an answer the user already has.
 - **Free-tier subsidy:** at ~₹1.6/render the subsidy per converted user roughly **doubles**
   vs the old 6-second guess — the render is the dominant cost line, confirmed.
 
