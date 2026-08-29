@@ -1,0 +1,20 @@
+# Keep the build context lean and secret-free.
+.git
+.github
+tests
+docs
+scratchpad
+**/__pycache__
+*.pyc
+.pytest_cache
+.venv
+venv
+env
+*.jpg
+*.jpeg
+*.png
+uploads
+# model binaries are fetched in-build, never shipped in the context
+models/*.task
+models/*.tflite
+.env

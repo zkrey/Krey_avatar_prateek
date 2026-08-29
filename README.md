@@ -84,6 +84,10 @@ curl -F "file=@body.jpg" -F height=170 -F weight=65 -F sex=2 \
      http://127.0.0.1:8000/twin/extract-measurements
 ```
 
+**Deploy to a live URL:** a `Dockerfile` builds the whole engine (deps + models). See
+[`docs/DEPLOY.md`](docs/DEPLOY.md) for a step-by-step (Railway + Supabase, Mumbai region).
+Quick local container: `docker build -t krey-service-a . && docker run -p 8000:8000 krey-service-a`.
+
 **Runtime models (not bundled):** Service A uses three Google MediaPipe models
 (Apache-2.0). They are large binaries, freely re-downloadable, and kept out of git.
 Fetch them once per machine:
