@@ -13,6 +13,10 @@ has felt the magic across a few looks), then firm enough that the wall itself co
 "you've seen what this does; go unlimited + instant." `upsell_signal` fires the nudge at
 that exact moment, never before the wow (nagging a cold user kills the feeling).
 
+Which side of the wall any feature lands on is decided by The Habit Line (docs/DOCTRINE.md),
+encoded here as `classify_feature`: give away what builds the habit, charge for value on top
+of it. The habit core can never be paid — a test pins that invariant.
+
 This is the mechanism, not the pricing. Plan contents are DATA (`PLANS`) so the founder
 tunes every number without touching logic; real billing (Razorpay) and ₹ prices live
 elsewhere and are gated on explicit permission. This module only decides, given a plan and
@@ -23,6 +27,61 @@ says *may this plan render right now, and how fast*.
 """
 from __future__ import annotations
 from typing import Optional
+
+# ── The Habit Line (docs/DOCTRINE.md) ─────────────────────────────────────────────────
+# Give away the thing that removes forced cost and builds the habit; charge for the thing
+# that creates new value on top of the habit. This is the barrier between free and paid.
+#   - free_habit    : builds the habit / removes forced cost -> ALWAYS free (hard invariant)
+#   - paid_leverage : the same habit made frictionless (unlimited quota, priority speed)
+#   - paid_new_value: value that only matters because the habit exists, genuinely additive
+# Applying the test to every feature keeps the wall principled instead of arbitrary.
+FREE_HABIT, PAID_LEVERAGE, PAID_NEW_VALUE = "free_habit", "paid_leverage", "paid_new_value"
+
+# The habit core — never behind the wall, whatever the conversion pressure. Guarded by a
+# test so the invariant lives in code, not just prose.
+_HABIT_CORE = {
+    "fit_answer":     "Does this fit me / what size — the habit itself, CPU, instant.",
+    "try_on":         "Seeing yourself in a garment — the behaviour we make universal.",
+    "twin_build":     "The twin, built once and kept — the price of entry, not a feature.",
+    "browse":         "The rail / browsing — where the habit is exercised.",
+    "size_recommend": "Size recommendation — removes the forced cost of guessing.",
+}
+# Paid = value on top of the habit. Leverage is the same habit, more & faster; new-value
+# only matters because the habit is already in place, and adds something rather than
+# withholding core. New surfaces get added here after passing the test in docs/DOCTRINE.md.
+_PAID_LEVERAGE = {
+    "unlimited_renders": "The same habit without the daily wall (quota lever).",
+    "priority_speed":    "The same habit, warm/instant instead of cold (speed lever).",
+}
+_PAID_NEW_VALUE = {
+    "hd_share_export":   "Shareable HD renders — new value built on the habit (referral).",
+    "wardrobe_planning": "Plan/organise outfits — presupposes a formed try-on habit.",
+    "occasion_styling":  "Styling intelligence for occasions — additive, not core.",
+    "shop_the_look":     "Buy the look — new value layered on knowing the fit.",
+}
+
+
+def classify_feature(feature: str) -> dict:
+    """The single call every feature passes through to land on a side of the wall. Returns
+    the Habit-Line class + the reason. Unknown features default to FREE_HABIT — 'when in
+    doubt, free' (docs/DOCTRINE.md): mis-charging for a habit-builder is the costly error,
+    so the safe default protects the flywheel."""
+    f = (feature or "").strip().lower()
+    if f in _HABIT_CORE:
+        return {"feature": f, "tier": FREE_HABIT, "paid": False, "reason": _HABIT_CORE[f]}
+    if f in _PAID_LEVERAGE:
+        return {"feature": f, "tier": PAID_LEVERAGE, "paid": True, "reason": _PAID_LEVERAGE[f]}
+    if f in _PAID_NEW_VALUE:
+        return {"feature": f, "tier": PAID_NEW_VALUE, "paid": True, "reason": _PAID_NEW_VALUE[f]}
+    return {"feature": f, "tier": FREE_HABIT, "paid": False,
+            "reason": "unclassified — defaults free (when in doubt, free; protect the habit)"}
+
+
+def is_free_habit(feature: str) -> bool:
+    """True when a feature is on the free side of the Habit Line. The habit core can never
+    be paid — this is the invariant a test pins."""
+    return not classify_feature(feature)["paid"]
+
 
 UNLIMITED = None  # a plan with quota == UNLIMITED never hits the wall
 

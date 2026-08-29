@@ -117,6 +117,42 @@ def test_unlimited_never_upsells():
     assert s["reason"] == "unlimited_plan"
 
 
+# ---- The Habit Line (docs/DOCTRINE.md) ------------------------------------------------
+def test_habit_core_is_always_free():
+    # The invariant: nothing that builds the habit can ever resolve to paid — whatever the
+    # conversion pressure. This is the guard that lives in code, not just prose.
+    for feat in ent._HABIT_CORE:
+        c = ent.classify_feature(feat)
+        assert c["paid"] is False
+        assert c["tier"] == ent.FREE_HABIT
+        assert ent.is_free_habit(feat) is True
+
+
+def test_fit_answer_and_try_on_never_paid():
+    # The two load-bearing habit-builders, named explicitly so a future edit can't quietly
+    # move them behind the wall without turning this red.
+    assert ent.is_free_habit("fit_answer") is True
+    assert ent.is_free_habit("try_on") is True
+
+
+def test_leverage_is_paid():
+    for feat in ent._PAID_LEVERAGE:
+        c = ent.classify_feature(feat)
+        assert c["paid"] is True and c["tier"] == ent.PAID_LEVERAGE
+
+
+def test_new_value_is_paid():
+    for feat in ent._PAID_NEW_VALUE:
+        c = ent.classify_feature(feat)
+        assert c["paid"] is True and c["tier"] == ent.PAID_NEW_VALUE
+
+
+def test_unknown_feature_defaults_free():
+    # "When in doubt, free" — mis-charging for a habit-builder is the costly error.
+    c = ent.classify_feature("some_future_thing")
+    assert c["paid"] is False and c["tier"] == ent.FREE_HABIT
+
+
 # ---- endpoint wiring ------------------------------------------------------------------
 def test_endpoint_authorizes_and_reports_lane():
     r = client.post("/render/authorize", json={"plan": "free", "used_today": 0})
