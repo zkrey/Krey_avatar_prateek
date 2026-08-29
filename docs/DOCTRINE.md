@@ -35,9 +35,12 @@ conversion; doing so breaks the habit and kills the flywheel. This is a hard inv
    (`entitlements.PLANS` → quota + lane).
 2. **New value** — capabilities that only matter *because* the habit is in place, and that
    add something genuinely new rather than withholding a piece of the core: shareable HD
-   exports, wardrobe/occasion planning, styling intelligence, shop-the-look, early drops.
-   Each is admitted to the paid side **only if it passes the test below** — never by
-   carving a slice out of the free habit.
+   exports, wardrobe/occasion planning, styling intelligence, shop-the-look, early drops,
+   and — as the M2 **premium** layer — Sohan's photoreal 3D try-on (mesh + Blender, Path A),
+   gated on the M1 rule fit-score reaching ~85% precision (docs/scope_bakeins.md). The 2D
+   try-on builds the habit and stays free; hyperreal 3D is new value on top of it, never a
+   replacement for it. Each new-value feature is admitted to the paid side **only if it
+   passes the test below** — never by carving a slice out of the free habit.
 
 ## The test (apply to every new feature)
 

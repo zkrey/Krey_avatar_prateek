@@ -58,6 +58,10 @@ _PAID_NEW_VALUE = {
     "wardrobe_planning": "Plan/organise outfits — presupposes a formed try-on habit.",
     "occasion_styling":  "Styling intelligence for occasions — additive, not core.",
     "shop_the_look":     "Buy the look — new value layered on knowing the fit.",
+    # M2 premium — Sohan's 3D-mesh + Blender photoreal try-on (Path A), gated on the M1 rule
+    # fit-score reaching ~85% precision (docs/scope_bakeins.md). New value on top of the 2D
+    # habit, not a replacement for it; parked until M2.
+    "hyperreal_3d_render": "Photoreal 3D try-on (Sohan's mesh+Blender, M2 premium) — new value on the 2D habit.",
 }
 
 
