@@ -8,7 +8,35 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 from bench import bench_core
-from bench.gpu_benchmark import DryRunProvider, preflight_budget, run_benchmark, main
+from bench.gpu_benchmark import (DryRunProvider, preflight_budget, run_benchmark, main,
+                                 resolve_model, build_input, MODEL_PRESETS)
+
+
+# ---- model presets + input building (per-model schema, pure) --------------------------
+def test_resolve_preset_shortname():
+    spec = resolve_model("idm-vton")
+    assert spec["ref"] == "cuuupid/idm-vton"
+    assert spec["person_key"] == "human_img" and spec["garment_key"] == "garm_img"
+
+
+def test_resolve_raw_ref_gets_default_keys():
+    spec = resolve_model("someowner/some-model")
+    assert spec["ref"] == "someowner/some-model"
+    assert spec["person_key"] == "human_img"
+
+
+def test_build_input_maps_person_and_garment():
+    spec = resolve_model("idm-vton")
+    payload = build_input(spec, "P.jpg", "G.jpg")
+    assert payload["human_img"] == "P.jpg" and payload["garm_img"] == "G.jpg"
+    assert payload["garment_des"] == "garment"        # preset extra carried through
+
+
+def test_build_input_cli_overrides_win():
+    spec = resolve_model("someowner/x")
+    payload = build_input(spec, "P", "G", person_key="model_image", garment_key="cloth_image",
+                          extra={"steps": 30})
+    assert payload == {"model_image": "P", "cloth_image": "G", "steps": 30}
 
 
 # ---- percentile core ------------------------------------------------------------------

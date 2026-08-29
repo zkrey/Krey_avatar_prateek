@@ -31,12 +31,54 @@ import json
 import os
 import sys
 import time
+from typing import Optional
 
 from bench import bench_core
 
 # Rough per-run cost estimate ($) used ONLY for the pre-flight budget check. Deliberately
 # conservative (assume a cold-ish A100 render) so the guard errs toward stopping early.
 _EST_USD_PER_RUN = 0.02
+
+
+# --------------------------------------------------------------------------------------
+# Candidate try-on models. Each maps the person/garment pair onto that model's own input
+# field names (they differ per model) + any required extra fields. Pass a shortname to
+# --model and the harness fills the ref + schema; or pass a full "owner/model[:version]"
+# and override the keys with --person-key/--garment-key. ALWAYS verify a model's exact
+# fields on its Replicate "API" tab — schemas change. Only idm-vton is pre-filled from a
+# known-good schema; the others are templates to confirm before a paid run.
+MODEL_PRESETS = {
+    "idm-vton": {"ref": "cuuupid/idm-vton",
+                 "person_key": "human_img", "garment_key": "garm_img",
+                 "extra": {"garment_des": "garment"}},
+    # Templates — confirm ref + keys on the model page, then uncomment / adjust:
+    # "oot":     {"ref": "<owner>/oot_diffusion", "person_key": "model_image",
+    #             "garment_key": "garment_image", "extra": {}},
+    # "catvton": {"ref": "<owner>/catvton", "person_key": "person_image",
+    #             "garment_key": "cloth_image", "extra": {}},
+}
+
+
+def resolve_model(model: str) -> dict:
+    """Turn a --model value into {ref, person_key, garment_key, extra}. Accepts a preset
+    shortname (idm-vton) or a raw 'owner/model[:version]' ref (uses default try-on keys,
+    override with --person-key/--garment-key). Pure — no network."""
+    if model in MODEL_PRESETS:
+        return dict(MODEL_PRESETS[model])
+    return {"ref": model, "person_key": "human_img", "garment_key": "garm_img", "extra": {}}
+
+
+def build_input(spec: dict, person, garment, person_key=None, garment_key=None,
+                extra: Optional[dict] = None) -> dict:
+    """Assemble the model's input dict from the person + garment images and the model's
+    field names. CLI overrides win over the preset. Pure — the tested seam that keeps the
+    per-model schema out of the network path."""
+    pk = person_key or spec["person_key"]
+    gk = garment_key or spec["garment_key"]
+    payload = {pk: person, gk: garment}
+    payload.update(spec.get("extra") or {})
+    payload.update(extra or {})
+    return payload
 
 
 # --------------------------------------------------------------------------------------
@@ -66,22 +108,31 @@ class ReplicateProvider:
     where Replicate reports them (`predict_time`), else None (core marks it unreported)."""
     name = "replicate"
 
-    def __init__(self, usd_per_gpu_s=0.001):
+    def __init__(self, usd_per_gpu_s=0.001, person_key=None, garment_key=None, extra=None):
         self.usd_per_gpu_s = usd_per_gpu_s
+        self.person_key, self.garment_key, self.extra = person_key, garment_key, extra
         self.token = os.environ.get("REPLICATE_API_TOKEN")
         if not self.token:
             raise RuntimeError("REPLICATE_API_TOKEN not set — provision the key before a paid run")
 
+    def _version(self, client, ref):
+        """Resolve 'owner/model[:version]' to a version id. If no version is pinned, ask the
+        API for the latest — so you never hand-copy a version hash."""
+        if ":" in ref:
+            return ref.split(":")[-1]
+        owner_model = ref
+        m = client.models.get(owner_model)
+        return m.latest_version.id
+
     def run(self, i, person, garment, model):
         import replicate  # lazy
+        spec = resolve_model(model)
+        payload = build_input(spec, person, garment, self.person_key, self.garment_key, self.extra)
         t0 = time.time()
         try:
             client = replicate.Client(api_token=self.token)
-            # Input keys vary per model; person/garment are the common try-on pair.
-            pred = client.predictions.create(
-                version=model.split(":")[-1],
-                input={"human_img": person, "garm_img": garment},
-            )
+            pred = client.predictions.create(version=self._version(client, spec["ref"]),
+                                              input=payload)
             pred.wait()
             latency = time.time() - t0
             metrics = getattr(pred, "metrics", None) or {}
@@ -131,15 +182,22 @@ def main(argv=None):
     ap.add_argument("--budget-usd", type=float, default=None, help="hard spend cap (paid providers)")
     ap.add_argument("--usd-per-gpu-s", type=float, default=0.001)
     ap.add_argument("--fx", type=float, default=85.0, help="USD->INR")
+    ap.add_argument("--person-key", default=None, help="override the model's person-image field name")
+    ap.add_argument("--garment-key", default=None, help="override the model's garment-image field name")
+    ap.add_argument("--extra-input", default=None, help="JSON merged into the model input (model-specific fields)")
     ap.add_argument("--out", default=None, help="write full JSON summary here")
     args = ap.parse_args(argv)
+
+    extra = json.loads(args.extra_input) if args.extra_input else None
 
     if args.provider != "dry":
         preflight_budget(args.runs, args.budget_usd)
         if not args.person or not args.garment:
             raise SystemExit("a paid provider needs --person and --garment images")
 
-    provider = PROVIDERS[args.provider](usd_per_gpu_s=args.usd_per_gpu_s)
+    provider = PROVIDERS[args.provider](usd_per_gpu_s=args.usd_per_gpu_s) if args.provider == "dry" \
+        else PROVIDERS[args.provider](usd_per_gpu_s=args.usd_per_gpu_s, person_key=args.person_key,
+                                      garment_key=args.garment_key, extra=extra)
     print(f"Benchmarking '{args.model}' via {provider.name} — {args.runs} runs", file=sys.stderr)
     runs = run_benchmark(provider, args.runs, args.person, args.garment, args.model)
 
