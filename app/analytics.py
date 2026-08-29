@@ -46,6 +46,7 @@ EVENT_SCHEMA = {
     "token":           ("direction", "amount"),    # earned | spent
     "confirm_gate":    ("action",),                # viewed | abandoned
     "identity_stitch": ("from_guest_id", "to_user_id"),
+    "feedback":        ("severity", "route"),       # live report -> ticket (feedback loop)
 }
 
 
@@ -150,6 +151,13 @@ class Analytics:
         """action: viewed | abandoned — the price-at-peak bounce watch (spec §2)."""
         return self.track("confirm_gate", spine, action=action, spent=spent,
                           cost=cost, balance_at_gate=balance_at_gate, **x)
+
+    def feedback(self, spine: Spine, severity: str, route: str, kind: Optional[str] = None,
+                 device_specific: Optional[bool] = None, dedup_key: Optional[str] = None, **x):
+        """A live report entered the feedback loop. route: standard | device_farm.
+        Not biometric — carries device/screen/severity, never a photo or measurement."""
+        return self.track("feedback", spine, severity=severity, route=route, kind=kind,
+                          device_specific=device_specific, dedup_key=dedup_key, **x)
 
     def stitch_identity(self, spine: Spine, from_guest_id: str, to_user_id: str, **x):
         """At signup: link the guest's pre-account events onto the new user_id."""

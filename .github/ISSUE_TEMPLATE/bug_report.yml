@@ -1,0 +1,83 @@
+name: Bug report (from live)
+description: A broken feature, a crash, or something that looks wrong on a device. Feeds the sandbox-debug loop.
+title: "[bug] "
+labels: ["from-live", "sandbox-debug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The more precise the **screen** and **device**, the faster
+        the fix — a layout bug can only be reproduced on the device it happens on.
+        (Reports posted by the app's `/feedback` endpoint arrive pre-filled and deduped.)
+  - type: input
+    id: screen
+    attributes:
+      label: Screen / where
+      description: Which screen or step? e.g. "Fit Result", "Capture — 5 photos", "Checkout".
+      placeholder: Fit Result
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What's wrong
+      description: What did you expect, and what happened instead?
+      placeholder: The "Try On" button is off-screen at the bottom — I can't tap it.
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind
+      options:
+        - functional (a feature does the wrong thing)
+        - visual (layout / button / text looks wrong)
+        - crash (app closes, freezes, white screen)
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - blocker (can't use the app at all)
+        - high (a core flow is broken)
+        - normal (annoying, has a workaround)
+        - low (cosmetic)
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      description: Phone model — required for visual/layout bugs so we can reproduce on the device farm.
+      placeholder: Redmi Note 12
+  - type: input
+    id: os
+    attributes:
+      label: OS + version
+      placeholder: Android 13
+  - type: input
+    id: app_version
+    attributes:
+      label: App version
+      placeholder: 1.2.0
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshot / screen recording
+      description: Drag an image or video in. For layout bugs this is what the device-farm reproduction is diffed against.
+  - type: input
+    id: event_ids
+    attributes:
+      label: Recent event IDs (optional)
+      description: If the app surfaced any analytics event IDs, paste them — the sandbox replays them.
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        **What happens next:** the `sandbox-debug` label fires a Claude Code Remote session
+        that reproduces the bug in a sandbox and opens a PR with a fix + a regression test.
+        **A human expert reviews and approves every PR before it merges** — the loop never
+        deploys itself. Fixes that touch eligibility, consent, or derive-and-discard get
+        extra scrutiny. See `docs/FEEDBACK_LOOP.md`.

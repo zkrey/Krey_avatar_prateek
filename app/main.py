@@ -27,6 +27,7 @@ import numpy as np
 from datetime import date, datetime
 
 from app import monk
+from app import feedback as feedback_mod
 from app.skin_tone import extract_skin_samples
 from app import measurements as body
 from app import face
@@ -461,6 +462,34 @@ def fit_recommend_ep(payload: dict = Body(...)):
     return fit_score.recommend_for_style(
         {k: float(v) for k, v in body_cm.items()}, garment,
         style_profile=payload.get("style_profile"), confidence=payload.get("confidence"))
+
+
+@app.post("/feedback")
+def feedback_ep(payload: dict = Body(...)):
+    """
+    Live→sandbox→production loop's front door. A user (or an auto-assessment on the live
+    app) reports a broken feature / misplaced button / crash; we normalize it into a
+    deduped ticket, emit the analytics event, and hand back the routing decision.
+
+    NOT a biometric ingestion (no photo, no measurement — just device/screen/note + recent
+    event ids), so there is NO canRender gate: reporting a bug must never require an account
+    or a verified DOB. The ticket routes device-specific *visual* bugs to the device farm;
+    everything else goes the standard sandbox-debug path. Issue creation + the sandbox
+    trigger live off-repo (see docs/FEEDBACK_LOOP.md); this endpoint produces the ticket
+    they consume.
+    """
+    try:
+        ticket = feedback_mod.build_ticket(payload)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    spine = _spine(payload.get("session_id"), payload.get("user_id"), payload.get("guest_id"),
+                   payload.get("surface"), payload.get("region"), payload.get("app_version"),
+                   payload.get("device_os") or ticket.get("os"), None)
+    analytics.feedback(spine, severity=ticket["severity"], route=ticket["route"],
+                       kind=ticket["kind"], device_specific=ticket["device_specific"],
+                       dedup_key=ticket["dedup_key"])
+    return {"status": "queued", "ticket": ticket}
 
 
 @app.post("/capture/instagram")

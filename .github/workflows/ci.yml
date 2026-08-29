@@ -1,0 +1,47 @@
+name: CI
+
+# The deploy gate. Every push and PR runs the full test suite; nothing merges (and
+# therefore nothing deploys) on red. This is the automated half of the feedback loop's
+# safety net — the human-expert review is the other half (see docs/FEEDBACK_LOOP.md).
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: pytest (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      # System libs MediaPipe/OpenCV load at import time (headless — no display).
+      - name: Install system deps
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libglib2.0-0
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      # The suite is deterministic and needs no models, no network, no GPU, no secrets:
+      # heavy pipelines are lazy-imported and monkeypatched in tests.
+      - name: Run tests
+        run: python -m pytest tests/ -q

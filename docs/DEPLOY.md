@@ -11,6 +11,8 @@ A running API with these routes (see `app/main.py`):
 - `POST /body/measure` — measurements from full-body frames
 - `POST /style/profile`, `POST /fit/recommend` — style + fit
 - `GET /twins/{id}`, `DELETE /twins/{id}` — fetch / erase the stored twin
+- `POST /feedback` — live bug/crash report → deduped ticket (feeds the feedback loop;
+  ungated, not biometric — see `docs/FEEDBACK_LOOP.md`)
 
 ## Prerequisites (accounts you create — free tiers to start)
 1. **GitHub** — already done (this repo).
@@ -51,9 +53,12 @@ Supabase also gives you **Auth** (accounts + the DOB the eligibility gate needs)
 - Never commit secrets. Set them in the host's **Variables** panel (or Supabase Vault).
 - `.env.example` lists every variable; copy to `.env` for local dev only (it's gitignored).
 
-## Step 4 — Auto-deploy (optional)
-`.github/workflows` can run the test suite on every push and trigger a redeploy. Ask and
-I'll add a GitHub Actions workflow (tests + deploy hook).
+## Step 4 — CI + auto-deploy
+`.github/workflows/ci.yml` already runs the full test suite on every push and PR — the
+deploy gate (nothing merges on red). The redeploy hook (merge → deploy) is the one piece
+left: Railway/Render redeploys the branch automatically once connected; wire branch
+protection (required review + green CI) so the human-expert gate holds. See
+`docs/FEEDBACK_LOOP.md` for the full live→sandbox→production cycle.
 
 ## Local run (no Docker)
 ```bash
