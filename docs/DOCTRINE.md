@@ -120,6 +120,38 @@ reason with. Real values live in the **backend**, are **env-overridable** (`toke
 against measured per-render GPU cost + the free-tier subsidy we allow (Slice 4 benchmark).
 The ₹999 tier especially is a bet unvalidated until that benchmark.
 
+### First measurement (the math behind the two open loops)
+
+A first real render was benchmarked on Replicate (IDM-VTON, the example run) so the ₹999
+tier and the Barrier-2 cap stop being pure guesses. Directional, not final — see caveats.
+
+```
+Measured:   predict_time = 16.59 GPU-seconds  (one render, 30 diffusion steps)
+Cost/sec:   $0.000975–0.0014  (L40S → A100-80GB; the GPU Replicate assigns; ESTIMATED)
+FX:         ₹85 / $
+
+Cost/render = 16.59 s × $/s × ₹85
+            = ₹1.37  (L40S)  …  ₹1.62 (A100 mid)  …  ₹1.97 (A100-80GB)     ≈ ₹1.6
+
+₹999/yr break-even = 999 ÷ cost/render
+            = 729 renders/yr (₹1.37)  …  507 (₹1.97)
+            ≈ 507–729 renders/yr  =  ~1.4–2.0 renders/DAY
+```
+
+**What it settles:**
+- **Barrier-2 cap open loop:** at ~₹1.6/render, ₹999/yr only covers **~1.7 renders/day**.
+  A truly-unlimited tier loses money on any heavy user — hard proof the pass must be a
+  **resetting cap**, set to keep a heavy user's average near that break-even (until cost drops).
+- **The lever that moves it:** ~30 diffusion steps drive most of the 16.6 s. Distilling to
+  ~8 steps (LCM/Turbo) roughly **thirds** the cost → ~₹0.6/render → ₹999 break-even rises to
+  ~**4–5 renders/day**. So: **optimise steps before switching rendering on**, then re-price.
+- **Free-tier subsidy:** at ~₹1.6/render the subsidy per converted user roughly **doubles**
+  vs the old 6-second guess — the render is the dominant cost line, confirmed.
+
+**Caveats (do not quote as final):** n = 1 (a single cached example render, no warm/cold
+spread); the $/second is estimated (pin it from the run's Replicate page); re-run properly
+(6+ fresh renders, warm vs cold, exact $) when a dev is on it — the harness is one command.
+
 Already in code: `app/capture_tokens.py` (earn — grants held, then resolved by the cascade,
 so garbage earns nothing), `app/eligibility.py` `TokenHold` + `insufficient_tokens` (spend —
 reserved up front, committed on a successful render, released on failure),
