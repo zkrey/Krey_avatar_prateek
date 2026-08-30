@@ -190,3 +190,17 @@ SERVER (built): the same capture pipeline does the picking —
 So "user does nothing, Krey picks" is real: even if the device uploads a broad chunk, the
 server keeps only the owner's best frames and bins the rest. The device-side model + the
 one-tap permission UI are the remaining MOBILE build; the backend half is done.
+
+## M2 — Creator discover feed + shoppable (pre-fitted to the viewer)
+
+Influencers post a look + a shoppable garment; users scroll discover, and each look is
+**tried on their own twin** before they buy — not a plain shop link (Instagram/LTK already
+do that), but the link *pre-fitted to the viewer*. That personalization is the wedge, and
+it only works because we hold the twin.
+
+Doctrine fit: creators posting/sharing = the **promotion earn faucet** (tokens, like
+broadcast/RAAQ); trying on a creator's look = the free **habit**; **shop_the_look** = paid
+new value AND a new **affiliate/commission revenue line** beyond subscription (possibly the
+bigger one). Plumbing anticipated: `shop_the_look` (entitlements), `provenance_tapped` /
+`creator_render_share` / `tried_on` events, Instagram creator source. Surface = unbuilt M2,
+next to RAAQ / creator rail.
