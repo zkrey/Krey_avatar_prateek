@@ -22,6 +22,8 @@ import os
 import uuid
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Body
+from fastapi.responses import HTMLResponse
+from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
 
 from datetime import date, datetime
@@ -38,6 +40,22 @@ from app.analytics import Analytics, Spine, ENTRY_POINTS as analytics_entry_poin
 from app.recognition import recognition_from_body_models
 
 app = FastAPI(title="Krey Avatar — Service A (twin extraction)", version="0.5.0")
+
+# Permissive CORS so the team QA page (/tester) works whether served here or opened locally
+# against a deployed URL. Tighten to the real client origin before production.
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False,
+                   allow_methods=["*"], allow_headers=["*"])
+
+_WEBTEST = os.path.join(os.path.dirname(__file__), "webtest.html")
+
+
+@app.get("/tester", response_class=HTMLResponse)
+def tester():
+    """Team QA page: upload a photo → see the extracted twin pointers (Monk tone, hair, eye,
+    body measurements) from the real endpoints; a Fit tab runs the rule engine offline.
+    Served by the backend so the Twin tab can call the same-origin extraction endpoints."""
+    with open(_WEBTEST, encoding="utf-8") as f:
+        return f.read()
 
 # Default sink logs JSON lines; swap for the warehouse / Events service in production.
 analytics = Analytics()

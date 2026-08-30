@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Krey Tester</title>
+<style>
+  :root{--ground:#160d11;--surface:#211318;--surface-2:#2b1a20;--line:#3a2630;--gold:#d4af6a;
+    --gold-soft:#e0c48a;--gold-dim:#7a6236;--rose:#e8d9dd;--muted:#a9929a;--faint:#7b6670;
+    --fits:#7bb08a;--snug:#d4af6a;--warn:#c77b7b;--sans:"Instrument Sans",system-ui,sans-serif;
+    --serif:Georgia,serif;color-scheme:dark;}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--rose);font-family:var(--sans);line-height:1.5}
+  .wrap{max-width:920px;margin:0 auto;padding:1.6rem 1.1rem 4rem}
+  h1{font-family:var(--serif);font-weight:600;font-size:1.7rem;margin:0}
+  h1 em{color:var(--gold);font-style:italic}
+  .sub{color:var(--muted);font-size:.9rem;margin:.4rem 0 1.2rem;max-width:60ch}
+  .tabs{display:flex;gap:.5rem;margin-bottom:1.2rem;border-bottom:1px solid var(--line)}
+  .tab{background:none;border:none;color:var(--muted);font-family:var(--sans);font-size:.95rem;
+    padding:.6rem .9rem;cursor:pointer;border-bottom:2px solid transparent}
+  .tab.on{color:var(--gold);border-bottom-color:var(--gold);font-weight:600}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:1.2rem;margin-bottom:1rem}
+  .panel h3{margin:0 0 .3rem;font-size:1.02rem}
+  .hint{color:var(--muted);font-size:.8rem;margin:0 0 1rem}
+  label{display:block;font-size:.78rem;color:var(--muted);margin:.6rem 0 .3rem}
+  input,select,button.go{font-family:var(--sans);font-size:.95rem;border-radius:9px;padding:.55rem .7rem}
+  input,select{width:100%;background:var(--surface-2);border:1px solid var(--line);color:var(--rose)}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem}
+  button.go{background:var(--gold);color:#231318;border:none;font-weight:600;cursor:pointer;margin-top:.9rem}
+  button.go:disabled{opacity:.5;cursor:wait}
+  .out{margin-top:1rem}
+  .kv{display:flex;justify-content:space-between;gap:1rem;padding:.4rem 0;border-bottom:1px solid var(--line);font-size:.9rem}
+  .kv:last-child{border-bottom:none}
+  .kv .k{color:var(--muted);text-transform:capitalize}
+  .kv .v{font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+  .swatch{display:inline-block;width:16px;height:16px;border-radius:4px;vertical-align:-3px;margin-right:6px;border:1px solid var(--line)}
+  .badge{display:inline-block;font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;font-weight:600;padding:.15rem .55rem;border-radius:999px}
+  .b-fits{color:var(--fits);border:1px solid #2f4636}.b-snug{color:var(--snug);border:1px solid #5a481f}
+  .b-up,.b-down{color:#8ba6c9;border:1px solid #33465a}.b-warn{color:var(--warn);border:1px solid #5a3436}
+  table{width:100%;border-collapse:collapse;font-size:.85rem;font-variant-numeric:tabular-nums;margin-top:.5rem}
+  th{text-align:left;font-size:.64rem;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);padding:.35rem .3rem;border-bottom:1px solid var(--line)}
+  td{padding:.4rem .3rem;border-bottom:1px solid var(--line)}
+  td.cap{text-transform:capitalize;color:var(--rose);font-weight:500}
+  .err{color:var(--warn);font-size:.85rem;margin-top:.6rem}
+  details{margin-top:.8rem}summary{cursor:pointer;color:var(--faint);font-size:.8rem}
+  pre{background:#0f0a0c;border:1px solid var(--line);border-radius:8px;padding:.7rem;overflow:auto;font-size:.72rem;color:var(--gold-soft)}
+  .chips{display:flex;gap:.4rem;flex-wrap:wrap}
+  .chip{background:var(--surface-2);border:1px solid var(--line);border-radius:999px;color:var(--muted);font:inherit;font-size:.82rem;padding:.35rem .8rem;cursor:pointer}
+  .chip.on{background:var(--gold);color:#231318;border-color:var(--gold);font-weight:600}
+  .big{font-family:var(--serif);font-size:2.6rem;font-weight:600;color:var(--gold);line-height:1}
+  .apibar{font-size:.72rem;color:var(--faint);margin-bottom:1rem}
+  .apibar input{display:inline-block;width:auto;min-width:16rem;font-size:.78rem;padding:.3rem .5rem;margin-left:.4rem}
+</style></head>
+<body><div class="wrap">
+  <h1>Krey <em>Tester</em></h1>
+  <p class="sub">Team QA tool. <b>Twin</b> uploads a photo to the real backend and shows the extracted
+    pointers (Monk skin tone, hair, eye, body measurements). <b>Fit</b> runs the rule engine offline.
+    Photos are processed then discarded (derive-and-discard) — nothing is stored.</p>
+
+  <div class="tabs">
+    <button class="tab on" data-tab="twin">Twin — from a photo</button>
+    <button class="tab" data-tab="fit">Fit — from measurements</button>
+  </div>
+
+  <!-- =================== TWIN =================== -->
+  <div id="twin">
+    <div class="apibar">API base: <input id="api" placeholder="(same server — leave blank)" value=""> <span id="apinote"></span></div>
+
+    <div class="panel">
+      <h3>Face &amp; skin</h3>
+      <p class="hint">A clear front-face selfie → skin tone (Monk), hair colour + texture, eye colour, recognition score.</p>
+      <input type="file" id="facefile" accept="image/*">
+      <button class="go" id="facebtn">Read face</button>
+      <div class="out" id="faceout"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Body measurements</h3>
+      <p class="hint">A full-body front photo + your declared vitals → per-part measurements, body shape, accuracy ledger. (Needs the pose model on the server.)</p>
+      <div class="row3">
+        <div><label>Height (cm)</label><input type="number" id="height" value="170"></div>
+        <div><label>Weight (kg)</label><input type="number" id="weight" value="65"></div>
+        <div><label>Sex</label><select id="sex"><option value="2">Female</option><option value="1">Male</option></select></div>
+      </div>
+      <label style="margin-top:.8rem">Full-body photo</label>
+      <input type="file" id="bodyfile" accept="image/*">
+      <button class="go" id="bodybtn">Measure body</button>
+      <div class="out" id="bodyout"></div>
+    </div>
+  </div>
+
+  <!-- =================== FIT =================== -->
+  <div id="fit" hidden>
+    <div class="panel">
+      <h3>Your measurements (cm)</h3>
+      <div class="row3">
+        <div><label>Chest</label><input type="number" id="chest" value="96"></div>
+        <div><label>Waist</label><input type="number" id="fwaist" value="82"></div>
+        <div><label>Hip</label><input type="number" id="hip" value="100"></div>
+      </div>
+      <label>Garment</label>
+      <select id="garment">
+        <option value="womens_top_regular">Women's top — regular</option>
+        <option value="mens_top_regular">Men's top — regular</option>
+        <option value="womens_bottom_regular">Women's bottom — regular</option>
+      </select>
+      <label>Fit feel</label>
+      <div class="chips" id="prefchips">
+        <button class="chip" data-p="fitted">Fitted</button>
+        <button class="chip on" data-p="true">True</button>
+        <button class="chip" data-p="relaxed">Relaxed</button>
+        <button class="chip" data-p="oversized">Oversized</button>
+      </div>
+      <div class="out" id="fitout" style="margin-top:1.2rem"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));t.classList.add("on");
+  $("twin").hidden=t.dataset.tab!=="twin"; $("fit").hidden=t.dataset.tab!=="fit";});
+
+const api=()=>($("api").value||"").replace(/\/$/,"");
+function lab2css(rgb){return rgb?`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`:"transparent";}
+function kv(k,v){return `<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`;}
+
+async function post(path, form, btn){
+  btn.disabled=true;
+  try{
+    const r=await fetch(api()+path,{method:"POST",body:form});
+    const j=await r.json();
+    return {ok:r.ok,status:r.status,j};
+  }catch(e){ return {ok:false,err:String(e)}; }
+  finally{ btn.disabled=false; }
+}
+
+$("facebtn").onclick=async()=>{
+  const f=$("facefile").files[0]; const out=$("faceout");
+  if(!f){out.innerHTML='<p class="err">Pick a face photo first.</p>';return;}
+  out.innerHTML='<p class="hint">Reading…</p>';
+  const fd1=new FormData();fd1.append("file",f);
+  const skin=await post("/twin/extract-skin",fd1,$("facebtn"));
+  const fd2=new FormData();fd2.append("file",f);
+  const face=await post("/twin/extract-face",fd2,$("facebtn"));
+  if(skin.err){out.innerHTML=`<p class="err">Could not reach the backend (${skin.err}). Is it deployed? Set the API base above.</p>`;return;}
+  let html="";
+  const mt=skin.j&&skin.j.monk_tone;
+  if(mt){
+    const sw=mt.rgb?`<span class="swatch" style="background:${lab2css(mt.rgb)}"></span>`:"";
+    html+=`<div class="big">${sw}MST ${mt.value}</div>`;
+    html+=kv("Monk tone (continuous)", mt.monk_continuous!=null?mt.monk_continuous:mt.value);
+    html+=kv("Confidence", (mt.confidence*100||0).toFixed(0)+"%");
+    html+=kv("Needs confirm", mt.needs_confirm?"yes":"no");
+  } else if(skin.j&&skin.j.eligibility){ html+=`<p class="err">No usable face — ${(skin.j.eligibility.quality_flags||[]).join(", ")||"retake"}.</p>`; }
+  const bm=face.j&&face.j.body_models;
+  if(bm){
+    if(bm.hair_colour) html+=kv("Hair colour", (bm.hair_colour.value||"—"));
+    if(bm.hair_texture) html+=kv("Hair texture", (bm.hair_texture.value||"—"));
+    if(bm.eye_colour) html+=kv("Eye colour", (bm.eye_colour.value||"—"));
+    if(bm.avatar_confidence) html+=kv("Recognition score", (bm.avatar_confidence.overall!=null?(bm.avatar_confidence.overall*100).toFixed(0)+"%":"—"));
+  }
+  html+=`<details><summary>Raw JSON</summary><pre>${JSON.stringify({skin:skin.j,face:face.j},null,2)}</pre></details>`;
+  out.innerHTML=html;
+};
+
+$("bodybtn").onclick=async()=>{
+  const f=$("bodyfile").files[0]; const out=$("bodyout");
+  if(!f){out.innerHTML='<p class="err">Pick a full-body photo first.</p>';return;}
+  out.innerHTML='<p class="hint">Measuring…</p>';
+  const fd=new FormData();fd.append("file",f);fd.append("height",$("height").value);
+  fd.append("weight",$("weight").value);fd.append("sex",$("sex").value);
+  const res=await post("/twin/extract-measurements",fd,$("bodybtn"));
+  if(res.err){out.innerHTML=`<p class="err">Could not reach the backend (${res.err}).</p>`;return;}
+  if(res.status===503){out.innerHTML='<p class="err">Pose model not on the server yet (503). It loads when the container is built with the models.</p>';return;}
+  const bm=res.j&&res.j.body_models;
+  if(!bm||!bm.measurements){out.innerHTML=`<p class="err">No body measured — ${(res.j.eligibility&&res.j.eligibility.quality_flags||[]).join(", ")||"retake"}.</p>`;return;}
+  let html="";
+  const led=bm.accuracy_ledger||{};
+  html+=kv("Body confidence", led.body_confidence!=null?(led.body_confidence*100).toFixed(0)+"%":"—");
+  html+=kv("Landmark coverage", led.landmark_coverage!=null?(led.landmark_coverage*100).toFixed(0)+"%":"—");
+  if(bm.body_shape){html+=kv("Body shape", (bm.body_shape.shape||"—"));html+=kv("BMI", bm.body_shape.bmi!=null?bm.body_shape.bmi:"—");}
+  html+='<table><thead><tr><th>Part</th><th style="text-align:right">Circumf. (cm)</th><th style="text-align:right">Conf.</th></tr></thead><tbody>';
+  for(const [part,m] of Object.entries(bm.measurements)){
+    html+=`<tr><td class="cap">${part}</td><td style="text-align:right">${m.circumference_cm!=null?m.circumference_cm:"—"}</td><td style="text-align:right">${m.confidence!=null?(m.confidence*100).toFixed(0)+"%":"—"}</td></tr>`;
+  }
+  html+="</tbody></table>";
+  html+=`<details><summary>Raw JSON</summary><pre>${JSON.stringify(res.j,null,2)}</pre></details>`;
+  out.innerHTML=html;
+};
+
+// ---------- FIT (offline, ported from fit_score.py) ----------
+const RULES={cut_ease_cm:{slim:{min:1,ideal:4,max:8},regular:{min:4,ideal:8,max:14},relaxed:{min:8,ideal:14,max:24}},
+  stretch_give_cm:{none:0,low:3,high:8},snug_tolerance_cm:3,fit_preference_ease_cm:{fitted:-4,true:0,relaxed:6,oversized:12}};
+const CHARTS={womens_top_regular:{cut:"regular",fabric_stretch:"low",size_chart:{XS:{chest:88,waist:74,hip:92},S:{chest:94,waist:80,hip:98},M:{chest:100,waist:86,hip:104},L:{chest:106,waist:92,hip:110},XL:{chest:112,waist:98,hip:116}}},
+  mens_top_regular:{cut:"regular",fabric_stretch:"none",size_chart:{S:{chest:100,waist:90,hip:100},M:{chest:106,waist:96,hip:106},L:{chest:112,waist:102,hip:112},XL:{chest:118,waist:108,hip:118}}},
+  womens_bottom_regular:{cut:"regular",fabric_stretch:"low",size_chart:{S:{waist:72,hip:96},M:{waist:78,hip:102},L:{waist:84,hip:108},XL:{waist:90,hip:114}}}};
+let PREF="true";
+function band(cut,l){const b=RULES.cut_ease_cm[cut]||RULES.cut_ease_cm.regular;const p=RULES.fit_preference_ease_cm[l]||0;return{min:b.min+p,ideal:b.ideal+p,max:b.max+p};}
+function score(body,g,cut,st,pref){const give=RULES.stretch_give_cm[st]||0,tol=RULES.snug_tolerance_cm,bd=band(cut,pref),rs=[];
+  Object.keys(g).filter(a=>a in body).sort().forEach(a=>{const room=g[a]-body[a]+give;
+    if(room<bd.min){const s=bd.min-room;rs.push({a,st:"tight",room:+room.toFixed(1),sh:+s.toFixed(1),m:s});}
+    else if(room>bd.max){const o=room-bd.max;rs.push({a,st:"loose",room:+room.toFixed(1),m:o});}
+    else{const m=Math.min(room-bd.min,bd.max-room);rs.push({a,st:"fits",room:+room.toFixed(1),m});}});
+  if(!rs.length)return null;const ti=rs.filter(x=>x.st==="tight"),lo=rs.filter(x=>x.st==="loose");let b,v;
+  if(ti.length){b=ti.reduce((a,c)=>c.sh>a.sh?c:a);v=b.sh<=tol?"snug":"size_up";}
+  else if(lo.length&&lo.length===rs.length){b=lo.reduce((a,c)=>c.m>a.m?c:a);v="size_down";}
+  else{const f=rs.filter(x=>x.st==="fits");const p=f.length?f:rs;b=p.reduce((a,c)=>c.m<a.m?c:a);v="fits";}
+  const conf=Math.max(0.05,Math.min(0.99,Math.min(0.99,0.45+b.m/8)*0.8));
+  return{v,rs,binding:b.a,conf:+conf.toFixed(3)};}
+function recommend(body,g,pref){const cut=g.cut,st=g.fabric_stretch,give=RULES.stretch_give_cm[st]||0;
+  const t=(RULES.cut_ease_cm[cut]||RULES.cut_ease_cm.regular).ideal+(RULES.fit_preference_ease_cm[pref]||0);
+  let best=null,bc=null;for(const[s,gi]of Object.entries(g.size_chart)){const ar=Object.keys(gi).filter(a=>a in body);if(!ar.length)continue;
+    const c=ar.reduce((z,a)=>z+Math.abs((gi[a]-body[a]+give)-t),0);if(bc===null||c<bc){best=s;bc=c;}}
+  if(best===null)return null;const sc=score(body,g.size_chart[best],cut,st,pref);sc.size=best;return sc;}
+const VL={fits:"Fits ✓",snug:"Snug",size_up:"Size up",size_down:"Size down"},VC={fits:"b-fits",snug:"b-snug",size_up:"b-up",size_down:"b-down"};
+function runFit(){const body={};[["chest","chest"],["waist","fwaist"],["hip","hip"]].forEach(([k,id])=>{const v=parseFloat($(id).value);if(!isNaN(v)&&v>0)body[k]=v;});
+  const g=CHARTS[$("garment").value];const r=recommend(body,g,PREF);const out=$("fitout");
+  if(!r){out.innerHTML='<p class="err">No comparable regions.</p>';return;}
+  let h=`<div class="big">${r.size}</div><div style="margin:.5rem 0"><span class="badge ${VC[r.v]}">${VL[r.v]}</span></div>`;
+  h+=kv("Confidence",(r.conf*100).toFixed(0)+"%")+kv("Binding region",r.binding);
+  h+='<table><thead><tr><th>Region</th><th>Status</th><th style="text-align:right">Room</th></tr></thead><tbody>';
+  r.rs.forEach(x=>{h+=`<tr><td class="cap">${x.a}</td><td class="cap">${x.st}</td><td style="text-align:right">${x.room>=0?"+":""}${x.room} cm</td></tr>`;});
+  h+="</tbody></table>";out.innerHTML=h;}
+document.querySelectorAll("#prefchips .chip").forEach(c=>c.onclick=()=>{document.querySelectorAll("#prefchips .chip").forEach(x=>x.classList.remove("on"));c.classList.add("on");PREF=c.dataset.p;runFit();});
+["chest","fwaist","hip","garment"].forEach(id=>$(id).addEventListener("input",runFit));
+runFit();
+</script></body></html>

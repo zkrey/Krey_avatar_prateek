@@ -180,3 +180,10 @@ def test_save_and_discard_roundtrip():
 if __name__ == "__main__":
     import subprocess
     raise SystemExit(subprocess.call(["pytest", "-q", __file__]))
+
+
+# ---- team QA tester page --------------------------------------------------------------
+def test_tester_page_served():
+    r = client.get("/tester")
+    assert r.status_code == 200
+    assert "Krey" in r.text and "/twin/extract-skin" in r.text   # twin tab calls the real API
