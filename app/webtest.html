@@ -58,6 +58,17 @@
   .dot{width:9px;height:9px;border-radius:50%;background:var(--faint);display:inline-block}
   .dot.ok{background:var(--fits)}.dot.bad{background:var(--warn)}
   .note{font-size:.72rem;color:var(--faint);margin-top:.4rem}
+  .slot{display:grid;grid-template-columns:64px 1fr;gap:.8rem;align-items:center;
+    background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:.7rem .8rem;margin-bottom:.6rem}
+  .slot.ready{border-color:var(--gold-dim)}
+  .slot .thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;background:#0f0a0c;border:1px solid var(--line)}
+  .slot .ph{width:64px;height:64px;border-radius:8px;background:#0f0a0c;border:1px dashed var(--line);
+    display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:1.4rem}
+  .slot .stitle{font-weight:600;font-size:.9rem}
+  .slot .skind{font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;color:var(--gold-dim);font-weight:700;margin-left:.4rem}
+  .slot .sfile{margin-top:.35rem;font-size:.82rem}
+  .slot .sfile::file-selector-button{font-family:var(--sans);font-size:.78rem;border-radius:7px;padding:.3rem .6rem;
+    background:var(--surface);color:var(--gold-soft);border:1px solid var(--gold-dim);cursor:pointer;margin-right:.6rem}
 </style></head>
 <body><div class="wrap">
   <h1>Krey <em>Tester</em></h1>
@@ -125,10 +136,18 @@
     </div>
 
     <div class="panel" id="tt_step2" hidden>
-      <h3>Step 2 · Add 5 photos <span class="note">(coming next)</span></h3>
-      <p class="hint">Prescribed set to exercise the algo: <b>1 clear front-face selfie</b> (appearance) +
-        <b>4 full-body shots</b> — front, side, three-quarter, and one retake — so capture consolidation and the
-        measurement scale both get tested. Upload + per-slot guidance gets wired in the next step.</p>
+      <h3>Step 2 · Add 5 photos <span class="note">prescribed set — each slot tests a different part of the algo</span></h3>
+      <p class="hint">Shoot in even light against a plain wall. The <b>face selfie</b> drives appearance
+        (skin tone, hair, eye, recognition); the <b>full-body</b> shots drive measurements — height is the scale
+        anchor, so stand straight, full body in frame, arms slightly away from the torso.</p>
+      <div id="tt_slots"></div>
+      <button class="go" id="tt_runbtn" disabled>Run algo → Step 3</button>
+      <div class="out" id="tt_step2out"></div>
+    </div>
+
+    <div class="panel" id="tt_step3" hidden>
+      <h3>Step 3 · Results <span class="note">(coming next)</span></h3>
+      <p class="hint">Runs the set through the real endpoints and shows the extracted data for accuracy QA. Wiring comes next.</p>
     </div>
   </div>
 
@@ -385,7 +404,65 @@ $("tt_savebtn").onclick=()=>{
   h1+='<p class="hint" style="margin-top:.8rem">Profile saved. Step 2 (add photos) unlocks below — wiring comes next.</p>';
   out.innerHTML=h1;
   $("tt_step2").hidden=false;
+  ttRenderSlots();
   $("tt_step2").scrollIntoView({behavior:"smooth",block:"nearest"});
+};
+
+// ---------- TWIN TEST · Step 2: the prescribed 5-photo set ----------
+// kind routes the photo in Step 3: "face" -> /capture/session, "body" -> /body/measure.
+const TT_SLOTS=[
+  {id:"face",  kind:"face", title:"Front-face selfie",     guide:"Clear, front-on, no sunglasses/hat. Drives skin tone, hair, eye, recognition."},
+  {id:"front", kind:"body", title:"Full body — front",     guide:"Straight-on, whole body in frame, arms slightly out. The measurement scale anchor."},
+  {id:"side",  kind:"body", title:"Full body — side",      guide:"90° profile. Tests depth + body shape."},
+  {id:"three", kind:"body", title:"Full body — 3/4 turn",  guide:"Angled between front and side. Tests landmark robustness."},
+  {id:"retake",kind:"body", title:"Full body — retake",    guide:"A second front-ish full-body shot. Tests capture consolidation (recency-weighted)."},
+];
+const TT_FILES={};   // slot id -> File
+
+function ttRenderSlots(){
+  const wrap=$("tt_slots"); if(wrap.dataset.built) return; wrap.dataset.built="1";
+  wrap.innerHTML=TT_SLOTS.map(s=>`
+    <div class="slot" id="slot-${s.id}">
+      <div class="ph" id="thumb-${s.id}">+</div>
+      <div>
+        <div><span class="stitle">${esc(s.title)}</span><span class="skind">${s.kind}</span></div>
+        <div class="note">${esc(s.guide)}</div>
+        <input class="sfile" type="file" accept="image/*" data-slot="${s.id}">
+      </div>
+    </div>`).join("");
+  wrap.querySelectorAll("input[type=file]").forEach(inp=>inp.onchange=ttOnPick);
+}
+
+function ttOnPick(e){
+  const id=e.target.dataset.slot, f=e.target.files[0], slot=$("slot-"+id), ph=$("thumb-"+id);
+  if(!f){ delete TT_FILES[id]; slot.classList.remove("ready"); ttUpdateRun(); return; }
+  TT_FILES[id]=f; slot.classList.add("ready");
+  const rd=new FileReader();
+  rd.onload=()=>{ ph.outerHTML=`<img class="thumb" id="thumb-${id}" src="${rd.result}" alt="">`; };
+  rd.readAsDataURL(f);
+  ttUpdateRun();
+}
+
+function ttUpdateRun(){
+  // Minimum to run the algo meaningfully: the face selfie + the front full-body (the scale anchor).
+  const haveFace=!!TT_FILES.face, haveFront=!!TT_FILES.front;
+  const n=Object.keys(TT_FILES).length;
+  const btn=$("tt_runbtn"), out=$("tt_step2out");
+  btn.disabled=!(haveFace&&haveFront);
+  if(btn.disabled){
+    const need=[!haveFace?"front-face selfie":null,!haveFront?"full-body front":null].filter(Boolean);
+    out.innerHTML=`<p class="note">Add at least the ${need.join(" + ")} to run. (${n}/5 added — all 5 gives the best test.)</p>`;
+  } else {
+    out.innerHTML=`<p class="note">${n}/5 added${n<5?" — the remaining full-body angles sharpen measurement + consolidation":""}. Ready to run.</p>`;
+  }
+}
+
+$("tt_runbtn").onclick=()=>{
+  // Step 3 wiring lands next; for now confirm the routing the run will use.
+  const face=Object.entries(TT_FILES).filter(([id])=>TT_SLOTS.find(s=>s.id===id).kind==="face").map(([id])=>id);
+  const bodyP=Object.entries(TT_FILES).filter(([id])=>TT_SLOTS.find(s=>s.id===id).kind==="body").map(([id])=>id);
+  $("tt_step3").hidden=false;
+  $("tt_step3").scrollIntoView({behavior:"smooth",block:"nearest"});
 };
 
 // ---------- TWIN: face ----------
