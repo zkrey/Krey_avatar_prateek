@@ -74,15 +74,66 @@
   </div>
 
   <div class="tabs">
-    <button class="tab on" data-tab="twin">Twin</button>
+    <button class="tab on" data-tab="twintest">Twin test</button>
+    <button class="tab" data-tab="twin">Twin</button>
     <button class="tab" data-tab="capture">Capture</button>
     <button class="tab" data-tab="fit">Fit</button>
     <button class="tab" data-tab="gate">Render gate</button>
     <button class="tab" data-tab="util">Utilities</button>
   </div>
 
+  <!-- =================== TWIN TEST (guided team flow) =================== -->
+  <div id="twintest">
+    <p class="hint" style="margin-bottom:1rem">The team-facing test: a member fills the profile the twin needs, adds the
+      prescribed 5 photos, then we run the real algo and show the extracted data to check accuracy.
+      <b>Step 1 of 3 — Profile.</b> Steps 2 (add photos) and 3 (results) come next.</p>
+
+    <div class="panel">
+      <h3>Step 1 · Profile <span class="note">everything the twin build needs</span></h3>
+
+      <label style="margin-top:0">Identity</label>
+      <div class="row2">
+        <div><label>Display name</label><input id="tt_name" placeholder="Aisha"></div>
+        <div><label>user_id <span class="note">(persists the twin for review)</span></label><input id="tt_uid" placeholder="team-aisha"></div>
+      </div>
+
+      <label style="margin-top:.8rem">Age gate <span class="note">(canRender wall)</span></label>
+      <div class="row2">
+        <div><label>Date of birth (ISO)</label><input id="tt_bd" placeholder="2000-01-01" value="2000-01-01"></div>
+        <div><label>Jurisdiction</label><input id="tt_jur" value="IN"></div>
+      </div>
+
+      <label style="margin-top:.8rem">Vitals <span class="note">(height = the measurement scale anchor)</span></label>
+      <div class="row3">
+        <div><label>Height (cm)</label><input type="number" id="tt_h" value="170"></div>
+        <div><label>Weight (kg)</label><input type="number" id="tt_w" value="65"></div>
+        <div><label>Sex</label><select id="tt_sex"><option value="2">Female</option><option value="1">Male</option></select></div>
+      </div>
+
+      <label style="margin-top:.8rem">Style — fit feel</label>
+      <div class="chips" id="tt_prefchips">
+        <button class="chip" data-p="fitted">Fitted</button>
+        <button class="chip on" data-p="true">True</button>
+        <button class="chip" data-p="relaxed">Relaxed</button>
+        <button class="chip" data-p="oversized">Oversized</button>
+      </div>
+      <label style="margin-top:.8rem">Region preferences <span class="note">(JSON, optional — e.g. {"waist":"relaxed"})</span></label>
+      <input id="tt_regions" placeholder='{"waist":"relaxed"}'>
+
+      <button class="go" id="tt_savebtn">Save profile → Step 2</button>
+      <div class="out" id="tt_profileout"></div>
+    </div>
+
+    <div class="panel" id="tt_step2" hidden>
+      <h3>Step 2 · Add 5 photos <span class="note">(coming next)</span></h3>
+      <p class="hint">Prescribed set to exercise the algo: <b>1 clear front-face selfie</b> (appearance) +
+        <b>4 full-body shots</b> — front, side, three-quarter, and one retake — so capture consolidation and the
+        measurement scale both get tested. Upload + per-slot guidance gets wired in the next step.</p>
+    </div>
+  </div>
+
   <!-- =================== TWIN =================== -->
-  <div id="twin">
+  <div id="twin" hidden>
     <div class="panel">
       <h3>Face &amp; skin <span class="note">POST /twin/extract-skin · /twin/extract-face</span></h3>
       <p class="hint">A clear front-face selfie → skin tone (Monk), hair colour + texture, eye colour, recognition score.</p>
@@ -250,7 +301,7 @@
 const $=id=>document.getElementById(id);
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));t.classList.add("on");
-  ["twin","capture","fit","gate","util"].forEach(id=>$(id).hidden=(t.dataset.tab!==id));});
+  ["twintest","twin","capture","fit","gate","util"].forEach(id=>$(id).hidden=(t.dataset.tab!==id));});
 
 const api=()=>($("api").value||"").replace(/\/$/,"");
 function lab2css(rgb){return rgb?`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`:"transparent";}
@@ -288,6 +339,54 @@ async function ping(){
   else{dot.className="dot bad";note.innerHTML=`<span class="err">HTTP ${r.status}</span>`;}
 }
 $("pingbtn").onclick=ping;
+
+// ---------- TWIN TEST · Step 1: profile ----------
+let TT_PREF="true";
+let TT_PROFILE=null;   // populated on save; Steps 2-3 read it
+document.querySelectorAll("#tt_prefchips .chip").forEach(c=>c.onclick=()=>{
+  document.querySelectorAll("#tt_prefchips .chip").forEach(x=>x.classList.remove("on"));c.classList.add("on");TT_PREF=c.dataset.p;});
+
+function ttValidate(){
+  const errs=[];
+  const bd=$("tt_bd").value.trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(bd)) errs.push("Date of birth must be ISO YYYY-MM-DD.");
+  else if(isNaN(Date.parse(bd))) errs.push("Date of birth is not a real date.");
+  const h=parseFloat($("tt_h").value), w=parseFloat($("tt_w").value);
+  if(!(h>0)) errs.push("Height must be a positive number.");
+  if(!(w>0)) errs.push("Weight must be a positive number.");
+  let regions=null;
+  if($("tt_regions").value.trim()){
+    try{ regions=JSON.parse($("tt_regions").value); }
+    catch(e){ errs.push("Region preferences must be valid JSON."); }
+  }
+  return {errs,regions,bd,h,w};
+}
+
+$("tt_savebtn").onclick=()=>{
+  const out=$("tt_profileout");
+  const {errs,regions,bd,h,w}=ttValidate();
+  if(errs.length){ out.innerHTML=errs.map(e=>`<p class="err">${esc(e)}</p>`).join(""); return; }
+  TT_PROFILE={
+    name:$("tt_name").value.trim(),
+    user_id:$("tt_uid").value.trim(),
+    birthdate:bd, jurisdiction:$("tt_jur").value.trim()||"IN",
+    height:h, weight:w, sex:parseInt($("tt_sex").value,10),
+    fit_feel:TT_PREF, region_preferences:regions,
+    // account/DOB assumed verified for a team member running the test
+    account_present:true, dob_verified:true,
+  };
+  let h1="";
+  h1+=kv("Name",esc(TT_PROFILE.name||"—"));
+  h1+=kv("user_id",esc(TT_PROFILE.user_id||"— (guest — twin not persisted)"));
+  h1+=kv("DOB · jurisdiction",`${esc(TT_PROFILE.birthdate)} · ${esc(TT_PROFILE.jurisdiction)}`);
+  h1+=kv("Vitals",`${TT_PROFILE.height} cm · ${TT_PROFILE.weight} kg · ${TT_PROFILE.sex===1?"male":"female"}`);
+  h1+=kv("Fit feel",esc(TT_PROFILE.fit_feel));
+  h1+=kv("Region prefs",TT_PROFILE.region_preferences?esc(JSON.stringify(TT_PROFILE.region_preferences)):"—");
+  h1+='<p class="hint" style="margin-top:.8rem">Profile saved. Step 2 (add photos) unlocks below — wiring comes next.</p>';
+  out.innerHTML=h1;
+  $("tt_step2").hidden=false;
+  $("tt_step2").scrollIntoView({behavior:"smooth",block:"nearest"});
+};
 
 // ---------- TWIN: face ----------
 $("facebtn").onclick=async()=>{
