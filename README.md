@@ -4,6 +4,18 @@ The avatar sub-project's extraction backend. Deterministic, **no ML training, no
 Two slices fill the `body_models` record (Capture Pipeline Spec §4); each is proven
 by a pure-math test suite before any expensive step.
 
+## Branches
+
+| Branch | Holds |
+|---|---|
+| `main` | Stable baseline. |
+| `claude/krey-avatar-setup-*` | Service A: backend + docs + `/tester` console. |
+| `claude/krey-frontend-*` | Frontend / tester-console work (branched off the setup branch). |
+
+**Naming going forward:** `type/scope-detail` — e.g. `feat/frontend-tester`,
+`fix/fit-score`, `docs/doctrine`. One concern per branch; branch off the branch
+that already holds the code you build on, not always `main`. See `CONTRIBUTING.md`.
+
 | Slice | Endpoint | Fills | Core (tested, stdlib-only) |
 |---|---|---|---|
 | 1 · skin tone | `POST /twin/extract-skin` | `skin_tone` | `app/monk.py` |
