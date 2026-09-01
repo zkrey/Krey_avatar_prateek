@@ -146,8 +146,11 @@
     </div>
 
     <div class="panel" id="tt_step3" hidden>
-      <h3>Step 3 · Results <span class="note">(coming next)</span></h3>
-      <p class="hint">Runs the set through the real endpoints and shows the extracted data for accuracy QA. Wiring comes next.</p>
+      <h3>Step 3 · Results <span class="note">face → /capture/session · body → /body/measure · then /twins</span></h3>
+      <p class="hint">One run through the real endpoints — no new logic, just the existing calls. Face slot drives
+        appearance; full-body slots drive measurements (height from Step 1 is the scale anchor). Compare against the
+        real person to check accuracy.</p>
+      <div class="out" id="tt_resultsout"></div>
     </div>
   </div>
 
@@ -457,12 +460,89 @@ function ttUpdateRun(){
   }
 }
 
-$("tt_runbtn").onclick=()=>{
-  // Step 3 wiring lands next; for now confirm the routing the run will use.
-  const face=Object.entries(TT_FILES).filter(([id])=>TT_SLOTS.find(s=>s.id===id).kind==="face").map(([id])=>id);
-  const bodyP=Object.entries(TT_FILES).filter(([id])=>TT_SLOTS.find(s=>s.id===id).kind==="body").map(([id])=>id);
+// ---------- TWIN TEST · Step 3: run the set through the existing endpoints ----------
+function ttGate(fd){                       // gate + identity from the saved profile
+  const p=TT_PROFILE;
+  fd.append("account_present",p.account_present);
+  fd.append("dob_verified",p.dob_verified);
+  fd.append("birthdate",p.birthdate);
+  fd.append("jurisdiction",p.jurisdiction);
+  if(p.user_id)fd.append("user_id",p.user_id);
+  return fd;
+}
+function ttFilesByKind(kind){
+  return TT_SLOTS.filter(s=>s.kind===kind&&TT_FILES[s.id]).map(s=>TT_FILES[s.id]);
+}
+function section(title){return `<h3 style="margin:1.4rem 0 .4rem;font-size:.95rem;color:var(--gold-soft)">${title}</h3>`;}
+
+$("tt_runbtn").onclick=async()=>{
+  if(!TT_PROFILE){return;}
   $("tt_step3").hidden=false;
+  const out=$("tt_resultsout");
+  out.innerHTML='<p class="hint">Running the set through the backend…</p>';
   $("tt_step3").scrollIntoView({behavior:"smooth",block:"nearest"});
+  let html="";
+
+  // --- appearance: face slot -> /capture/session ---
+  const faceFiles=ttFilesByKind("face");
+  if(faceFiles.length){
+    const fd=new FormData();faceFiles.forEach(f=>fd.append("files",f));ttGate(fd);
+    const res=await post("/capture/session",fd,$("tt_runbtn"));
+    html+=section("Appearance — /capture/session");
+    if(res.err){html+=unreachable(res);}
+    else if(res.status===403){const d=(res.j&&res.j.detail)||{};html+=`<p class="err">403 — canRender: ${esc(d.reason||"blocked")}.</p>`;}
+    else if(!res.ok){html+=`<p class="err">HTTP ${res.status}.</p>`+raw(res.j);}
+    else{
+      const j=res.j;
+      html+=kv("Decision",esc(j.decision||"—"));
+      const idc=j.identity&&j.identity.overall; if(idc!=null)html+=kv("Identity confidence",(idc*100).toFixed(0)+"%");
+      html+=kv("Faces total / owner",`${j.n_faces_total!=null?j.n_faces_total:"—"} / ${j.n_user_faces!=null?j.n_user_faces:"—"}`);
+      const a=j.appearance||{};
+      const slot=(n)=>a[n]&&a[n].value!=null?esc(a[n].value):null;
+      if(slot("skin_tone"))html+=kv("Skin tone",slot("skin_tone"));
+      if(slot("hair_colour"))html+=kv("Hair colour",slot("hair_colour"));
+      if(slot("hair_texture"))html+=kv("Hair texture",slot("hair_texture"));
+      if(slot("eye_colour"))html+=kv("Eye colour",slot("eye_colour"));
+      html+=kv("Persisted",j.saved?"yes":"no");
+      html+=raw(j);
+    }
+  }
+
+  // --- measurements: body slots -> /body/measure ---
+  const bodyFiles=ttFilesByKind("body");
+  if(bodyFiles.length){
+    const p=TT_PROFILE;const fd=new FormData();bodyFiles.forEach(f=>fd.append("files",f));
+    fd.append("height",p.height);fd.append("weight",p.weight);fd.append("sex",p.sex);ttGate(fd);
+    const res=await post("/body/measure",fd,$("tt_runbtn"));
+    html+=section("Measurements — /body/measure");
+    if(res.err){html+=unreachable(res);}
+    else if(res.status===403){const d=(res.j&&res.j.detail)||{};html+=`<p class="err">403 — canRender: ${esc(d.reason||"blocked")}.</p>`;}
+    else if(res.status===503){html+='<p class="err">Pose model not on the server (503) — deploy with the models to test measurements.</p>';}
+    else if(!res.ok){html+=`<p class="err">HTTP ${res.status}.</p>`+raw(res.j);}
+    else{
+      const j=res.j;
+      html+=kv("Decision",esc(j.decision||"—"));
+      html+=kv("Measurable frames",j.n_measurable!=null?j.n_measurable:"—");
+      html+=kv("Persisted",j.saved?"yes":"no");
+      if(j.measurements)html+=renderMeasurements({measurements:j.measurements,body_shape:j.body_shape,accuracy_ledger:j.accuracy_ledger});
+      html+=raw(j);
+    }
+  }
+
+  // --- persisted record: /twins/{user_id} ---
+  if(TT_PROFILE.user_id){
+    const res=await req("/twins/"+encodeURIComponent(TT_PROFILE.user_id),{},$("tt_runbtn"));
+    html+=section("Stored twin — /twins/"+esc(TT_PROFILE.user_id));
+    if(res.err){html+=unreachable(res);}
+    else if(res.status===404){html+='<p class="note">No record stored (guest, or nothing persisted this run).</p>';}
+    else if(!res.ok){html+=`<p class="err">HTTP ${res.status}.</p>`;}
+    else{html+='<p class="note">Compact derived record (never raw photos):</p>'+raw(res.j);}
+  } else {
+    html+=section("Stored twin");
+    html+='<p class="note">No user_id set in Step 1 — nothing persisted. Add one to review the stored record.</p>';
+  }
+
+  out.innerHTML=html;
 };
 
 // ---------- TWIN: face ----------
