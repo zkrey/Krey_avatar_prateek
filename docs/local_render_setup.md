@@ -240,17 +240,31 @@ python app.py --output_dir="resource/demo/output" --mixed_precision="bf16" --all
 
 ---
 
-## If detectron2 just won't build (escape hatch — get a render TODAY, ₹0)
+## If the detectron2 build fights you — push through (don't switch tools)
 
-Don't lose a day to a 2021 library. To prove the *engine* while the local build is sorted:
+detectron2 is the one genuinely hard step. **The goal is to complete this build**, so when
+it errors, work the fix below — don't reach for a different engine. These are the failures
+that actually happen and the fix for each:
 
-- **HF Space (zero install):** https://huggingface.co/spaces/yisol/IDM-VTON — upload
-  person + garment, get a render in the browser now. Good enough to show the concept.
-- **detectron2-free local alternative:** OOTDiffusion uses OpenPose + human-parsing (no
-  detectron2), so it sidesteps this whole wall — a fallback if Windows-native keeps failing.
+- **Builds, but CUDA isn't used / it runs on CPU** → `CUDA_HOME` wasn't set when it compiled.
+  Confirm `echo $CUDA_HOME` = `/usr/local/cuda-12.1` and `nvcc --version` = 12.1, then
+  reinstall the detectron2 lines with `--force-reinstall --no-build-isolation`.
+- **`nvcc fatal: Unsupported gpu architecture`** → the arch flag is missing. Make sure
+  `export TORCH_CUDA_ARCH_LIST=8.6` (RTX 3060 = Ampere) is set **in the same shell** before
+  the pip install, then retry.
+- **C++ compile error (`identifier undefined`, ABI/`c10` mismatch)** → the **v0.6 tag**
+  choking on torch 2.1. Switch to detectron2 **main** — it keeps the exact DensePose API
+  CatVTON imports, so this is still the same fix, just a newer compiler front-end:
+  ```bash
+  pip install "git+https://github.com/facebookresearch/detectron2.git"
+  pip install "git+https://github.com/facebookresearch/detectron2.git#subdirectory=projects/DensePose"
+  ```
+- **Build killed / OOM on the laptop** → lower parallelism: `export MAX_JOBS=2` and retry.
+- **`No module named 'torch'` during the build** → torch wasn't installed first, or a
+  different Python/venv is active. Re-activate the venv, redo Phase 2, then Phase 3.
 
-The measured local GPU-seconds is the *nice-to-have*; a working render to show the team is
-the *must-have*. Use the Space to unblock, then finish the local island above for the number.
+Between the pinned island (torch 2.1.2 + CUDA 12.1 + arch 8.6) and the `main`-branch
+fallback, this build **does** go through on Linux. Stay on it — WSL2 is the reliable route.
 
 ---
 
