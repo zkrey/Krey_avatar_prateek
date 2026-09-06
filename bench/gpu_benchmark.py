@@ -147,7 +147,35 @@ class ReplicateProvider:
                     "ok": False, "error": f"{type(e).__name__}: {e}", "cold": i == 0}
 
 
-PROVIDERS = {"dry": DryRunProvider, "replicate": ReplicateProvider}
+class LocalProvider:
+    """Logs a LOCAL render (e.g. CatVTON on Sohan's own GPU) into the same shape as the
+    cloud runs — so a self-hosted number sits apples-to-apples next to the cloud IDM-VTON
+    figure. It does NOT render: you read the wall-clock seconds off the CatVTON app/CLI
+    (measure the SECOND render onward — the first includes model load/download) and hand
+    them in via --latencies. On a dedicated local card the GPU is ~100% busy for the whole
+    render, so GPU-seconds ≈ wall-clock (tune with --gpu-frac). No key, no spend, no network.
+
+    Cost note: a local card isn't billed per GPU-second — `inr_derived` here is the
+    *cloud-equivalent* cost of that many GPU-seconds (at --usd-per-gpu-s), i.e. "what this
+    render would cost if we rented it," which is exactly the number to compare against the
+    cloud benchmark. Marginal local cost is electricity, tracked elsewhere."""
+    name = "local"
+
+    def __init__(self, latencies, gpu_frac=1.0, all_warm=False, **_ignored):
+        if not latencies:
+            raise SystemExit("--provider local needs --latencies (measured render seconds)")
+        self.latencies = list(latencies)
+        self.gpu_frac = gpu_frac
+        self.all_warm = all_warm
+
+    def run(self, i, person, garment, model):
+        latency = float(self.latencies[i])
+        cold = False if self.all_warm else (i == 0)
+        return {"latency_s": round(latency, 3), "gpu_s": round(latency * self.gpu_frac, 3),
+                "cost_usd": None, "ok": True, "error": None, "cold": cold}
+
+
+PROVIDERS = {"dry": DryRunProvider, "replicate": ReplicateProvider, "local": LocalProvider}
 
 
 def preflight_budget(n_runs: int, budget_usd) -> None:
@@ -159,6 +187,26 @@ def preflight_budget(n_runs: int, budget_usd) -> None:
         raise SystemExit(
             f"REFUSING: estimated ${projected:.2f} for {n_runs} runs exceeds "
             f"--budget-usd ${budget_usd:.2f}. Lower --runs or raise the cap.")
+
+
+def _parse_latencies(latencies: Optional[str], latencies_file: Optional[str]) -> list:
+    """Read measured render seconds from --latencies (comma list) or --latencies-file
+    (one per line). Blanks and '#' comment lines are ignored. Pure — the tested seam."""
+    raw = ""
+    if latencies_file:
+        with open(latencies_file) as f:
+            raw += "\n".join(ln.split("#", 1)[0] for ln in f)
+    if latencies:
+        raw += "\n" + latencies
+    vals = [tok.strip() for chunk in raw.replace(",", "\n").splitlines() for tok in [chunk] if tok.strip()]
+    try:
+        out = [float(v) for v in vals]
+    except ValueError as e:
+        raise SystemExit(f"--latencies: not a number ({e}). Give seconds like '12.3,11.8,11.9'")
+    if not out:
+        raise SystemExit("--provider local needs at least one measured latency "
+                         "(--latencies or --latencies-file)")
+    return out
 
 
 def run_benchmark(provider, n_runs, person, garment, model) -> list:
@@ -182,6 +230,14 @@ def main(argv=None):
     ap.add_argument("--budget-usd", type=float, default=None, help="hard spend cap (paid providers)")
     ap.add_argument("--usd-per-gpu-s", type=float, default=0.001)
     ap.add_argument("--fx", type=float, default=85.0, help="USD->INR")
+    ap.add_argument("--latencies", default=None,
+                    help="local provider: comma-list of measured render seconds, e.g. '12.3,11.8,11.9'")
+    ap.add_argument("--latencies-file", default=None,
+                    help="local provider: file with one measured render-second value per line")
+    ap.add_argument("--gpu-frac", type=float, default=1.0,
+                    help="local provider: GPU-busy fraction of wall-clock (1.0 for a dedicated card)")
+    ap.add_argument("--all-warm", action="store_true",
+                    help="local provider: treat every measured run as warm (none as cold-start)")
     ap.add_argument("--person-key", default=None, help="override the model's person-image field name")
     ap.add_argument("--garment-key", default=None, help="override the model's garment-image field name")
     ap.add_argument("--extra-input", default=None, help="JSON merged into the model input (model-specific fields)")
@@ -190,14 +246,18 @@ def main(argv=None):
 
     extra = json.loads(args.extra_input) if args.extra_input else None
 
-    if args.provider != "dry":
+    if args.provider == "local":
+        latencies = _parse_latencies(args.latencies, args.latencies_file)
+        args.runs = len(latencies)   # one run per measured render — not --runs
+        provider = LocalProvider(latencies=latencies, gpu_frac=args.gpu_frac, all_warm=args.all_warm)
+    elif args.provider == "dry":
+        provider = DryRunProvider(usd_per_gpu_s=args.usd_per_gpu_s)
+    else:
         preflight_budget(args.runs, args.budget_usd)
         if not args.person or not args.garment:
             raise SystemExit("a paid provider needs --person and --garment images")
-
-    provider = PROVIDERS[args.provider](usd_per_gpu_s=args.usd_per_gpu_s) if args.provider == "dry" \
-        else PROVIDERS[args.provider](usd_per_gpu_s=args.usd_per_gpu_s, person_key=args.person_key,
-                                      garment_key=args.garment_key, extra=extra)
+        provider = PROVIDERS[args.provider](usd_per_gpu_s=args.usd_per_gpu_s, person_key=args.person_key,
+                                            garment_key=args.garment_key, extra=extra)
     print(f"Benchmarking '{args.model}' via {provider.name} — {args.runs} runs", file=sys.stderr)
     runs = run_benchmark(provider, args.runs, args.person, args.garment, args.model)
 

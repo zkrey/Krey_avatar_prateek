@@ -8,7 +8,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import pytest
 from bench import bench_core
-from bench.gpu_benchmark import (DryRunProvider, preflight_budget, run_benchmark, main,
+from bench.gpu_benchmark import (DryRunProvider, LocalProvider, _parse_latencies,
+                                 preflight_budget, run_benchmark, main,
                                  resolve_model, build_input, MODEL_PRESETS)
 
 
@@ -139,3 +140,37 @@ def test_main_dry_end_to_end():
     assert s["subsidy_inputs"]["gpu_seconds_per_render"] is not None
     assert s["cost_per_render"]["inr_derived"] is not None
     assert out["leaderboard"]["cheapest"] == "dry/try-on"
+
+
+# ---- local provider (log a self-hosted render alongside the cloud number) -------------
+def test_parse_latencies_comma_and_file(tmp_path):
+    assert _parse_latencies("12.3,11.8, 11.9", None) == [12.3, 11.8, 11.9]
+    f = tmp_path / "lat.txt"
+    f.write_text("12.3\n11.8  # warm\n\n11.9\n")
+    assert _parse_latencies(None, str(f)) == [12.3, 11.8, 11.9]
+
+
+def test_parse_latencies_rejects_junk():
+    with pytest.raises(SystemExit):
+        _parse_latencies("12.3,notanumber", None)
+    with pytest.raises(SystemExit):
+        _parse_latencies(None, None)   # nothing provided
+
+
+def test_local_provider_first_cold_gpu_equals_wallclock():
+    p = LocalProvider(latencies=[20.0, 12.0, 11.5], gpu_frac=1.0)
+    runs = run_benchmark(p, 3, None, None, "catvton-local")
+    assert runs[0]["cold"] is True and all(r["cold"] is False for r in runs[1:])
+    assert runs[1]["gpu_s"] == 12.0 and runs[1]["cost_usd"] is None   # dedicated card: GPU-s == wall-clock
+    assert all(r["ok"] for r in runs)
+
+
+def test_main_local_end_to_end_matches_cloud_shape():
+    # warm-only measured renders -> the same summary/subsidy shape as a cloud run
+    out = main(["--provider", "local", "--model", "catvton-local",
+                "--latencies", "12.0,11.8,11.9", "--all-warm"])
+    s = out["summary"]
+    assert s["provider"] == "local" and s["n_ok"] == 3 and s["n_cold"] == 0
+    # GPU-seconds per render is populated and cloud-equivalent cost derives from it
+    assert s["subsidy_inputs"]["gpu_seconds_per_render"] is not None
+    assert s["cost_per_render"]["inr_derived"] is not None

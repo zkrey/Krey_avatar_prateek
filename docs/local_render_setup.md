@@ -251,3 +251,18 @@ Don't lose a day to a 2021 library. To prove the *engine* while the local build 
 
 The measured local GPU-seconds is the *nice-to-have*; a working render to show the team is
 the *must-have*. Use the Space to unblock, then finish the local island above for the number.
+
+---
+
+## Once it renders — log the GPU-seconds
+
+Read the wall-clock seconds the CatVTON app prints, **skip the first render** (it includes
+model load/download), and log the rest into our benchmark so the local number sits
+apples-to-apples next to the cloud IDM-VTON figure (~16.6 GPU-s ≈ ₹1.6):
+
+```bash
+python -m bench.gpu_benchmark --provider local --model catvton-rtx3060 \
+    --latencies "20.0,12.0,11.8,11.9" --out bench_catvton_local.json
+```
+
+Details in `bench/README.md` → "Log a LOCAL render".

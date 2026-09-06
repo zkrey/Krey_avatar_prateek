@@ -53,6 +53,26 @@ Run once per candidate, then compare the `bench_*.json` files — cheapest warm 
 wins, warm p90 latency breaks ties. `python -m bench.gpu_benchmark` prints a leaderboard
 per file; the numbers you carry over are in each file's `summary.subsidy_inputs`.
 
+## Log a LOCAL render (Sohan's own GPU) — free, no key
+
+Once the local CatVTON render works (see `docs/local_render_setup.md`), drop its numbers
+into the *same* summary shape so a self-hosted figure sits apples-to-apples next to the
+cloud one. The harness doesn't render here — you read the wall-clock seconds off the
+CatVTON app/CLI and hand them in. **Skip the first render** (it includes model
+load/download); measure the 2nd onward.
+
+```bash
+# each value is one render's wall-clock seconds; first is treated as cold unless --all-warm
+python -m bench.gpu_benchmark --provider local --model catvton-rtx3060 \
+    --latencies "20.0,12.0,11.8,11.9" --out bench_catvton_local.json
+```
+
+On a dedicated card the GPU is ~100% busy for the whole render, so **GPU-seconds ≈
+wall-clock** (tune with `--gpu-frac`). A local card isn't billed per second, so
+`cost_per_render.inr_derived` here is the **cloud-equivalent** cost of those GPU-seconds
+(at `--usd-per-gpu-s`) — exactly the figure to compare against the cloud IDM-VTON run
+(~16.6 GPU-s ≈ ₹1.6). `cost_usd` stays null because nothing was actually billed.
+
 ## What you get
 For each model: warm vs cold latency percentiles, GPU-seconds, and cost/render in ₹, plus:
 ```
