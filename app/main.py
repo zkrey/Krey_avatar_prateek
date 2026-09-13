@@ -21,7 +21,7 @@ from __future__ import annotations
 import os
 import uuid
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Body
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Body, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
@@ -34,6 +34,7 @@ from app.skin_tone import extract_skin_samples
 from app import measurements as body
 from app import face
 from app import eligibility, style_profile, fit_score, entitlements
+from app import notify
 from app import store as store_mod
 from app.body_models import assemble_body_models
 from app.analytics import Analytics, Spine, ENTRY_POINTS as analytics_entry_points
@@ -526,7 +527,7 @@ def render_authorize_ep(payload: dict = Body(...)):
 
 
 @app.post("/feedback")
-def feedback_ep(payload: dict = Body(...)):
+def feedback_ep(payload: dict = Body(...), background: BackgroundTasks = None):
     """
     Live→sandbox→production loop's front door. A user (or an auto-assessment on the live
     app) reports a broken feature / misplaced button / crash; we normalize it into a
@@ -556,7 +557,16 @@ def feedback_ep(payload: dict = Body(...)):
     # from the logs, or point the sink at a store (see docs/alpha_hosting_guide.md).
     analytics.sink({"event": "feedback_ticket", "surface": spine.surface,
                     "user_id": spine.user_id, "guest_id": spine.guest_id, "ticket": ticket})
-    return {"status": "queued", "ticket": ticket}
+    # Optionally email the ticket too, if SMTP is configured (docs/alpha_hosting_guide.md).
+    # Background task so the user's "Send" stays instant; best-effort, never blocks/raises.
+    emailed = False
+    if notify.smtp_configured():
+        emailed = True
+        if background is not None:
+            background.add_task(notify.send_feedback_email, ticket)
+        else:
+            notify.send_feedback_email(ticket)
+    return {"status": "queued", "ticket": ticket, "emailed": emailed}
 
 
 @app.post("/capture/instagram")

@@ -36,6 +36,17 @@ requirements are Docker + enough RAM.
 - **CPU:** shared is fine for alpha; the render (the slow, GPU part) isn't in this service.
 - **Disk:** ephemeral is fine — nothing is persisted (see §5, §6).
 
+**Cost:** Railway is **not free ongoing** — a small trial credit, then the **Hobby plan
+~$5/month** which *includes* ~$5 of usage, billed by the minute for RAM/CPU actually used.
+A low-traffic alpha at ~2 GB, spun up only while testing, typically fits inside that ~$5.
+If you want to avoid even that: **Fly.io** and **Render** have small free/low tiers, but our
+image needs ≥2 GB RAM (buffalo_l + MediaPipe), which their *free* tiers don't give — so
+expect a similar few-dollars/month there too. **Cheapest of all:** run the same `Dockerfile`
+on any machine you already have (even Sohan's, when it's on) — `docker build -t krey . &&
+docker run -p 8000:8000 krey` — and share it over the LAN or a tunnel for a testing session;
+₹0, just not always-on. (Pricing changes — confirm current numbers on railway.com before you
+commit.)
+
 ---
 
 ## 2. Deploy it — step by step (Railway)
@@ -124,16 +135,33 @@ flag report you can action. Example (abbreviated):
 ```
 `grep feedback_ticket` (or Railway's log search) gives you every one.
 
-**Make it durable (recommended once flags start coming):** logs roll off. Pick one, low
-effort → higher:
-- **Log drain** — Railway can forward logs to a destination you keep (a bucket, Logtail,
-  etc.). Zero code.
-- **Swap the sink** — `app/main.py` builds `Analytics()` with the default `stdout_sink`.
-  Point it at a function that writes each event to **Supabase** (a `feedback` table) or posts
-  `feedback_ticket` events to a **Slack webhook**. ~20 lines, no other change — every event
-  (incl. tickets) flows there automatically.
-- **Full loop** — `docs/FEEDBACK_LOOP.md` describes routing a ticket to a sandbox / GitHub
-  issue for the live→fix→deploy cycle; wire that when alpha graduates.
+**Get it by EMAIL (recommended — no Slack/Supabase needed).** The service can email every
+feedback ticket to you over plain SMTP (a Gmail address + an App Password is enough). It's
+already built (`app/notify.py`); you just set env vars on Railway:
+
+| Env var | Value |
+|---|---|
+| `KREY_SMTP_HOST` | `smtp.gmail.com` (or your provider) |
+| `KREY_SMTP_PORT` | `587` (default; `465` for SSL) |
+| `KREY_SMTP_USER` | the sending mailbox, e.g. `kreyindia@gmail.com` |
+| `KREY_SMTP_PASS` | an **App Password**, not your normal password (see below) |
+| `KREY_FEEDBACK_EMAIL_TO` | where feedback should land (comma-separated for several) |
+| `KREY_FEEDBACK_EMAIL_FROM` | optional; defaults to `KREY_SMTP_USER` |
+
+Gmail App Password: Google Account → Security → **2-Step Verification** (must be on) →
+**App passwords** → generate one → paste it as `KREY_SMTP_PASS`. (Normal Gmail passwords are
+blocked for SMTP.) Redeploy after setting the vars.
+
+Then every **Send feedback** emails you a subject like
+`[Krey alpha] feedback · high · functional · <id>` with the full note (flagged fields, what
+they should be, confirmations, snapshot). Sending is a background task — the user's tap stays
+instant — and best-effort: if email fails or isn't configured, the ticket is **still** in the
+logs, so nothing is lost. The `/feedback` response includes `"emailed": true/false` so you can
+confirm it's wired.
+
+**If you'd rather not run email at all:** the logs are the fallback — read `feedback_ticket`
+lines in Railway logs, or add a Railway **log drain** to keep them. (`docs/FEEDBACK_LOOP.md`
+covers routing to a sandbox / issue tracker later, when alpha graduates.)
 
 The ticket also flags **device-specific visual bugs** (`route: "device_farm"`) vs general
 issues (`route: "standard"`), so you can triage rendering/UX bugs separately from algorithm
