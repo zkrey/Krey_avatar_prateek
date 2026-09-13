@@ -56,6 +56,19 @@
       "purpose": "Optional auxiliary attribute model. Coarse race/age/gender; does NOT replace ArcFace identity and does NOT read skin colour.",
       "access": "git clone; weights included (fairface.onnx / .pt)."
     },
+    "hair_type_kavyasree": {
+      "name": "Hair Type Dataset (kavyasreeb)",
+      "url": "https://www.kaggle.com/datasets/kavyasreeb/hair-type-dataset",
+      "kind": "hair",
+      "indian": false,
+      "labels": {"hair_texture": true, "classes": ["straight", "wavy", "curly", "kinky", "dreadlocks"]},
+      "size": "unknown (web-sourced)",
+      "licence": "unclear",
+      "commercial_ok": null,
+      "use": "train_texture",
+      "purpose": "TRAIN the hair-texture classifier (the one unbuilt slice). Single-label 4-class softmax straight/wavy/curly/coily: remap kinky->coily, DROP dreadlocks (a style, not a texture). Not Indian -> fine-tune + validate on Indian hair. See docs/hair_texture_plan.md.",
+      "access": "Kaggle CLI: kaggle datasets download kavyasreeb/hair-type-dataset (needs kaggle token)."
+    },
     "iiscifd": {
       "name": "IISc Indian Face Dataset (IISCIFD)",
       "url": "https://github.com/harish2006/IISCIFD",

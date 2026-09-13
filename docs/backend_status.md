@@ -20,7 +20,7 @@
 
 ## ⏳ Not built yet
 - **The render (Service B, generative try-on)** — the visual "you in a garment" + RAAQ. It's the GPU/cost piece; **parked** until a real GPU (local Intel integrated GPU can't run it). First step is a small paid benchmark.
-- **Hair texture** (coily/curly/wavy/straight) — the last recognition gap (90% → 100%); needs a small classifier/VLM, not colour maths. Hair *colour* + eye *colour* are done.
+- **Hair texture** (straight/wavy/curly/coily) — the last recognition gap (90% → 100%); a small **single-label** classifier (not colour maths), plan + datasets in `docs/hair_texture_plan.md`. Hair *colour* + eye *colour* are done. The one place training is warranted; post-M1 polish, not a launch blocker.
 - Dashboard / discovery / taste engine — broader app (master spec), separate workstream.
 
 ## Data & validation

@@ -15,7 +15,7 @@ set -euo pipefail
 DEST="${DATA_DIR:-data}"
 mkdir -p "$DEST"
 
-want=("$@"); [ ${#want[@]} -eq 0 ] && want=(indicfairface dermacon_in scin fairface_onnx)
+want=("$@"); [ ${#want[@]} -eq 0 ] && want=(indicfairface dermacon_in scin fairface_onnx hair_type_kavyasree)
 has(){ printf '%s\n' "${want[@]}" | grep -qx "$1"; }
 
 if has indicfairface; then
@@ -35,6 +35,12 @@ if has scin; then
   echo "== SCIN (US dermatology · Monk+Fitzpatrick · CALIBRATE secondary · SCIN DUL) =="
   echo "  Option A (GCS, public):  gsutil -m cp -r gs://dx-scin-public-data/dataset $DEST/scin"
   command -v gsutil >/dev/null && gsutil -m cp -r gs://dx-scin-public-data/dataset "$DEST/scin" || echo "  (install gsutil, or use the google/scin HuggingFace mirror)"
+fi
+
+if has hair_type_kavyasree; then
+  echo "== Hair Type (kavyasreeb) · TRAIN hair-texture · confirm licence · not Indian =="
+  echo "  kaggle datasets download -d kavyasreeb/hair-type-dataset -p $DEST/hair_type_kavyasree --unzip"
+  command -v kaggle >/dev/null && kaggle datasets download -d kavyasreeb/hair-type-dataset -p "$DEST/hair_type_kavyasree" --unzip || echo "  (install+auth the kaggle CLI, then re-run) — see docs/hair_texture_plan.md (remap kinky->coily, drop dreadlocks)"
 fi
 
 if has fairface_onnx; then

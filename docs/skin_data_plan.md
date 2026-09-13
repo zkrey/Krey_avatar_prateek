@@ -87,6 +87,7 @@ exist in the list. Build it cheaply:
    calibrate the LAB→Monk mapping on **DermaCon‑IN** (Indian + Monk) with **SCIN** as a
    secondary cross‑check — no training.
 2. **Seed the real calibration set** from alpha flags + a colour‑reference capture.
-3. **Train only** where it's warranted: **hair texture** (needs a labelled set not in this
-   list) and, later, an illumination corrector / licence‑clear identity model.
+3. **Train only** where it's warranted: **hair texture** (its own plan +
+   datasets in `docs/hair_texture_plan.md`) and, later, an illumination corrector /
+   licence‑clear identity model.
 4. **Skip** IISCIFD and the two Kaggle sets for skin (grayscale / coarse / non‑Indian / licence).
