@@ -28,10 +28,13 @@ COPY models ./models
 # Bake the MediaPipe models into the image (~35 MB) so boot needs no network.
 RUN bash scripts/fetch_models.sh
 
-# OPTIONAL — pre-warm InsightFace (buffalo_l, ~300 MB) so the FIRST capture is fast and
-# never depends on a runtime download. Uncomment for production reliability (bigger image):
-# RUN python -c "from insightface.app import FaceAnalysis; \
-#     a=FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider']); a.prepare(ctx_id=-1)"
+# Pre-warm InsightFace (buffalo_l, ~300 MB) at build so the identity algo (/capture/session)
+# works on the FIRST request and never depends on a runtime download. Required for reliable
+# testing on hosts with an ephemeral filesystem (Railway/Render), which would otherwise
+# re-download buffalo_l on every container restart. Downloads into /root/.insightface, the
+# same path the app reads at runtime (both run as root). Bigger image, but a dependable one.
+RUN python -c "from insightface.app import FaceAnalysis; \
+    a=FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider']); a.prepare(ctx_id=-1)"
 
 EXPOSE 8000
 # Hosts (Railway/Render) inject $PORT; default to 8000 locally.
