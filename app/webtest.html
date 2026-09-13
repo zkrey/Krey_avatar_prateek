@@ -96,9 +96,12 @@
 
   <!-- =================== TWIN TEST (guided team flow) =================== -->
   <div id="twintest">
-    <p class="hint" style="margin-bottom:1rem">The team-facing test: a member fills the profile the twin needs, adds the
-      prescribed 5 photos, then we run the real algo and show the extracted data to check accuracy.
-      <b>Step 1 of 3 — Profile.</b> Steps 2 (add photos) and 3 (results) come next.</p>
+    <p class="hint" style="margin-bottom:1rem">The team-facing test of the <b>complete Krey pipeline, GPU-free</b>: fill the
+      profile, add the same 5-photo scenario we expect users to upload, and see everything the algo extracts —
+      identity, skin tone, hair, eye, body measurements, recognition — <b>up to the render wall</b> (no GPU render is
+      triggered, so there is zero GPU cost). Works on real people <i>and</i> on random/unrelated photos, so you can
+      also check how it handles no-face, bystanders, and low-confidence cases.
+      <b>Step 1 of 3 — Profile.</b></p>
 
     <div class="panel">
       <h3>Step 1 · Profile <span class="note">everything the twin build needs</span></h3>
@@ -564,11 +567,34 @@ $("tt_runbtn").onclick=async()=>{
     if(res.err){html+=unreachable(res);}
     else if(res.status===404){html+='<p class="note">No record stored (guest, or nothing persisted this run).</p>';}
     else if(!res.ok){html+=`<p class="err">HTTP ${res.status}.</p>`;}
-    else{html+='<p class="note">Compact derived record (never raw photos):</p>'+raw(res.j);}
+    else{
+      const twin=res.j||{};
+      const ac=twin.avatar_confidence||(twin.record&&twin.record.avatar_confidence)||(twin.body_models&&twin.body_models.avatar_confidence);
+      if(ac&&ac.overall!=null)html+=kv("Recognition score (§6 — is it recognisably them)",(ac.overall*100).toFixed(0)+"%");
+      html+='<p class="note">Compact derived record (never raw photos):</p>'+raw(twin);
+    }
   } else {
     html+=section("Stored twin");
     html+='<p class="note">No user_id set in Step 1 — nothing persisted. Add one to review the stored record.</p>';
   }
+
+  // --- RENDER WALL: the pipeline ends here, BEFORE any GPU spend ---
+  html+=section("Render wall — /render/authorize");
+  const gres=await postJSON("/render/authorize",{plan:"free",used_today:0,entry_point:"try_on"},$("tt_runbtn"));
+  if(gres.err){html+=unreachable(gres);}
+  else if(!gres.ok){html+=`<p class="err">HTTP ${gres.status}.</p>`;}
+  else{
+    const g=gres.j;
+    html+=kv("Render gate", g.allowed
+      ? `would allow — ${esc(g.lane||"")} lane, ${g.unlimited?"∞":g.renders_left} left`
+      : `blocked — ${esc(g.reason)}`);
+  }
+  html+='<div class="panel" style="background:var(--surface-2);border-color:var(--gold-dim);margin-top:.8rem">'
+      +'<b style="color:var(--gold)">✋ Pipeline complete — GPU render NOT run.</b>'
+      +'<p class="note" style="margin-top:.4rem">Everything above is the full GPU-free Krey pipeline: eligibility gate, '
+      +'identity/owner-pick, appearance (skin · hair · eye), body measurements, recognition, and the render '
+      +'authorization decision. The actual try-on render (Service B, GPU) begins <b>past</b> this point and is '
+      +'deliberately not triggered — <b>zero GPU cost</b> for this test.</p></div>';
 
   out.innerHTML=html;
 };
