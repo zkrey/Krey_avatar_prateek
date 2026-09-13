@@ -1,0 +1,7 @@
+# Optional — ONLY needed to train / run the hair-texture classifier (train/).
+# Kept OUT of the main requirements.txt so Service A stays lean and GPU-free.
+# Install on the training/inference machine:  pip install -r train/requirements-train.txt
+torch>=2.1
+torchvision>=0.16
+pillow
+numpy

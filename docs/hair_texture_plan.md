@@ -51,6 +51,17 @@ criterion = nn.CrossEntropyLoss()
 then **fine-tune + validate on Indian hair** (labelled IndicFairFace slice + alpha flags)
 before trusting it — same domain-shift discipline as skin.
 
+## Scaffold (in the repo)
+Built and ready to run when data + a dev are in hand (`train/`, torch is an optional dep kept
+out of the main requirements so Service A stays GPU-free):
+- `train/hair_texture.py` — ResNet18 → 4-class softmax (CrossEntropy), auto-remap
+  (kinky→coily, drop styles), train/val split, per-class accuracy, checkpoint + metrics.
+- `train/infer.py` — `read_hair_texture(image)` returns the slot `{value, available,
+  confidence}`; degrades to `{"available": False}` without torch/model (today's behaviour).
+- `train/README.md` — fetch → train → fairness-gate → wire-in steps.
+- Torch-free parts (label remap, sample building, degrade path) are covered by
+  `tests/test_hair_texture_train.py`.
+
 ## Integration + guardrails
 1. Train the 4-class texture head; export a small model (keep it CPU-friendly — the rest of
    Service A is GPU-free; a ResNet18 head runs fine on CPU).
