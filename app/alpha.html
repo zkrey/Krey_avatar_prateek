@@ -388,7 +388,8 @@ $("sendbtn").onclick=async()=>{
   const res=await postJSON("/feedback",{screen:"alpha-twin-check",note:note,severity:(flags.length>=3?"high":"normal"),source:"alpha"});
   b.disabled=false; b.textContent="Send feedback to the team";
   if(res.err||!res.ok){ out.innerHTML='<p class="err">Couldn\'t send just now — please try again.</p>'; return; }
-  out.innerHTML=`<p class="okmsg">✓ Thank you — sent to the team${flags.length?` (${flags.length} flag${flags.length>1?"s":""})`:""}. Ref: ${esc((res.j&&res.j.ticket&&res.j.ticket.dedup_key)||"received")}.</p>`;
+  const emailed=res.j&&res.j.emailed;
+  out.innerHTML=`<p class="okmsg">✓ Thank you — ${emailed?"emailed to the Krey team":"sent to the team"}${flags.length?` (${flags.length} flag${flags.length>1?"s":""})`:""}. Ref: ${esc((res.j&&res.j.ticket&&res.j.ticket.dedup_key)||"received")}.</p>`;
   b.disabled=true;
 };
 </script></body></html>
