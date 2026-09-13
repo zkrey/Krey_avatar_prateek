@@ -70,6 +70,32 @@ def test_continuous_monk_monotonic_in_lightness():
     assert _continuous_monk(60) > _continuous_monk(70)   # darker L* -> higher index
 
 
+def test_matching_uses_ciede2000():
+    # A swatch read against itself is a near-zero ΔE2000, and the method is reported.
+    out = classify([(160, 126, 86)])                 # MST6 exactly
+    assert out["delta_e_method"] == "ciede2000"
+    assert out["delta_e"] <= 1.0                      # near-zero distance to its own bucket
+
+
+def test_off_swatch_reading_trips_confirm():
+    # A saturated non-skin colour sits far from every warm Monk swatch in ΔE2000 → off-locus
+    # → low confidence + needs_confirm, even from a single, internally-consistent sample
+    # (dispersion alone would have missed this; the ΔE fit factor catches it).
+    out = classify([(60, 180, 90)])
+    assert out["delta_e"] > 10.0
+    assert out["needs_confirm"] is True
+    assert out["confidence"] < 0.65
+
+
+def test_between_swatch_tone_stays_confident():
+    # A real skin tone that falls BETWEEN two swatches is normal — it must NOT be flagged
+    # just for being off-centre (ΔE under OFF_SWATCH_DE), or we'd over-confirm real users.
+    out = classify([(190, 158, 118)])                # between MST5 and MST6
+    assert out["delta_e"] < 10.0
+    assert out["needs_confirm"] is False
+    assert out["confidence"] >= 0.9
+
+
 if __name__ == "__main__":
     import subprocess
     raise SystemExit(subprocess.call(["pytest", "-q", __file__]))

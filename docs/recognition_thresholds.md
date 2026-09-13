@@ -48,7 +48,13 @@ self-report noise (±~1.2 cm), well within tolerance.
 ## Implications for Krey
 
 - **85% likeness** is a reasonable launch bet; treat it as provisional and measure it.
-- **Skin** target is quantifiable now: continuous tone, aim ΔE ≲ 2–3.
+- **Skin** target is quantifiable now: continuous tone, aim ΔE ≲ 2–3. **Implemented:**
+  `app/monk.py` matches the Monk swatch by **CIEDE2000** (`delta_e2000`) and folds the ΔE2000
+  distance-to-nearest-swatch into confidence + `needs_confirm` — an off-locus read (past
+  `OFF_SWATCH_DE`) is low-confidence and asks a confirm, while a real between-swatch tone is
+  not penalised. `delta_e` in the record is now ΔE2000 (`delta_e_method: "ciede2000"`). Note
+  this is distance to the **bucket centre** (quantisation), not error vs the person's real
+  skin — that needs ground truth, which the alpha flags provide.
 - **Weight/shape** has a tolerance band — surface confidence + a soft reconfirm rather than
   demanding accuracy; never hard-reject (doctrine: no forced cost).
 - **Recognition weights** (`config/recognition.json`: skin .30 · hair-colour .25 ·
