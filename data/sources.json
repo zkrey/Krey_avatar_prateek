@@ -1,0 +1,99 @@
+{
+  "_note": "Registry of open datasets for Krey twin validation + calibration. Raw images are NOT committed (see data/.gitignore) — fetch with scripts/fetch_datasets.sh into data/<key>/. Rationale + verdicts: docs/skin_data_plan.md. Skin tone is deterministic (app/monk.py, CIEDE2000) so these feed VALIDATION/CALIBRATION, not training — except hair-texture, the one classifier worth training (no labels here yet).",
+  "version": "data-sources-v0",
+  "sources": {
+    "indicfairface": {
+      "name": "IndicFairFace",
+      "url": "https://github.com/aarishshahmohsin/IndicFairFace",
+      "kind": "faces",
+      "indian": true,
+      "labels": {"skin_tone": null, "monk": false, "fitzpatrick": false, "other": ["state", "gender"]},
+      "size": "14400 images (7200 balanced base)",
+      "licence": "CC0 / CC-BY / public-domain",
+      "commercial_ok": true,
+      "use": "validate",
+      "purpose": "Indian-face corpus: validate owner-pick/recognition + inspect the tone distribution / off-swatch rate our reader produces across diverse Indian faces. No tone ground truth.",
+      "access": "git clone the repo; dataset via the Google Drive link in its README (use gdown)."
+    },
+    "dermacon_in": {
+      "name": "DermaCon-IN",
+      "url": "https://arxiv.org/abs/2506.06099",
+      "kaggle": "hiro002/dermacon-in-dataset",
+      "kind": "dermatology",
+      "indian": true,
+      "labels": {"skin_tone": true, "monk": true, "fitzpatrick": true, "other": ["245 diagnoses"]},
+      "size": "5450 images, 3002 South-India patients",
+      "licence": "confirm (research/clinical; NeurIPS 2025 dataset)",
+      "commercial_ok": null,
+      "use": "calibrate",
+      "purpose": "PRIMARY Indian Monk/Fitzpatrick reference: calibrate the LAB->Monk mapping on our actual population (MST 6-7 centred). Caveats: dermatology sites not faces; lesion/condition confounds on colour.",
+      "access": "Kaggle CLI: kaggle datasets download hiro002/dermacon-in-dataset (needs kaggle token)."
+    },
+    "scin": {
+      "name": "SCIN (Skin Condition Image Network)",
+      "url": "https://github.com/google-research-datasets/scin",
+      "huggingface": "google/scin",
+      "kind": "dermatology",
+      "indian": false,
+      "labels": {"skin_tone": true, "monk": true, "fitzpatrick": true, "other": ["conditions"]},
+      "size": "10000+ images, US crowdsourced",
+      "licence": "SCIN Data Use License (confirm commercial)",
+      "commercial_ok": null,
+      "use": "calibrate",
+      "purpose": "Secondary Monk-label cross-check of the LAB->Monk mapping (larger, but US population). Use after DermaCon-IN.",
+      "access": "GCS bucket gs://dx-scin-public-data (gsutil) or the google/scin HuggingFace mirror."
+    },
+    "fairface_onnx": {
+      "name": "fairface-onnx",
+      "url": "https://github.com/yakhyo/fairface-onnx",
+      "kind": "model",
+      "indian": false,
+      "labels": {"skin_tone": false, "monk": false, "fitzpatrick": false, "other": ["race-7", "age", "gender"]},
+      "size": "model weights + code",
+      "licence": "code MIT, weights CC-BY 4.0",
+      "commercial_ok": true,
+      "use": "tool_optional",
+      "purpose": "Optional auxiliary attribute model. Coarse race/age/gender; does NOT replace ArcFace identity and does NOT read skin colour.",
+      "access": "git clone; weights included (fairface.onnx / .pt)."
+    },
+    "iiscifd": {
+      "name": "IISc Indian Face Dataset (IISCIFD)",
+      "url": "https://github.com/harish2006/IISCIFD",
+      "kind": "faces",
+      "indian": true,
+      "labels": {"skin_tone": false, "monk": false, "fitzpatrick": false, "other": ["north/south", "age", "gender"]},
+      "size": "~1650 (251 publishable), grayscale 500x500",
+      "licence": "research-only, NON-COMMERCIAL",
+      "commercial_ok": false,
+      "use": "skip",
+      "purpose": "SKIP for Krey: grayscale (no colour for tone) + non-commercial (can't ship).",
+      "access": "email request per repo README."
+    },
+    "kaggle_adityakammati_skintone": {
+      "name": "Kaggle SkinTone-Dataset (adityakammati)",
+      "url": "https://www.kaggle.com/datasets/adityakammati/skintone-dataset",
+      "kind": "skin",
+      "indian": null,
+      "labels": {"skin_tone": true, "monk": false, "fitzpatrick": false, "other": ["coarse classes (unclear)"]},
+      "size": "unknown",
+      "licence": "unclear",
+      "commercial_ok": null,
+      "use": "skip",
+      "purpose": "SKIP/low: coarse class labels, not Monk, not Indian-specific, wrong tool for a continuous read.",
+      "access": "Kaggle CLI (needs token)."
+    },
+    "kaggle_usamarana_skintone": {
+      "name": "Kaggle Skin Tone Classification Dataset (usamarana)",
+      "url": "https://www.kaggle.com/datasets/usamarana/skin-tone-classification-dataset",
+      "kind": "skin",
+      "indian": false,
+      "labels": {"skin_tone": true, "monk": false, "fitzpatrick": false, "other": ["White/Brown/Black"]},
+      "size": "unknown",
+      "licence": "unclear",
+      "commercial_ok": null,
+      "use": "skip",
+      "purpose": "SKIP: 3 coarse classes (not Monk), not Indian.",
+      "access": "Kaggle CLI (needs token)."
+    }
+  }
+}

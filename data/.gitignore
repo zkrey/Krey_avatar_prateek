@@ -1,0 +1,9 @@
+# Raw datasets are large AND licence/consent-restricted (faces, dermatology, minors) —
+# NEVER commit the images. Fetch them with scripts/fetch_datasets.sh into per-source
+# folders here; they stay local. Only the registry, docs and DERIVED reports are tracked.
+*
+!.gitignore
+!README.md
+!sources.json
+!reports/
+!reports/**

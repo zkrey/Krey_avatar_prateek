@@ -71,6 +71,17 @@ exist in the list. Build it cheaply:
 - Kaggle sets — per‑dataset licence unclear; verify before use.
 - Same discipline as the `buffalo_l` (research‑only) and SMPL‑X flags in `docs/scope_bakeins.md`.
 
+## Tooling (in the repo)
+
+- **Registry:** `data/sources.json` — every source with url, labels, licence, and use.
+- **Fetch:** `scripts/fetch_datasets.sh <key>` — pulls each into `data/<key>/` (git-ignored;
+  raw faces/skin images are never committed).
+- **Report:** `python -m bench.skin_report --data data/<key>/images --name <key>` — runs the
+  real Monk reader and writes `data/reports/<key>.{json,md}` (tone distribution, needs_confirm
+  / off-swatch rates, ΔE2000 stats, and agreement vs Monk labels when present). Reports are
+  committed — that's the "early info" kept for later. `data/reports/example_synthetic.md` shows
+  the format. See `data/README.md`.
+
 ## Recommendation
 1. **Validate now** on **IndicFairFace** (Indian‑face robustness + tone distribution), and
    calibrate the LAB→Monk mapping on **DermaCon‑IN** (Indian + Monk) with **SCIN** as a

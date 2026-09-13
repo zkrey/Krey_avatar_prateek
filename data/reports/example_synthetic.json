@@ -1,0 +1,26 @@
+{
+  "dataset": "example_synthetic",
+  "n_images_read": 20,
+  "skin_extractor": [
+    "pil-proxy"
+  ],
+  "monk_bucket_counts": {
+    "4": 4,
+    "5": 4,
+    "6": 4,
+    "7": 4,
+    "8": 4
+  },
+  "monk_continuous_mean": 6.0,
+  "monk_continuous_median": 6.0,
+  "needs_confirm_rate": 0.0,
+  "off_swatch_rate": 0.0,
+  "delta_e_mean": 0.0,
+  "delta_e_p90": 0.0,
+  "labelled": {
+    "n": 20,
+    "exact_bucket_agreement": 1.0,
+    "within_1_bucket": 1.0,
+    "mean_abs_bucket_error": 0.0
+  }
+}
