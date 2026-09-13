@@ -69,6 +69,32 @@
       "purpose": "TRAIN the hair-texture classifier (the one unbuilt slice). Single-label 4-class softmax straight/wavy/curly/coily: remap kinky->coily, DROP dreadlocks (a style, not a texture). Not Indian -> fine-tune + validate on Indian hair. See docs/hair_texture_plan.md.",
       "access": "Kaggle CLI: kaggle datasets download kavyasreeb/hair-type-dataset (needs kaggle token)."
     },
+    "india_size": {
+      "name": "IndiaSize (national sizing survey)",
+      "url": "https://www.scribd.com/document/850449371/indiasize",
+      "kind": "anthropometry_reference",
+      "indian": true,
+      "labels": {"body_measurements": true, "size_charts": true},
+      "size": "national anthropometric survey (reference tables)",
+      "licence": "confirm (get authoritative IndiaSize/BIS source; Scribd is a secondary copy)",
+      "commercial_ok": null,
+      "use": "calibrate_reference",
+      "purpose": "Calibrate size_charts.json + measure_core.PLAUSIBLE_CIRC_CM + DEFAULT_DEPTH_RATIO to the Indian population (sample->real). NOT a training set; NOT an individual prior. See docs/body_data_plan.md.",
+      "access": "Not auto-fetchable (Scribd/login). Export CSVs to data/indiasize/ then run bench.body_shape_report."
+    },
+    "indian_anthropometrics": {
+      "name": "Indian Anthropometric Dimensions",
+      "url": "https://www.scribd.com/document/511496232/INDIAN-Anthropometric-Dimensions",
+      "kind": "anthropometry_reference",
+      "indian": true,
+      "labels": {"body_measurements": true},
+      "size": "measurement dimension tables",
+      "licence": "confirm",
+      "commercial_ok": null,
+      "use": "calibrate_reference",
+      "purpose": "Secondary Indian anthropometric reference for plausibility ranges + depth priors. Deterministic calibration, no training.",
+      "access": "Not auto-fetchable (Scribd). Manual export to data/ then bench.body_shape_report."
+    },
     "iiscifd": {
       "name": "IISc Indian Face Dataset (IISCIFD)",
       "url": "https://github.com/harish2006/IISCIFD",

@@ -34,6 +34,11 @@
   calibrate the mapping, IndicFairFace to validate on Indian faces; raw images stay out of git.
 - **Alpha tester is the ground-truth instrument:** `/alpha` (`docs/alpha_hosting_guide.md`)
   emails each flag; the flag/confirm distribution recalibrates the thresholds on real users.
+- **Body shape is deterministic too** (`measure_core.classify_body_shape`); Indian
+  anthropometrics (IndiaSize) calibrate size charts + plausibility ranges, not a model —
+  `docs/body_data_plan.md` + `bench/body_shape_report.py`.
+- **Hair texture** is the one train-worthy slice — scaffolded in `train/`, wired env-gated
+  into `app/face.py` (`docs/hair_texture_plan.md`).
 
 ## Money
 Nothing spent. Everything above is free/CPU. The only paid step ahead is the one-off GPU render benchmark, which we'll do deliberately.
