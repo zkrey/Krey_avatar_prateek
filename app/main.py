@@ -250,7 +250,8 @@ async def extract_face(
     record = face.assemble_face(skin_samples=sig["skin_samples"] or None,
                                 hair_samples=sig["hair_samples"] or None,
                                 iris_samples=sig["iris_samples"] or None,
-                                hair_features=hair_features)
+                                hair_features=hair_features,
+                                hair_region=sig["hair_region"])   # used only if a texture model is configured
 
     present = face.face_slices_present(record)
     if not present:

@@ -80,6 +80,7 @@ def read_hair_texture(image, model_path: Optional[str] = None,
             probs = torch.softmax(net(tf(pil).unsqueeze(0)), dim=1)[0]
         conf, idx = float(probs.max()), int(probs.argmax())
         return {"value": classes[idx], "available": True,
-                "confidence": round(conf, 3), "needs_confirm": conf < confirm_below}
+                "confidence": round(conf, 3), "needs_confirm": conf < confirm_below,
+                "model": "hair-texture-resnet18-v1"}
     except Exception:
         return dict(_UNAVAILABLE)

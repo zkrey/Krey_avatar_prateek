@@ -65,8 +65,12 @@ out of the main requirements so Service A stays GPU-free):
 ## Integration + guardrails
 1. Train the 4-class texture head; export a small model (keep it CPU-friendly — the rest of
    Service A is GPU-free; a ResNet18 head runs fine on CPU).
-2. Wire it behind `hair.texture_features_from_region` → return the slot `{value, available,
-   confidence}`. No other code changes; recognition coverage goes to 100% automatically.
+2. **Already wired (env-gated):** `app/face.assemble_face` calls `train.infer.read_hair_texture`
+   on the hair region when `KREY_HAIR_TEXTURE_MODEL` is set, and the model read replaces the
+   heuristic stub; unset (today) → no-op, deterministic stub, recognition renormalises. So
+   enabling is just: train a model → set the env var. Recognition coverage then goes to 100%.
+   (Single-photo `/twin/extract-face` path is wired; the multi-photo capture path can be wired
+   the same way later.)
 3. **Fairness gate before trust:** measure per-texture accuracy **on Indian hair specifically**
    (curly/coily are where biased models fail). Don't ship until Indian wavy/curly hold up.
 4. Licence: confirm the training set's terms before commercial use (same rule as buffalo_l /
