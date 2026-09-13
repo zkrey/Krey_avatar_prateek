@@ -164,6 +164,7 @@
     <p class="step">Step 2 · What Krey read</p>
     <h2>Your twin data</h2>
     <div class="found" id="found"></div>
+    <div id="recap"></div>
     <p class="hint">Tap <b>Flag</b> on anything wrong and say what it should be.</p>
     <div id="fromphotos"></div>
     <div id="measures"></div>
@@ -292,6 +293,13 @@ function renderResults(cap, meas, h){
     <div class="fs">${others!=null?`${others} other ${others===1?"person":"people"} ignored and discarded with their photos. `:""}Nothing raw is stored.</div>
     <div class="fchips">${chips}</div></div>`;
 
+  // soft "looks off / recapture" hint — never a hard reject (doctrine: no forced cost)
+  const dec=cj.decision||"";
+  const needRecap = dec==="reconfirm" || dec==="retake_low_confidence" || (id.overall!=null && id.overall<0.60);
+  $("recap").innerHTML = needRecap
+    ? `<div class="nudge2" id="recapbox"><span>⚠ This might not look quite like you yet${id.overall!=null?` (${Math.round(id.overall*100)}% match)`:""} — a clearer or fuller set would sharpen it. It's still usable, so confirm or fix anything below.</span><button id="dismissrecap">Got it</button></div>`
+    : "";
+
   // from your photos (appearance) — low-confidence fields ask a one-tap Confirm ✓ / Fix
   let out='<div class="seclabel">Read from your photos <span class="free">no input needed</span></div>';
   const skin=slotVal(a,"skin_tone");
@@ -361,6 +369,7 @@ function refreshCount(){ $("flagcount").textContent=Object.keys(FLAGS).length; c
 document.addEventListener("click",e=>{
   if(e.target&&e.target.id==="minigo"){ const v=$("minih").value; if(v){$("height").value=v; $("optdetails").open=true;} $("buildbtn").click(); }
   if(e.target&&e.target.id==="dismisssharper"){ const s=$("sharper"); if(s)s.hidden=true; }
+  if(e.target&&e.target.id==="dismissrecap"){ const s=$("recapbox"); if(s)s.hidden=true; }
 });
 
 // ---- send flags to the team via /feedback ----

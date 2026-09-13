@@ -49,7 +49,7 @@ def test_twin_extracted_from_a_real_monk_reading():
                      confidence=mt["confidence"], needs_confirm=mt["needs_confirm"])
     e = sink.events[0]
     assert e["event"] == "twin_extracted" and e["props"]["slice"] == "skin"
-    assert e["props"]["model"] == "deterministic-lab-mst-v0"
+    assert e["props"]["model"] == "deterministic-lab-mst-v1"   # CIEDE2000 match + off-swatch fit
 
 
 def test_eligibility_event_from_can_render_verdict():

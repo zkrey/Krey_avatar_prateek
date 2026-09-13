@@ -550,6 +550,12 @@ def feedback_ep(payload: dict = Body(...)):
     analytics.feedback(spine, severity=ticket["severity"], route=ticket["route"],
                        kind=ticket["kind"], device_specific=ticket["device_specific"],
                        dedup_key=ticket["dedup_key"])
+    # The analytics `feedback` event above carries only severity/route/kind. Emit the FULL
+    # ticket (incl. the `note` body with the alpha user's flagged fields + comments) through
+    # the SAME pluggable sink, so alpha feedback is actually collectable for rework — read it
+    # from the logs, or point the sink at a store (see docs/alpha_hosting_guide.md).
+    analytics.sink({"event": "feedback_ticket", "surface": spine.surface,
+                    "user_id": spine.user_id, "guest_id": spine.guest_id, "ticket": ticket})
     return {"status": "queued", "ticket": ticket}
 
 
