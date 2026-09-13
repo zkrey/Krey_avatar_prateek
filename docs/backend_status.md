@@ -24,6 +24,8 @@
 - Dashboard / discovery / taste engine — broader app (master spec), separate workstream.
 
 ## Data & validation
+- **One-page datasets index (for Sohan):** `docs/DATASETS.md` — every source, verdict, and the
+  fetch/report/train commands in one place.
 - **Skin tone is deterministic (no training)** — CIELAB → Monk by **CIEDE2000**, with the
   off-swatch ΔE folded into confidence + the §6 recapture nudge (`app/monk.py`,
   `app/recognition.py`). What we need is **validation/calibration**, not a training set.
