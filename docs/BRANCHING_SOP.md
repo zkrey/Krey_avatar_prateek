@@ -51,6 +51,23 @@ Not vague (`update`, `changes`, `wip`), not a bare type (`feat/feat`).
 Do **not** invent new top-level prefixes, and do **not** create a readable "alias" of an
 existing branch — rename through a PR into `main` instead.
 
+## The `purge_` marker (flag-for-deletion)
+
+When something should be removed but **can't be deleted automatically** (e.g. a tool
+lacks permission), mark it instead of leaving it ambiguous: prefix its name with
+**`purge_`**. Anyone who sees the keyword knows it is safe to delete manually.
+
+- Files: `purge_old_helper.py`, `purge_stale_notes.md`. Delete on sight after a glance.
+- The prefix is the whole signal — search the repo for `purge_` to find everything queued
+  for removal, then delete.
+- Only mark things already confirmed dead/redundant and already superseded elsewhere.
+  Don't `purge_`-mark live code.
+- Prefer real deletion when you can (`git rm`); use `purge_` only when deletion is blocked.
+
+> Note: this marker can't be applied to **branches** — renaming a branch requires deleting
+> the old name, which may itself be blocked. List stale branches for manual deletion in the
+> PR/description instead.
+
 ## Starting new work
 
 ```bash
