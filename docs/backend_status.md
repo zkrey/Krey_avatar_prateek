@@ -1,6 +1,6 @@
 # Krey backend — status update (2026-08-26)
 
-**Repo:** `zkrey/Krey_avatar_prateek` · branch `feat/service-a-backend` · **272 tests passing.**
+**Repo:** `zkrey/Krey_avatar_prateek` · branch `main` (canonical) · **272 tests passing.**
 
 ## ✅ Built — Service A (the digital-twin backend), GPU-free
 - **Skin tone** — photo → Monk scale (1–10) + confidence. Verified on a real selfie (Monk 6, 0.87).
