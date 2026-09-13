@@ -49,6 +49,27 @@ to compile) → everything else **last**. Do **not** let a later `pip install` u
 
 ---
 
+## Dead-ends & roadblocks (do NOT re-walk these)
+
+Everything below we already tried and it cost us time. Written down so nobody — us or a
+future teammate — burns the same hours twice.
+
+| # | What we tried | How it failed | Verdict |
+|---|---|---|---|
+| 1 | **ComfyUI CatVTON node** (`pzc163/Comfyui-CatVTON`) | Pulled the rolling-release ComfyUI whose `comfy_kitchen` backend needs **torch ≥ 2.5**; CatVTON's masker needs **torch ~2.1**. `infer_schema ... kernel_size unsupported type list[int]`. | **Abandoned.** Use the standalone CatVTON app — same model, no ComfyUI, no torch-2.5 demand. |
+| 2 | **detectron2 native on Windows** | No Windows wheels; source build fights MSVC/`.cu` compile. `ResolutionImpossible` / no distribution. | **Avoid.** Build detectron2 on **Linux/WSL2**, not native Windows. |
+| 3 | **Python 3.14** (WSL default) | No torch / detectron2 wheels exist for 3.14 → `ModuleNotFoundError: No module named 'torch'` during the detectron2 build. | **Pin Python 3.10.** Never let the newest system Python drive an ML stack. |
+| 4 | **Fresh venv missing pip** | New 3.11/3.10 venv: "Neither python -m pip nor uv are available". | Bootstrap with `python -m ensurepip --upgrade`, then upgrade pip/setuptools/wheel. |
+| 5 | **Letting `requirements.txt` pin setuptools 51** | CatVTON's raw `requirements.txt` pins `setuptools==51.0.0`, which breaks modern pip builds. | **Don't run the raw file.** Use the hand-split Phase-4 list (that pin removed). |
+| 6 | **detectron2 v0.6 tag vs torch 2.1.2** | Occasionally a C++/`c10` ABI compile error on the exact v0.6 tag. | **Not fatal** — switch to detectron2 **main** (same DensePose API). See troubleshooting below. |
+| 7 | **GitHub-App repo visibility** (Railway couldn't see the repo) | Repo owned by `zkrey`; Railway authorized on a different owner (`kreydotin`). Collaborator/admin access ≠ GitHub-App visibility. | Transfer/fork under the right owner, or install the App on `zkrey`. (Deploy is a separate track — not this render.) |
+
+**One-line lesson:** the enemy was never the GPU — it was **version drift**. A pinned island
+(Python 3.10 · torch 2.1.2 · CUDA 12.1 · detectron2 built from source) on **Linux/WSL2** is
+the only combination that holds.
+
+---
+
 ## Recommended: Ubuntu (native **or** WSL2 on Windows 11)
 
 detectron2 builds **cleanly on Linux**. If you're on Windows 11, **WSL2 Ubuntu is the

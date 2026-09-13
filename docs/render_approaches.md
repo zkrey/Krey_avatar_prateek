@@ -18,6 +18,12 @@ our repo). Right now we're proving the render engines *in isolation* before wiri
   ghost-mannequin). **Not** sewing patterns.
 - **Cost/speed:** measured ~**16.6 GPU-s ≈ ₹1.6/render** on cloud (IDM-VTON, 30 steps). We're
   now testing **CatVTON on Sohan's local GPU** to get a cheaper/faster number for free.
+- **One garment per render (structural):** CatVTON / IDM-VTON / OOTDiffusion are all
+  **single-garment** engines — one garment, one region (upper / lower / a one-piece) per
+  pass. **No 2D model does a full outfit in one shot** (it's not a config we can flip). A
+  top+bottom look = **chaining**: render the top → feed that image back in as the person →
+  render the bottom (2–3× the cost, and each pass can smudge the previous garment). So M1 is
+  realistically a **"try this one piece"** loop; full-outfit-in-one-shot is an M2 job.
 - **Honest limit:** it's a 2D "skin" — it flatters, and can be slightly off on drape. That's
   fine, because the **fit *truth* comes from our rule fit-score** (Service A), computed
   separately. The render is the pretty picture; the fit-score is the truth.
@@ -28,6 +34,14 @@ our repo). Right now we're proving the render engines *in isolation* before wiri
   **cloth-simulated** onto a 3D body → a physically-accurate **3D drape**.
 - **Why premium:** true-to-physics fit, made-to-measure accuracy, rotate/zoom, the "wow" for
   high-intent moments. Genuinely differentiated — most try-on apps can't do real drape.
+- **True multi-garment full outfit (the capability 2D can't match):** in 3D each garment is
+  its own mesh with its own cloth sim on one body, so a shirt + trousers + jacket are worn
+  **together in one coherent scene** — real layering, not chained repaints. This is a
+  structural advantage of 3D, and a concrete reason the premium tier exists. Cost of it:
+  **per-garment 3D asset prep**, **inter-garment collision/layering** work (outer must sit
+  over inner, not clip through), and **minutes-per-render** sim — so it's curated/high-intent,
+  not the rapid loop. (Reality check: the pipeline isn't proven for a *single* garment yet,
+  so multi-garment is further down this track, not a shortcut around the M1 2D engine.)
 - **Inputs:** 2D sewing patterns (Sohan's panels) + a 3D body derived from **our measurements**
   (Service A's twin).
 - **Honest limit:** heavier (3D sim + render) and needs **per-garment 3D asset prep**, so it
