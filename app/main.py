@@ -47,6 +47,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False,
                    allow_methods=["*"], allow_headers=["*"])
 
 _WEBTEST = os.path.join(os.path.dirname(__file__), "webtest.html")
+_ALPHA = os.path.join(os.path.dirname(__file__), "alpha.html")
 
 
 @app.get("/tester", response_class=HTMLResponse)
@@ -55,6 +56,17 @@ def tester():
     body measurements) from the real endpoints; a Fit tab runs the rule engine offline.
     Served by the backend so the Twin tab can call the same-origin extraction endpoints."""
     with open(_WEBTEST, encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/alpha", response_class=HTMLResponse)
+def alpha():
+    """Alpha-user Twin Check: add up to 5 photos → owner is picked (/capture/session) and the
+    twin read shown (skin/hair/eye/shape/proportions, + measurements when height is given via
+    /body/measure); low-confidence fields ask a one-tap confirm, and any wrong value is flagged
+    back to the team via /feedback. Same-origin so the page calls the extraction endpoints
+    directly. GPU-free: the pipeline stops before any render (Service B)."""
+    with open(_ALPHA, encoding="utf-8") as f:
         return f.read()
 
 # Default sink logs JSON lines; swap for the warehouse / Events service in production.

@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Krey Twin Check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root{
+    --ground:#150c10; --surface:#1f1218; --surface-2:#2a1922; --line:#3a2632;
+    --gold:#d8b06a; --gold-soft:#e6cf9a; --gold-dim:#8a6d3a;
+    --rose:#ece0e3; --muted:#b09aa2; --faint:#7e6a74;
+    --flag:#e6a748; --flag-bg:#2f2213; --ok:#8bbd98; --ok-bg:#16281c; --warn:#d18c8c;
+    --serif:"Fraunces",Georgia,serif; --sans:"Instrument Sans",system-ui,sans-serif;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--rose);font-family:var(--sans);line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:640px;margin:0 auto;padding-block:1.8rem 5rem;padding-inline:1.15rem}
+  .brand{font-family:var(--serif);font-weight:600;font-size:1.05rem;letter-spacing:.02em;color:var(--gold-soft);margin-bottom:1.1rem}
+  h1{font-family:var(--serif);font-weight:600;font-size:2.2rem;line-height:1.03;margin:.2rem 0 0;text-wrap:balance}
+  h1 em{font-style:italic;color:var(--gold)}
+  .lede{color:var(--muted);font-size:.98rem;margin:.7rem 0 1.7rem;max-width:53ch}
+  .lede b{color:var(--rose);font-weight:600}
+  .step{color:var(--gold-dim);font-size:.68rem;text-transform:uppercase;letter-spacing:.16em;font-weight:700;margin:0 0 .35rem}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:1.35rem;margin-bottom:1.05rem}
+  .panel h2{margin:0 0 .15rem;font-family:var(--serif);font-weight:600;font-size:1.3rem}
+  .hint{color:var(--muted);font-size:.83rem;margin:.15rem 0 1.05rem;max-width:52ch}
+  .bigdrop{position:relative;background:var(--surface-2);border:1.5px dashed var(--line);border-radius:14px;padding:1.6rem 1rem;text-align:center;transition:border-color .15s}
+  .bigdrop:hover{border-color:var(--gold-dim)}
+  .bigdrop .ic{font-size:1.9rem}.bigdrop .t{font-weight:600;font-size:1rem;margin-top:.35rem}.bigdrop .s{color:var(--faint);font-size:.78rem;margin-top:.15rem}
+  .bigdrop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+  .thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:.5rem;margin-top:.9rem}
+  .thumbs .thumb{position:relative}
+  .thumbs .thumb img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
+  .thumbs .thumb.warn img{outline:2px solid var(--flag);outline-offset:-2px}
+  .thumbs .thumb .badge{position:absolute;top:4px;right:4px;background:var(--flag);color:#25160a;font-size:.62rem;font-weight:800;border-radius:6px;padding:.06rem .32rem}
+  .count{font-size:.8rem;color:var(--gold-soft);margin-top:.7rem;font-weight:600}
+  .picwarn{font-size:.8rem;color:var(--flag);background:var(--flag-bg);border:1px solid var(--gold-dim);border-radius:9px;padding:.55rem .7rem;margin-top:.55rem}
+  .guide{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:.9rem 1rem;margin:.1rem 0 .95rem}
+  .guide .gt{font-size:.7rem;text-transform:uppercase;letter-spacing:.09em;font-weight:700;color:var(--gold-dim);margin-bottom:.5rem}
+  .guide ol{margin:0;padding-left:1.15rem}.guide li{font-size:.85rem;margin:.22rem 0}.guide li b{color:var(--gold-soft)}
+  .guide .rules{color:var(--muted);font-size:.78rem;margin-top:.6rem}
+  details.opt{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:.2rem .9rem;margin-top:.9rem}
+  details.opt summary{cursor:pointer;list-style:none;padding:.65rem 0;font-size:.86rem;font-weight:600;color:var(--gold-soft);display:flex;justify-content:space-between;align-items:center;gap:1rem}
+  details.opt summary::-webkit-details-marker{display:none}
+  details.opt summary .cue{color:var(--faint);font-size:.74rem;font-weight:400}
+  details.opt[open] summary{border-bottom:1px solid var(--line)}
+  .optbody{padding:.4rem 0 .9rem}
+  label{display:block;font-size:.74rem;color:var(--muted);margin:.75rem 0 .3rem}
+  input,select,textarea{width:100%;background:var(--ground);border:1px solid var(--line);color:var(--rose);font-family:var(--sans);font-size:.95rem;border-radius:10px;padding:.62rem .72rem}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--gold-dim);outline-offset:1px;border-color:var(--gold-dim)}
+  textarea{min-height:3rem;resize:vertical}
+  .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem}.row2{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+  @media(max-width:480px){.row2{grid-template-columns:1fr}}
+  .consent{display:flex;gap:.55rem;align-items:flex-start;margin-top:1rem;font-size:.83rem;color:var(--muted)}
+  .consent input{width:auto;margin-top:.15rem}
+  button.go{width:100%;background:var(--gold);color:#211217;border:none;font-family:var(--sans);font-weight:700;font-size:1rem;border-radius:12px;padding:.9rem;cursor:pointer;margin-top:1.15rem;transition:filter .15s}
+  button.go:hover{filter:brightness(1.06)} button.go:disabled{opacity:.55;cursor:not-allowed;filter:none}
+  .found{display:flex;gap:.7rem;align-items:flex-start;background:var(--ok-bg);border:1px solid #2f4a37;border-radius:12px;padding:.85rem 1rem;margin-bottom:1rem}
+  .found .fi{font-size:1.1rem;line-height:1.2}.found .ft{font-size:.88rem}.found .fs{color:var(--muted);font-size:.77rem;margin-top:.15rem}
+  .seclabel{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;font-weight:700;color:var(--gold-dim);margin:1.3rem 0 .6rem;display:flex;align-items:center;gap:.5rem}
+  .seclabel:first-of-type{margin-top:.4rem}
+  .free{font-size:.6rem;letter-spacing:.08em;color:var(--ok);border:1px solid #2f4a37;border-radius:999px;padding:.12rem .5rem;background:var(--ok-bg)}
+  .card{background:var(--surface-2);border:1px solid var(--line);border-radius:13px;padding:.95rem 1.05rem;margin-bottom:.7rem}
+  .card.flagged{border-color:var(--flag);background:var(--flag-bg)} .card.low{border-color:var(--gold-dim)} .card.confirmed{border-color:#2f4a37;background:var(--ok-bg)}
+  .card .top{display:flex;justify-content:space-between;align-items:center;gap:1rem}
+  .card .lab{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--faint)}
+  .card .val{font-size:1.35rem;font-weight:600;font-family:var(--serif);color:var(--gold-soft);margin-top:.15rem;line-height:1.1}
+  .card .val small{font-size:.78rem;color:var(--muted);font-weight:400;font-family:var(--sans)}
+  .swatch{display:inline-block;width:22px;height:22px;border-radius:6px;vertical-align:-5px;margin-right:9px;border:1px solid rgba(255,255,255,.15)}
+  .chip{display:inline-block;font-size:.66rem;font-weight:700;letter-spacing:.04em;border-radius:999px;padding:.16rem .5rem;margin-left:.5rem;vertical-align:middle}
+  .chip.ok{color:var(--ok);background:var(--ok-bg);border:1px solid #2f4a37}.chip.chk{color:var(--flag);background:var(--flag-bg);border:1px solid var(--gold-dim)}
+  .confpill{font-size:.64rem;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:.05rem .42rem;margin-left:.5rem;vertical-align:middle;font-weight:600}
+  .controls{display:flex;gap:.45rem;flex-wrap:wrap;flex:none}
+  .flagbtn{flex:none;background:none;border:1px solid var(--line);color:var(--muted);border-radius:999px;font:inherit;font-size:.75rem;font-weight:600;padding:.34rem .75rem;cursor:pointer;transition:.12s}
+  .flagbtn:hover{border-color:var(--flag);color:var(--flag)} .flagbtn.on{background:var(--flag);border-color:var(--flag);color:#25160a}
+  .okbtn{background:none;border:1px solid #2f4a37;color:var(--ok);border-radius:999px;font:inherit;font-size:.75rem;font-weight:700;padding:.34rem .8rem;cursor:pointer;transition:.12s}
+  .okbtn:hover{background:var(--ok-bg)} .okbtn.on{background:var(--ok);border-color:var(--ok);color:#10261a}
+  .card textarea{margin-top:.75rem} .card:not(.flagged) textarea{display:none}
+  .fchips{display:flex;gap:.45rem;flex-wrap:wrap;margin:.6rem 0 .2rem}
+  .fchip{font-size:.68rem;font-weight:700;border-radius:999px;padding:.22rem .6rem;border:1px solid var(--line);color:var(--muted)}
+  .fchip.ok{color:var(--ok);background:var(--ok-bg);border-color:#2f4a37}.fchip.chk{color:var(--flag);background:var(--flag-bg);border-color:var(--gold-dim)}
+  .mtable{background:var(--surface-2);border:1px solid var(--line);border-radius:13px;padding:.5rem .7rem .3rem}
+  .mtitle{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);padding:.4rem .3rem}
+  table{width:100%;border-collapse:collapse;font-size:.92rem;font-variant-numeric:tabular-nums}
+  th{text-align:left;font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);padding:.35rem .3rem;border-bottom:1px solid var(--line)}
+  td{padding:.55rem .3rem;border-bottom:1px solid var(--line);vertical-align:middle} tr:last-child td{border-bottom:none}
+  td.cap{text-transform:capitalize;font-weight:500} td.num{text-align:right;color:var(--gold-soft);font-weight:600} td.conf{text-align:right;color:var(--muted);font-size:.8rem} td.fc{text-align:right;width:1%}
+  tr.flagged td.cap,tr.flagged td.num{color:var(--flag)}
+  .nudge{background:var(--surface-2);border:1px dashed var(--gold-dim);border-radius:13px;padding:1rem 1.05rem}
+  .nudge .t{font-weight:600;color:var(--gold-soft)}.nudge .s{color:var(--muted);font-size:.82rem;margin:.2rem 0 .7rem}
+  .nudge .mini{display:flex;gap:.5rem;align-items:end}.nudge .mini input{flex:1}
+  .nudge .mini button{width:auto;margin:0;padding:.62rem 1rem;font-size:.9rem;border-radius:10px;background:var(--gold);color:#211217;border:none;font-weight:700;cursor:pointer}
+  .nudge2{color:var(--muted);font-size:.8rem;background:var(--surface-2);border:1px dashed var(--gold-dim);border-radius:11px;padding:.7rem .8rem;margin-top:.7rem;display:flex;gap:.7rem;align-items:center;justify-content:space-between}
+  .nudge2 button{flex:none;background:none;border:1px solid var(--line);color:var(--gold-soft);border-radius:8px;font:inherit;font-size:.76rem;padding:.3rem .7rem;cursor:pointer}
+  .err{color:var(--warn);font-size:.86rem;margin-top:.6rem}
+  .okmsg{color:var(--ok);font-size:.95rem;margin-top:.7rem;font-weight:500}
+  .muted{color:var(--muted)} .fine{color:var(--faint);font-size:.72rem}
+  details.raw{margin-top:1rem}details.raw summary{cursor:pointer;color:var(--faint);font-size:.75rem}
+  pre{background:#0f0709;border:1px solid var(--line);border-radius:8px;padding:.7rem;overflow:auto;font-size:.7rem;color:var(--gold-soft)}
+  .apibar{font-size:.72rem;color:var(--faint);margin-top:1.4rem}
+  .apibar input{display:inline-block;width:auto;min-width:14rem;font-size:.76rem;padding:.3rem .5rem}
+  [hidden]{display:none!important}
+</style></head>
+<body><div class="wrap">
+  <div class="brand">KREY</div>
+  <h1>Twin <em>Check</em></h1>
+  <p class="lede"><b>Just add your photos — up to 5.</b> Krey finds you, ignores everyone else, and reads your twin:
+    skin tone, hair, eyes, body shape and proportions. No sign-up, nothing stored. Something look wrong?
+    <b>Flag it</b> — it goes straight to the team.</p>
+
+  <!-- STEP 1 -->
+  <section class="panel">
+    <p class="step">Step 1 · Add your photos</p>
+    <h2>Up to 5 — Krey picks you</h2>
+    <p class="hint">The capture set is <b>up to 5 photos</b>. For a real test, follow the set below — Krey keeps only
+      <b>your</b> best frames and ignores anyone else in shot.</p>
+    <div class="guide">
+      <div class="gt">Your 5 — the set that tests well</div>
+      <ol>
+        <li><b>Face selfie</b> — clear, front-on, even light, no sunglasses or hat</li>
+        <li><b>Second face</b> — a different day or angle (helps recognition)</li>
+        <li><b>Full body — front</b> — head to toe, straight-on, arms slightly out</li>
+        <li><b>Full body — side</b> — 90° profile, same distance</li>
+        <li><b>Full body — ¾ turn</b> — between front and side</li>
+      </ol>
+      <div class="rules">Every shot: plain background, even light, whole subject in frame, fitted clothing.
+        Full-body shots should be <b>tall/portrait</b>. Random screenshots, memes or group photos won't test well —
+        they'll be flagged as you add them.</div>
+    </div>
+    <label class="bigdrop" id="drop">
+      <span class="ic">📸</span><div class="t">Add photos</div><div class="s">up to 5 — follow the set above</div>
+      <input type="file" id="photos" accept="image/*" multiple>
+    </label>
+    <div class="thumbs" id="thumbs"></div>
+    <div class="count" id="count" hidden></div>
+    <div class="picwarn" id="picwarn" hidden></div>
+
+    <details class="opt" id="optdetails">
+      <summary><span>＋ Add height for measurements in cm</span><span class="cue">optional</span></summary>
+      <div class="optbody">
+        <p class="fine" style="margin:.2rem 0">Shape &amp; proportions need no input. Height is the one number that
+          unlocks absolute measurements — and lets Krey cross-check the read against you.</p>
+        <div class="row3">
+          <div><label for="height">Height (cm)</label><input type="number" id="height" placeholder="e.g. 170"></div>
+          <div><label for="weight">Weight (kg)</label><input type="number" id="weight" placeholder="optional"></div>
+          <div><label for="sex">Sex</label><select id="sex"><option value="">—</option><option value="2">Female</option><option value="1">Male</option></select></div>
+        </div>
+        <div class="row2">
+          <div><label for="name">Name <span class="fine">optional</span></label><input id="name" placeholder="For follow-up"></div>
+          <div><label for="email">Email <span class="fine">optional</span></label><input id="email" placeholder="So we can reply"></div>
+        </div>
+      </div>
+    </details>
+
+    <label class="consent"><input type="checkbox" id="consent"> <span>I'm 18+ and consent to Krey processing these photos to read my twin. Photos are processed then discarded — nothing raw is stored.</span></label>
+    <button class="go" id="buildbtn">Read my twin</button>
+    <div id="builderr"></div>
+  </section>
+
+  <!-- STEP 2 -->
+  <section class="panel" id="results" hidden>
+    <p class="step">Step 2 · What Krey read</p>
+    <h2>Your twin data</h2>
+    <div class="found" id="found"></div>
+    <p class="hint">Tap <b>Flag</b> on anything wrong and say what it should be.</p>
+    <div id="fromphotos"></div>
+    <div id="measures"></div>
+    <details class="raw"><summary>Technical details (for the team)</summary><pre id="rawjson"></pre></details>
+  </section>
+
+  <!-- STEP 3 -->
+  <section class="panel" id="feedbackpanel" hidden>
+    <p class="step">Step 3 · Send it back</p>
+    <h2>Tell the team</h2>
+    <p class="hint"><b id="confirmcount">0</b> confirmed · <b id="flagcount">0</b> flagged. Add anything else and send — flags route straight to rework.</p>
+    <label for="overall">Anything else? <span class="fine">optional</span></label>
+    <textarea id="overall" placeholder="e.g. the body shape feels off, or the lighting was tricky"></textarea>
+    <button class="go" id="sendbtn">Send feedback to the team</button>
+    <div id="sendout"></div>
+  </section>
+
+  <p class="fine">Krey reads each value from your photos (owner found by face, everyone else discarded with the pixels),
+    needs no account, and stores nothing — the twin is derived and the photos discarded. Casual photos give estimates;
+    a guided capture gives fit-grade.</p>
+  <div class="apibar">Advanced · API base <input id="api" placeholder="(same server — leave blank)" value=""></div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const api=()=>($("api").value||"").replace(/\/$/,"");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const FLAGS={}, CONFIRMED={}, SNAPSHOT={};
+const MAX_PICS=5, LOW=0.75;
+// gate: alpha testers confirm 18+; the canRender wall is satisfied with a consenting-adult context.
+const GATE={account_present:"true", dob_verified:"true", birthdate:"2000-01-01", jurisdiction:"IN"};
+
+async function post(path, form){ try{ const r=await fetch(api()+path,{method:"POST",body:form});
+  let j=null; try{j=await r.json();}catch(_){} return {ok:r.ok,status:r.status,j}; }catch(e){ return {err:String(e)}; } }
+async function postJSON(path, body){ try{ const r=await fetch(api()+path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  let j=null; try{j=await r.json();}catch(_){} return {ok:r.ok,status:r.status,j}; }catch(e){ return {err:String(e)}; } }
+function addGate(fd){ for(const k in GATE)fd.append(k,GATE[k]); const uid=$("name").value.trim()||$("email").value.trim(); return fd; }
+
+// ---- capture set: up to 5 photos, flag poor ones as they're added ----
+$("photos").onchange=()=>{
+  const all=[...$("photos").files]; const fs=all.slice(0,MAX_PICS);
+  const g=$("thumbs"); g.innerHTML=""; const warns=[]; let pending=fs.length;
+  fs.forEach((f,i)=>{
+    const fig=document.createElement("div"); fig.className="thumb";
+    const im=document.createElement("img"); fig.appendChild(im); g.appendChild(fig);
+    const r=new FileReader();
+    r.onload=()=>{ im.src=r.result; const probe=new Image();
+      probe.onload=()=>{ const w=probe.naturalWidth,h=probe.naturalHeight,issues=[];
+        if(Math.min(w,h)<600) issues.push("low-res");
+        if(w>h*1.1) issues.push("landscape — full-body wants portrait");
+        if(issues.length){ fig.classList.add("warn");
+          const b=document.createElement("span"); b.className="badge"; b.textContent="⚠"; b.title=issues.join(", ");
+          fig.appendChild(b); warns.push(`#${i+1} ${issues.join(" · ")}`); }
+        if(--pending===0) summarizePics(all.length,warns); };
+      probe.onerror=()=>{ if(--pending===0) summarizePics(all.length,warns); };
+      probe.src=r.result; };
+    r.readAsDataURL(f);
+  });
+  if(!fs.length) summarizePics(0,[]);
+};
+function summarizePics(total,warns){
+  const c=$("count"); c.hidden=!total;
+  let msg=total>MAX_PICS?`Using the first ${MAX_PICS} of ${total} — the set is ${MAX_PICS} photos. `:`${total} of ${MAX_PICS} added. `;
+  if(total&&total<MAX_PICS) msg+=`Add ${MAX_PICS-total} more for the full set.`;
+  c.textContent=msg.trim();
+  const pw=$("picwarn");
+  if(warns.length){ pw.hidden=false; pw.innerHTML=`⚠ ${warns.length} photo${warns.length>1?"s":""} may not test well — ${esc(warns.join("; "))}. Swap for sharp, portrait shots from the set above.`; }
+  else { pw.hidden=true; pw.textContent=""; }
+}
+
+// ---- cards ----
+function fieldCard(key,label,valueHTML,plain,conf){
+  SNAPSHOT[label]=plain;
+  const low = conf!=null && conf<LOW;
+  const pill = conf!=null?`<span class="confpill">${Math.round(conf*100)}%${low?" · check":""}</span>`:"";
+  const controls = low
+    ? `<button class="okbtn" data-ok="${key}">Confirm ✓</button><button class="flagbtn" data-flag="${key}" data-label="${esc(label)}" data-value="${esc(plain)}">Fix</button>`
+    : `<button class="flagbtn" data-flag="${key}" data-label="${esc(label)}" data-value="${esc(plain)}">🚩 Flag</button>`;
+  return `<div class="card${low?' low':''}" id="card-${key}"><div class="top">
+      <div><div class="lab">${esc(label)}</div><div class="val">${valueHTML}${pill}</div></div>
+      <div class="controls">${controls}</div></div>
+    <textarea placeholder="What should it be? e.g. 'my eyes are green, not brown'" data-comment="${key}"></textarea></div>`;
+}
+function slotVal(a,n){ const s=a&&a[n]; if(!s) return null; return (typeof s==="object")?(s.value!=null?s.value:null):s; }
+function slotConf(a,n){ const s=a&&a[n]; return (s&&typeof s==="object"&&s.confidence!=null)?s.confidence:null; }
+
+// ---- build the twin from the real endpoints ----
+$("buildbtn").onclick=async()=>{
+  const err=$("builderr");
+  if(!$("consent").checked){ err.innerHTML='<p class="err">Please confirm you\'re 18+ and consent, so we can process the photos.</p>';return; }
+  const files=[...$("photos").files].slice(0,MAX_PICS);
+  if(!files.length){ err.innerHTML='<p class="err">Add at least one photo — that\'s all it takes.</p>';return; }
+  err.innerHTML=''; const b=$("buildbtn"); b.disabled=true; b.textContent="Finding you & reading…";
+
+  const fd=new FormData(); files.forEach(f=>fd.append("files",f)); addGate(fd);
+  const uid=($("name").value.trim()||$("email").value.trim()); if(uid)fd.append("user_id",uid);
+  const cap=await post("/capture/session",fd);
+
+  let meas=null; const h=parseFloat($("height").value)||null;
+  if(h){ const fd2=new FormData(); files.forEach(f=>fd2.append("files",f));
+    fd2.append("height",h); fd2.append("weight",$("weight").value||"0"); fd2.append("sex",$("sex").value||"2"); addGate(fd2);
+    meas=await post("/body/measure",fd2); }
+
+  b.disabled=false; b.textContent="Re-run read";
+  renderResults(cap, meas, h);
+  $("results").hidden=false; $("feedbackpanel").hidden=false;
+  $("results").scrollIntoView({behavior:"smooth",block:"start"});
+};
+
+function renderResults(cap, meas, h){
+  for(const k in FLAGS)delete FLAGS[k]; for(const k in CONFIRMED)delete CONFIRMED[k]; for(const k in SNAPSHOT)delete SNAPSHOT[k];
+  if(cap&&cap.err){ $("found").innerHTML=`<span class="fi">⚠</span><div>Couldn't reach Krey. Please try again in a moment.</div>`; $("fromphotos").innerHTML=""; $("measures").innerHTML=""; return; }
+  if(cap&&cap.status===403){ const d=(cap.j&&cap.j.detail)||{}; $("found").innerHTML=`<span class="fi">⚠</span><div>Blocked at the eligibility check: ${esc(d.reason||"not allowed")}.</div>`; return; }
+  const cj=(cap&&cap.j)||{}, a=cj.appearance||{}, id=cj.identity||{};
+
+  // header: owner-pick + confidence cross-checks
+  const total=cj.n_faces_total, owner=cj.n_user_faces, others=(total!=null&&owner!=null)?Math.max(0,total-owner):null;
+  let chips="";
+  if(id.overall!=null) chips+=`<span class="fchip ok">🔎 ${Math.round(id.overall*100)}% sure it's you</span>`;
+  const mj=(meas&&meas.j)||{}; const shape=mj.body_shape&&mj.body_shape.shape; const bmi=mj.body_shape&&mj.body_shape.bmi;
+  if(shape) chips+=`<span class="fchip ok">shape: ${esc(shape)}</span>`;
+  if(bmi!=null) chips+=`<span class="fchip ok">BMI ${esc(bmi)}</span>`;
+  else if(!h) chips+=`<span class="fchip chk">add height to cross-check</span>`;
+  $("found").innerHTML=`<span class="fi">🔎</span><div style="flex:1">
+    <div class="ft"><b>${esc(cj.decision||"read complete")}</b>${owner!=null?` · found you in ${owner} of ${total} face${total===1?"":"s"}`:""}.</div>
+    <div class="fs">${others!=null?`${others} other ${others===1?"person":"people"} ignored and discarded with their photos. `:""}Nothing raw is stored.</div>
+    <div class="fchips">${chips}</div></div>`;
+
+  // from your photos (appearance) — low-confidence fields ask a one-tap Confirm ✓ / Fix
+  let out='<div class="seclabel">Read from your photos <span class="free">no input needed</span></div>';
+  const skin=slotVal(a,"skin_tone");
+  if(skin!=null) out+=fieldCard("skin","Skin tone",`Monk ${esc(typeof skin==="number"?Math.round(skin):skin)}`,`Monk ${skin}`,slotConf(a,"skin_tone"));
+  const hc=slotVal(a,"hair_colour"); if(hc!=null) out+=fieldCard("haircol","Hair colour",esc(hc),hc,slotConf(a,"hair_colour"));
+  const ht=slotVal(a,"hair_texture"); if(ht!=null) out+=fieldCard("hairtex","Hair texture",esc(ht),ht,slotConf(a,"hair_texture"));
+  const ey=slotVal(a,"eye_colour"); if(ey!=null) out+=fieldCard("eye","Eye colour",esc(ey),ey,slotConf(a,"eye_colour"));
+  if(shape) out+=fieldCard("shape","Body shape",esc(shape),shape,null);
+  // proportions (scale-free) from measurement circumferences, if present
+  const M=mj.measurements||{}; const cm=n=>M[n]&&M[n].circumference_cm; const props=[];
+  if(cm("waist")&&cm("hip")) props.push(["Waist : hip",(cm("waist")/cm("hip")).toFixed(2)]);
+  if(cm("shoulder")&&cm("hip")) props.push(["Shoulder : hip",(cm("shoulder")/cm("hip")).toFixed(2)]);
+  if(props.length){ out+='<div class="mtable"><div class="mtitle">Proportions (scale-free)</div><table><thead><tr><th>Ratio</th><th style="text-align:right">value</th><th class="fc">Wrong?</th></tr></thead><tbody>';
+    props.forEach(([lab,v],i)=>{ SNAPSHOT[lab]=v;
+      out+=`<tr id="card-p${i}"><td class="cap">${esc(lab)}</td><td class="num">${v}</td><td class="fc"><button class="flagbtn" data-flag="p${i}" data-label="${esc(lab)}" data-value="${v}">🚩</button></td></tr>
+        <tr id="cmt-p${i}" hidden><td colspan="3"><textarea placeholder="What should ${esc(lab)} be?" data-comment="p${i}"></textarea></td></tr>`; });
+    out+='</tbody></table></div>'; }
+  if(!skin&&!hc&&!ey&&!shape) out+='<p class="muted">Couldn\'t read appearance from that set — try clearer, front-on photos.</p>';
+  $("fromphotos").innerHTML=out;
+
+  // measurements in cm
+  let m='<div class="seclabel">Measurements in cm</div>';
+  if(!h){ m+=`<div class="nudge"><div class="t">Want measurements in centimetres?</div>
+      <div class="s">Everything above needed <b>zero input</b>. Add your height and Krey scales exact measurements — and uses it to validate the read.</div>
+      <div class="mini"><input type="number" id="minih" placeholder="Height (cm)"><button id="minigo">Get cm</button></div></div>`; }
+  else if(meas&&meas.status===503){ m+='<p class="muted">Measurements aren\'t available on this server yet (the pose model isn\'t loaded).</p>'; }
+  else if(meas&&(meas.err||!meas.ok)){ m+='<p class="muted">Couldn\'t measure from that set — try a full head-to-toe shot, standing straight.</p>'; }
+  else if(!Object.keys(M).length){ m+='<p class="muted">No full-body frame found — add a head-to-toe photo to unlock measurements.</p>'; }
+  else {
+    m+=fieldCard("height","Height",`${esc(h)} cm <small>· you entered — used to scale + validate</small>`,`${h} cm`,null);
+    m+='<div class="mtable"><div class="mtitle">Measurements (circumference)</div><table><thead><tr><th>Part</th><th style="text-align:right">cm</th><th class="conf">conf.</th><th class="fc">Wrong?</th></tr></thead><tbody>';
+    Object.entries(M).forEach(([part,mm])=>{ const v=mm.circumference_cm!=null?mm.circumference_cm:"—"; const cf=mm.confidence; SNAPSHOT[part]=v+" cm";
+      m+=`<tr id="card-m_${part}"><td class="cap">${esc(part)}</td><td class="num">${v}</td><td class="conf">${cf!=null?Math.round(cf*100)+"%":"—"}</td>
+        <td class="fc"><button class="flagbtn" data-flag="m_${part}" data-label="${esc(part)}" data-value="${v} cm">🚩</button></td></tr>
+        <tr id="cmt-m_${part}" hidden><td colspan="4"><textarea placeholder="What should ${esc(part)} be?" data-comment="m_${part}"></textarea></td></tr>`; });
+    m+='</tbody></table></div>';
+    m+=fieldCard("build","Overall build — look about right?","Estimates from casual photos · low confidence is normal","the set (estimate)",0.4);
+    m+='<div class="nudge2" id="sharper"><span>Want fit-grade numbers? A guided capture (fixed distance, straight-on, arms slightly out) tightens these — no re-do of the whole set.</span><button id="dismisssharper">Got it</button></div>';
+  }
+  $("measures").innerHTML=m;
+
+  $("rawjson").textContent=JSON.stringify({capture:cj, measure:mj}, null, 2);
+  wireControls(); refreshCount();
+}
+
+function wireControls(){
+  document.querySelectorAll(".flagbtn").forEach(b=>{ if(b.dataset.w)return; b.dataset.w="1";
+    b.onclick=()=>{const k=b.dataset.flag,on=!b.classList.contains("on"); b.classList.toggle("on",on);
+      const card=$("card-"+k); if(card)card.classList.toggle("flagged",on);
+      const cmt=$("cmt-"+k); if(cmt)cmt.hidden=!on;
+      if(on){ FLAGS[k]={label:b.dataset.label,value:b.dataset.value,comment:""}; delete CONFIRMED[k];
+        if(card)card.classList.remove("confirmed"); const ok=document.querySelector('.okbtn[data-ok="'+k+'"]'); if(ok)ok.classList.remove("on");
+      } else delete FLAGS[k]; refreshCount();};
+  });
+  document.querySelectorAll(".okbtn").forEach(b=>{ if(b.dataset.w)return; b.dataset.w="1";
+    b.onclick=()=>{const k=b.dataset.ok,on=!b.classList.contains("on"); b.classList.toggle("on",on);
+      const card=$("card-"+k); if(card)card.classList.toggle("confirmed",on);
+      if(on){ CONFIRMED[k]=true; delete FLAGS[k]; const fb=document.querySelector('.flagbtn[data-flag="'+k+'"]'); if(fb)fb.classList.remove("on");
+        if(card)card.classList.remove("flagged"); const cmt=$("cmt-"+k); if(cmt)cmt.hidden=true;
+      } else delete CONFIRMED[k]; refreshCount();};
+  });
+  document.querySelectorAll("[data-comment]").forEach(t=>{ if(t.dataset.w)return; t.dataset.w="1";
+    t.oninput=()=>{const k=t.dataset.comment; if(FLAGS[k])FLAGS[k].comment=t.value;};});
+}
+function refreshCount(){ $("flagcount").textContent=Object.keys(FLAGS).length; const cc=$("confirmcount"); if(cc)cc.textContent=Object.keys(CONFIRMED).length; }
+
+document.addEventListener("click",e=>{
+  if(e.target&&e.target.id==="minigo"){ const v=$("minih").value; if(v){$("height").value=v; $("optdetails").open=true;} $("buildbtn").click(); }
+  if(e.target&&e.target.id==="dismisssharper"){ const s=$("sharper"); if(s)s.hidden=true; }
+});
+
+// ---- send flags to the team via /feedback ----
+$("sendbtn").onclick=async()=>{
+  const out=$("sendout"), overall=$("overall").value.trim(), flags=Object.values(FLAGS);
+  if(!flags.length && !overall){ out.innerHTML='<p class="err">Flag something wrong, or add a note, before sending.</p>';return; }
+  const who=[$("name").value.trim(),$("email").value.trim()].filter(Boolean).join(" · ");
+  let note="ALPHA TWIN CHECK — flagged as wrong:\n";
+  if(flags.length) flags.forEach(f=>{ note+=`• ${f.label}: shown "${f.value}"${f.comment?` → should be: ${f.comment}`:" (no detail)"}\n`; });
+  else note+="(no specific fields flagged)\n";
+  if(Object.keys(CONFIRMED).length) note+=`\nConfirmed correct: ${Object.keys(CONFIRMED).join(", ")}\n`;
+  if(overall) note+=`\nOther notes: ${overall}\n`;
+  if(who) note+=`\nFrom: ${who}\n`;
+  note+=`\nFull read: ${JSON.stringify(SNAPSHOT)}`;
+  const b=$("sendbtn"); b.disabled=true; b.textContent="Sending…";
+  const res=await postJSON("/feedback",{screen:"alpha-twin-check",note:note,severity:(flags.length>=3?"high":"normal"),source:"alpha"});
+  b.disabled=false; b.textContent="Send feedback to the team";
+  if(res.err||!res.ok){ out.innerHTML='<p class="err">Couldn\'t send just now — please try again.</p>'; return; }
+  out.innerHTML=`<p class="okmsg">✓ Thank you — sent to the team${flags.length?` (${flags.length} flag${flags.length>1?"s":""})`:""}. Ref: ${esc((res.j&&res.j.ticket&&res.j.ticket.dedup_key)||"received")}.</p>`;
+  b.disabled=true;
+};
+</script></body></html>
