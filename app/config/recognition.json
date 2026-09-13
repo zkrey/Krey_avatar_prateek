@@ -8,5 +8,7 @@
     "eye_colour": 0.10,
     "hair_texture": 0.10
   },
-  "recapture_floor": 0.60
+  "recapture_floor": 0.60,
+  "_note_skin_off_swatch_de": "ΔE2000 (skin) to the nearest Monk swatch beyond which the read is 'off-locus' (odd lighting / non-skin / cast) — mirrors app/monk.OFF_SWATCH_DE. An off-locus skin read forces the soft re-capture nudge even if the weighted score clears the floor, because skin is the top-weighted, memory-colour attribute. Provisional; recalibrate on real flag data.",
+  "skin_off_swatch_de": 10.0
 }

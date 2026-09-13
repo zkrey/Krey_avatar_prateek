@@ -88,6 +88,39 @@ def test_texture_available_closes_coverage_to_full():
     assert out["weight_coverage"] == 1.0 and out["attributes_missing"] == []
 
 
+def test_off_swatch_skin_signal_forces_recapture():
+    # Even with a high weighted score, an off-locus skin read (large ΔE2000) escalates to
+    # a soft recapture nudge — skin is the top-weighted, memory-colour attribute.
+    out = avatar_confidence(ALL, signals={"skin_off_swatch": True, "skin_delta_e": 22.0})
+    assert out["overall"] == 0.8                    # score itself is NOT re-penalised
+    assert out["skin_off_swatch"] is True and out["skin_delta_e"] == 22.0
+    assert out["needs_recapture"] is True
+
+
+def test_off_swatch_skin_from_record_forces_recapture():
+    # A body_models record whose skin delta_e exceeds the config threshold trips the nudge,
+    # even though 0.9/0.9 would otherwise clear the 0.60 floor.
+    record = assemble_body_models(
+        skin_tone={"value": 6, "confidence": 0.9, "delta_e": 22.0},
+        accuracy_ledger={"landmark_coverage": 0.9, "surfaced_to_user": False},
+    )
+    out = recognition_from_body_models(record)
+    assert out["skin_off_swatch"] is True
+    assert out["needs_recapture"] is True
+
+
+def test_on_locus_skin_does_not_force_recapture():
+    # A real between-swatch skin tone (small ΔE2000) must NOT be flagged just for being
+    # off-centre — no over-nudging of real users.
+    record = assemble_body_models(
+        skin_tone={"value": 6, "confidence": 0.9, "delta_e": 3.0},
+        accuracy_ledger={"landmark_coverage": 0.9, "surfaced_to_user": False},
+    )
+    out = recognition_from_body_models(record)
+    assert out["skin_off_swatch"] is False
+    assert out["needs_recapture"] is False
+
+
 if __name__ == "__main__":
     import subprocess
     raise SystemExit(subprocess.call(["pytest", "-q", __file__]))

@@ -54,7 +54,10 @@ self-report noise (±~1.2 cm), well within tolerance.
   `OFF_SWATCH_DE`) is low-confidence and asks a confirm, while a real between-swatch tone is
   not penalised. `delta_e` in the record is now ΔE2000 (`delta_e_method: "ciede2000"`). Note
   this is distance to the **bucket centre** (quantisation), not error vs the person's real
-  skin — that needs ground truth, which the alpha flags provide.
+  skin — that needs ground truth, which the alpha flags provide. The §6 **recognition** score
+  (`app/recognition.py`) now escalates the soft re-capture nudge when the skin read is
+  off-locus (ΔE2000 past `skin_off_swatch_de` in `config/recognition.json`), without
+  re-penalising the weighted score — skin is the top-weighted, memory-colour attribute.
 - **Weight/shape** has a tolerance band — surface confidence + a soft reconfirm rather than
   demanding accuracy; never hard-reject (doctrine: no forced cost).
 - **Recognition weights** (`config/recognition.json`: skin .30 · hair-colour .25 ·
