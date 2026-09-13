@@ -12,8 +12,8 @@
   .wrap{max-width:920px;margin:0 auto;padding:1.6rem 1.1rem 4rem}
   h1{font-family:var(--serif);font-weight:600;font-size:1.7rem;margin:0}
   h1 em{color:var(--gold);font-style:italic}
-  .sub{color:var(--muted);font-size:.9rem;margin:.4rem 0 1.2rem;max-width:60ch}
-  .tabs{display:flex;gap:.5rem;margin-bottom:1.2rem;border-bottom:1px solid var(--line)}
+  .sub{color:var(--muted);font-size:.9rem;margin:.4rem 0 1.2rem;max-width:64ch}
+  .tabs{display:flex;gap:.4rem;margin-bottom:1.2rem;border-bottom:1px solid var(--line);flex-wrap:wrap}
   .tab{background:none;border:none;color:var(--muted);font-family:var(--sans);font-size:.95rem;
     padding:.6rem .9rem;cursor:pointer;border-bottom:2px solid transparent}
   .tab.on{color:var(--gold);border-bottom-color:var(--gold);font-weight:600}
@@ -21,10 +21,14 @@
   .panel h3{margin:0 0 .3rem;font-size:1.02rem}
   .hint{color:var(--muted);font-size:.8rem;margin:0 0 1rem}
   label{display:block;font-size:.78rem;color:var(--muted);margin:.6rem 0 .3rem}
-  input,select,button.go{font-family:var(--sans);font-size:.95rem;border-radius:9px;padding:.55rem .7rem}
-  input,select{width:100%;background:var(--surface-2);border:1px solid var(--line);color:var(--rose)}
+  input,select,textarea,button.go{font-family:var(--sans);font-size:.95rem;border-radius:9px;padding:.55rem .7rem}
+  input,select,textarea{width:100%;background:var(--surface-2);border:1px solid var(--line);color:var(--rose)}
+  textarea{min-height:3.2rem;resize:vertical}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
   .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem}
+  .row4{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem}
   button.go{background:var(--gold);color:#231318;border:none;font-weight:600;cursor:pointer;margin-top:.9rem}
+  button.go.alt{background:var(--surface-2);color:var(--gold-soft);border:1px solid var(--gold-dim)}
   button.go:disabled{opacity:.5;cursor:wait}
   .out{margin-top:1rem}
   .kv{display:flex;justify-content:space-between;gap:1rem;padding:.4rem 0;border-bottom:1px solid var(--line);font-size:.9rem}
@@ -35,37 +39,153 @@
   .badge{display:inline-block;font-size:.7rem;text-transform:uppercase;letter-spacing:.05em;font-weight:600;padding:.15rem .55rem;border-radius:999px}
   .b-fits{color:var(--fits);border:1px solid #2f4636}.b-snug{color:var(--snug);border:1px solid #5a481f}
   .b-up,.b-down{color:#8ba6c9;border:1px solid #33465a}.b-warn{color:var(--warn);border:1px solid #5a3436}
+  .b-ok{color:var(--fits);border:1px solid #2f4636}.b-no{color:var(--warn);border:1px solid #5a3436}
   table{width:100%;border-collapse:collapse;font-size:.85rem;font-variant-numeric:tabular-nums;margin-top:.5rem}
   th{text-align:left;font-size:.64rem;text-transform:uppercase;letter-spacing:.08em;color:var(--faint);padding:.35rem .3rem;border-bottom:1px solid var(--line)}
   td{padding:.4rem .3rem;border-bottom:1px solid var(--line)}
   td.cap{text-transform:capitalize;color:var(--rose);font-weight:500}
   .err{color:var(--warn);font-size:.85rem;margin-top:.6rem}
+  .why{color:var(--gold-soft);font-style:italic;font-family:var(--serif);margin:.6rem 0 0}
   details{margin-top:.8rem}summary{cursor:pointer;color:var(--faint);font-size:.8rem}
   pre{background:#0f0a0c;border:1px solid var(--line);border-radius:8px;padding:.7rem;overflow:auto;font-size:.72rem;color:var(--gold-soft)}
   .chips{display:flex;gap:.4rem;flex-wrap:wrap}
   .chip{background:var(--surface-2);border:1px solid var(--line);border-radius:999px;color:var(--muted);font:inherit;font-size:.82rem;padding:.35rem .8rem;cursor:pointer}
   .chip.on{background:var(--gold);color:#231318;border-color:var(--gold);font-weight:600}
   .big{font-family:var(--serif);font-size:2.6rem;font-weight:600;color:var(--gold);line-height:1}
-  .apibar{font-size:.72rem;color:var(--faint);margin-bottom:1rem}
-  .apibar input{display:inline-block;width:auto;min-width:16rem;font-size:.78rem;padding:.3rem .5rem;margin-left:.4rem}
+  .apibar{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;font-size:.74rem;color:var(--faint);
+    background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:.6rem .8rem;margin-bottom:1.2rem}
+  .apibar input{display:inline-block;width:auto;min-width:15rem;flex:1;font-size:.78rem;padding:.3rem .5rem}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--faint);display:inline-block}
+  .dot.ok{background:var(--fits)}.dot.bad{background:var(--warn)}
+  .note{font-size:.72rem;color:var(--faint);margin-top:.4rem}
+  .slot{display:grid;grid-template-columns:64px 1fr;gap:.8rem;align-items:center;
+    background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:.7rem .8rem;margin-bottom:.6rem}
+  .slot.ready{border-color:var(--gold-dim)}
+  .slot .thumb{width:64px;height:64px;border-radius:8px;object-fit:cover;background:#0f0a0c;border:1px solid var(--line)}
+  .slot .ph{width:64px;height:64px;border-radius:8px;background:#0f0a0c;border:1px dashed var(--line);
+    display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:1.4rem}
+  .slot .stitle{font-weight:600;font-size:.9rem}
+  .slot .skind{font-size:.62rem;text-transform:uppercase;letter-spacing:.07em;color:var(--gold-dim);font-weight:700;margin-left:.4rem}
+  .slot .sfile{margin-top:.35rem;font-size:.82rem}
+  .slot .sfile::file-selector-button{font-family:var(--sans);font-size:.78rem;border-radius:7px;padding:.3rem .6rem;
+    background:var(--surface);color:var(--gold-soft);border:1px solid var(--gold-dim);cursor:pointer;margin-right:.6rem}
 </style></head>
 <body><div class="wrap">
   <h1>Krey <em>Tester</em></h1>
-  <p class="sub">Team QA tool. <b>Twin</b> uploads a photo to the real backend and shows the extracted
-    pointers (Monk skin tone, hair, eye, body measurements). <b>Fit</b> runs the rule engine offline.
-    Photos are processed then discarded (derive-and-discard) — nothing is stored.</p>
+  <p class="sub">Team QA console for Service A (the digital-twin backend). Each tab drives a real
+    endpoint on the server named below. Photos are processed then discarded (derive-and-discard) —
+    nothing raw is stored. The <b>Fit</b> tab's calculator also runs fully offline in the browser.</p>
+
+  <div class="apibar">
+    <span class="dot" id="hdot"></span>
+    <span>API base</span>
+    <input id="api" placeholder="(same server — leave blank)" value="">
+    <button class="go alt" id="pingbtn" style="margin:0;padding:.3rem .7rem;font-size:.78rem">Ping /health</button>
+    <span id="apinote"></span>
+  </div>
 
   <div class="tabs">
-    <button class="tab on" data-tab="twin">Twin — from a photo</button>
-    <button class="tab" data-tab="fit">Fit — from measurements</button>
+    <button class="tab on" data-tab="twintest">Twin test</button>
+    <button class="tab" data-tab="identity">Identity</button>
+    <button class="tab" data-tab="twin">Twin</button>
+    <button class="tab" data-tab="capture">Capture</button>
+    <button class="tab" data-tab="fit">Fit</button>
+    <button class="tab" data-tab="gate">Render gate</button>
+    <button class="tab" data-tab="util">Utilities</button>
+  </div>
+
+  <!-- =================== TWIN TEST (guided team flow) =================== -->
+  <div id="twintest">
+    <p class="hint" style="margin-bottom:1rem">The team-facing test: a member fills the profile the twin needs, adds the
+      prescribed 5 photos, then we run the real algo and show the extracted data to check accuracy.
+      <b>Step 1 of 3 — Profile.</b> Steps 2 (add photos) and 3 (results) come next.</p>
+
+    <div class="panel">
+      <h3>Step 1 · Profile <span class="note">everything the twin build needs</span></h3>
+
+      <label style="margin-top:0">Identity</label>
+      <div class="row2">
+        <div><label>Display name</label><input id="tt_name" placeholder="Aisha"></div>
+        <div><label>user_id <span class="note">(persists the twin for review)</span></label><input id="tt_uid" placeholder="team-aisha"></div>
+      </div>
+
+      <label style="margin-top:.8rem">Age gate <span class="note">(canRender wall)</span></label>
+      <div class="row2">
+        <div><label>Date of birth (ISO)</label><input id="tt_bd" placeholder="2000-01-01" value="2000-01-01"></div>
+        <div><label>Jurisdiction</label><input id="tt_jur" value="IN"></div>
+      </div>
+
+      <label style="margin-top:.8rem">Vitals <span class="note">(height = the measurement scale anchor)</span></label>
+      <div class="row3">
+        <div><label>Height (cm)</label><input type="number" id="tt_h" value="170"></div>
+        <div><label>Weight (kg)</label><input type="number" id="tt_w" value="65"></div>
+        <div><label>Sex</label><select id="tt_sex"><option value="2">Female</option><option value="1">Male</option></select></div>
+      </div>
+
+      <label style="margin-top:.8rem">Style — fit feel</label>
+      <div class="chips" id="tt_prefchips">
+        <button class="chip" data-p="fitted">Fitted</button>
+        <button class="chip on" data-p="true">True</button>
+        <button class="chip" data-p="relaxed">Relaxed</button>
+        <button class="chip" data-p="oversized">Oversized</button>
+      </div>
+      <label style="margin-top:.8rem">Region preferences <span class="note">(JSON, optional — e.g. {"waist":"relaxed"})</span></label>
+      <input id="tt_regions" placeholder='{"waist":"relaxed"}'>
+
+      <button class="go" id="tt_savebtn">Save profile → Step 2</button>
+      <div class="out" id="tt_profileout"></div>
+    </div>
+
+    <div class="panel" id="tt_step2" hidden>
+      <h3>Step 2 · Add 5 photos <span class="note">prescribed set — each slot tests a different part of the algo</span></h3>
+      <p class="hint">Shoot in even light against a plain wall. The <b>face selfie</b> drives appearance
+        (skin tone, hair, eye, recognition); the <b>full-body</b> shots drive measurements — height is the scale
+        anchor, so stand straight, full body in frame, arms slightly away from the torso.</p>
+      <div id="tt_slots"></div>
+      <button class="go" id="tt_runbtn" disabled>Run algo → Step 3</button>
+      <div class="out" id="tt_step2out"></div>
+    </div>
+
+    <div class="panel" id="tt_step3" hidden>
+      <h3>Step 3 · Results <span class="note">face → /capture/session · body → /body/measure · then /twins</span></h3>
+      <p class="hint">One run through the real endpoints — no new logic, just the existing calls. Face slot drives
+        appearance; full-body slots drive measurements (height from Step 1 is the scale anchor). Compare against the
+        real person to check accuracy.</p>
+      <div class="out" id="tt_resultsout"></div>
+    </div>
+  </div>
+
+  <!-- =================== IDENTITY (user-identification algo) =================== -->
+  <div id="identity" hidden>
+    <p class="hint" style="margin-bottom:1rem">Tests the <b>user-identification algo</b> in <code>/capture/session</code>:
+      across the uploaded set it detects every face, matches them, picks the <b>owner</b> (the identity recurring across
+      the most photos/dates), scores how sure it is, and rejects bystanders. Upload the subject across several photos —
+      optionally with other people in frame — and check it picks the right person.</p>
+
+    <div class="panel">
+      <h3>Eligibility <span class="note">/capture/session ingests biometrics → passes canRender first</span></h3>
+      <div class="row4">
+        <div><label>Account present</label><select id="id_acct"><option value="true">true</option><option value="false">false</option></select></div>
+        <div><label>DOB verified</label><select id="id_dob"><option value="true">true</option><option value="false">false</option></select></div>
+        <div><label>Birthdate (ISO)</label><input id="id_bd" value="2000-01-01"></div>
+        <div><label>Jurisdiction</label><input id="id_jur" value="IN"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Photo set <span class="note">POST /capture/session</span></h3>
+      <p class="hint">Best test: 3–5 photos of the same subject (different days/angles) + a couple with bystanders.
+        The algo should tag the recurring subject as owner and count the rest as rejected faces.</p>
+      <input type="file" id="id_files" accept="image/*" multiple>
+      <button class="go" id="id_runbtn">Identify owner</button>
+      <div class="out" id="id_out"></div>
+    </div>
   </div>
 
   <!-- =================== TWIN =================== -->
-  <div id="twin">
-    <div class="apibar">API base: <input id="api" placeholder="(same server — leave blank)" value=""> <span id="apinote"></span></div>
-
+  <div id="twin" hidden>
     <div class="panel">
-      <h3>Face &amp; skin</h3>
+      <h3>Face &amp; skin <span class="note">POST /twin/extract-skin · /twin/extract-face</span></h3>
       <p class="hint">A clear front-face selfie → skin tone (Monk), hair colour + texture, eye colour, recognition score.</p>
       <input type="file" id="facefile" accept="image/*">
       <button class="go" id="facebtn">Read face</button>
@@ -73,7 +193,7 @@
     </div>
 
     <div class="panel">
-      <h3>Body measurements</h3>
+      <h3>Body measurements <span class="note">POST /twin/extract-measurements</span></h3>
       <p class="hint">A full-body front photo + your declared vitals → per-part measurements, body shape, accuracy ledger. (Needs the pose model on the server.)</p>
       <div class="row3">
         <div><label>Height (cm)</label><input type="number" id="height" value="170"></div>
@@ -84,6 +204,47 @@
       <input type="file" id="bodyfile" accept="image/*">
       <button class="go" id="bodybtn">Measure body</button>
       <div class="out" id="bodyout"></div>
+    </div>
+  </div>
+
+  <!-- =================== CAPTURE =================== -->
+  <div id="capture" hidden>
+    <div class="panel">
+      <h3>Eligibility gate (canRender) <span class="note">shared by both flows below</span></h3>
+      <p class="hint">The consolidated flows ingest biometrics, so they pass the single <code>canRender</code> wall
+        first: account present + verified DOB + jurisdiction age policy. A blank/underage combo returns 403.</p>
+      <div class="row4">
+        <div><label>Account present</label><select id="cap_acct"><option value="true">true</option><option value="false">false</option></select></div>
+        <div><label>DOB verified</label><select id="cap_dob"><option value="true">true</option><option value="false">false</option></select></div>
+        <div><label>Birthdate (ISO)</label><input id="cap_bd" placeholder="2000-01-01" value="2000-01-01"></div>
+        <div><label>Jurisdiction</label><input id="cap_jur" placeholder="IN" value="IN"></div>
+      </div>
+      <label style="margin-top:.6rem">user_id <span class="note">(optional — set to persist the derived twin to the store)</span></label>
+      <input id="cap_uid" placeholder="(guest if blank — nothing persisted)">
+    </div>
+
+    <div class="panel">
+      <h3>Capture set → one twin <span class="note">POST /capture/session</span></h3>
+      <p class="hint">Upload several photos of the same person (plus stray faces). The picker finds the owner by
+        face-dominance, fuses appearance, and returns the soft-confirm decision.</p>
+      <input type="file" id="capfiles" accept="image/*" multiple>
+      <button class="go" id="capbtn">Consolidate capture</button>
+      <div class="out" id="capout"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Full-body frames → measurements <span class="note">POST /body/measure</span></h3>
+      <p class="hint">Multiple full-body frames, consolidated (recency-weighted, robust). Height is the scale anchor.
+        (Needs the pose model on the server.)</p>
+      <div class="row3">
+        <div><label>Height (cm)</label><input type="number" id="bm_h" value="170"></div>
+        <div><label>Weight (kg)</label><input type="number" id="bm_w" value="65"></div>
+        <div><label>Sex</label><select id="bm_sex"><option value="2">Female</option><option value="1">Male</option></select></div>
+      </div>
+      <label style="margin-top:.6rem">Full-body photos</label>
+      <input type="file" id="bmfiles" accept="image/*" multiple>
+      <button class="go" id="bmbtn">Measure body (multi-frame)</button>
+      <div class="out" id="bmout"></div>
     </div>
   </div>
 
@@ -109,7 +270,79 @@
         <button class="chip" data-p="relaxed">Relaxed</button>
         <button class="chip" data-p="oversized">Oversized</button>
       </div>
+      <p class="note">Calculator runs offline in the browser (ported from <code>fit_score.py</code>). Use the button to
+        cross-check against the live <code>POST /fit/recommend</code> — it applies the StyleProfile and returns a user-facing <em>why</em>.</p>
+      <button class="go alt" id="fitapibtn">Cross-check on backend</button>
       <div class="out" id="fitout" style="margin-top:1.2rem"></div>
+      <div class="out" id="fitapiout"></div>
+    </div>
+  </div>
+
+  <!-- =================== RENDER GATE =================== -->
+  <div id="gate" hidden>
+    <div class="panel">
+      <h3>Play-loop gate <span class="note">POST /render/authorize</span></h3>
+      <p class="hint">The subscription levers — same product for every plan, differing only on daily quota + GPU lane.
+        Slide <code>used_today</code> up to watch the wall approach and the wow-inflection upsell fire (only after the
+        3rd render, only at the wall).</p>
+      <div class="row2">
+        <div><label>Plan</label>
+          <select id="gt_plan">
+            <option value="free">Free — 5/day, standard lane</option>
+            <option value="plus">Plus — 50/day, priority lane</option>
+            <option value="pro">Pro — unlimited, priority lane</option>
+          </select></div>
+        <div><label>used_today</label><input type="number" id="gt_used" value="0" min="0"></div>
+      </div>
+      <button class="go" id="gatebtn">Authorize render</button>
+      <div class="out" id="gateout"></div>
+    </div>
+  </div>
+
+  <!-- =================== UTILITIES =================== -->
+  <div id="util" hidden>
+    <div class="panel">
+      <h3>Stored twin <span class="note">GET / DELETE /twins/{user_id}</span></h3>
+      <p class="hint">Fetch the compact derived record for an account (never raw photos), or exercise right-to-erasure (DPDP).</p>
+      <label>user_id</label>
+      <input id="tw_uid" placeholder="user-123">
+      <div class="row2">
+        <button class="go" id="twgetbtn">Fetch twin</button>
+        <button class="go alt" id="twdelbtn" style="border-color:#5a3436;color:var(--warn)">Delete twin</button>
+      </div>
+      <div class="out" id="twout"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Style profile <span class="note">POST /style/profile</span></h3>
+      <p class="hint">Assemble a StyleProfile from the quick-tap intake — no biometrics, no LLM.</p>
+      <div class="row2">
+        <div><label>Fit feel</label>
+          <select id="sp_feel"><option>true</option><option>fitted</option><option>relaxed</option><option>oversized</option></select></div>
+        <div><label>Source</label><input id="sp_src" value="single_input"></div>
+      </div>
+      <label>Region preferences <span class="note">(JSON, e.g. {"waist":"relaxed","shoulder":"true"})</span></label>
+      <input id="sp_regions" value='{"waist":"relaxed"}'>
+      <button class="go" id="spbtn">Build profile</button>
+      <div class="out" id="spout"></div>
+    </div>
+
+    <div class="panel">
+      <h3>Feedback ticket <span class="note">POST /feedback</span></h3>
+      <p class="hint">The live→sandbox→production loop's front door. No account or DOB required — reporting a bug is never gated.</p>
+      <div class="row2">
+        <div><label>Screen (where)</label><input id="fb_screen" placeholder="try-on" value="try-on"></div>
+        <div><label>Severity</label><select id="fb_sev"><option>normal</option><option>low</option><option>high</option><option>critical</option></select></div>
+      </div>
+      <label>Note (what's wrong)</label>
+      <textarea id="fb_note" placeholder="The render button does nothing on my phone.">The render button does nothing.</textarea>
+      <div class="row3">
+        <div><label>Device</label><input id="fb_device" placeholder="Pixel 7"></div>
+        <div><label>OS</label><input id="fb_os" placeholder="Android"></div>
+        <div><label>OS version</label><input id="fb_osv" placeholder="14"></div>
+      </div>
+      <button class="go" id="fbbtn">Send report</button>
+      <div class="out" id="fbout"></div>
     </div>
   </div>
 </div>
@@ -118,13 +351,15 @@
 const $=id=>document.getElementById(id);
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));t.classList.add("on");
-  $("twin").hidden=t.dataset.tab!=="twin"; $("fit").hidden=t.dataset.tab!=="fit";});
+  ["twintest","identity","twin","capture","fit","gate","util"].forEach(id=>$(id).hidden=(t.dataset.tab!==id));});
 
 const api=()=>($("api").value||"").replace(/\/$/,"");
 function lab2css(rgb){return rgb?`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`:"transparent";}
 function kv(k,v){return `<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`;}
+function raw(obj){return `<details><summary>Raw JSON</summary><pre>${JSON.stringify(obj,null,2)}</pre></details>`;}
+function esc(s){return String(s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));}
 
-async function post(path, form, btn){
+async function post(path, form, btn){          // multipart form-data
   btn.disabled=true;
   try{
     const r=await fetch(api()+path,{method:"POST",body:form});
@@ -133,7 +368,264 @@ async function post(path, form, btn){
   }catch(e){ return {ok:false,err:String(e)}; }
   finally{ btn.disabled=false; }
 }
+async function req(path, opts, btn){            // JSON / GET / DELETE
+  if(btn)btn.disabled=true;
+  try{
+    const r=await fetch(api()+path,opts||{});
+    let j=null; try{ j=await r.json(); }catch(_){ j=null; }
+    return {ok:r.ok,status:r.status,j};
+  }catch(e){ return {ok:false,err:String(e)}; }
+  finally{ if(btn)btn.disabled=false; }
+}
+const postJSON=(path,body,btn)=>req(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)},btn);
+const unreachable=r=>`<p class="err">Could not reach the backend (${esc(r.err)}). Is it running? Check the API base above.</p>`;
 
+// ---------- health ----------
+async function ping(){
+  const r=await req("/health",{},$("pingbtn"));
+  const dot=$("hdot"),note=$("apinote");
+  if(r.err){dot.className="dot bad";note.innerHTML=`<span class="err">unreachable</span>`;return;}
+  if(r.ok){dot.className="dot ok";note.textContent=`ok · ${(r.j&&r.j.service)||""}`;}
+  else{dot.className="dot bad";note.innerHTML=`<span class="err">HTTP ${r.status}</span>`;}
+}
+$("pingbtn").onclick=ping;
+
+// ---------- TWIN TEST · Step 1: profile ----------
+let TT_PREF="true";
+let TT_PROFILE=null;   // populated on save; Steps 2-3 read it
+document.querySelectorAll("#tt_prefchips .chip").forEach(c=>c.onclick=()=>{
+  document.querySelectorAll("#tt_prefchips .chip").forEach(x=>x.classList.remove("on"));c.classList.add("on");TT_PREF=c.dataset.p;});
+
+function ttValidate(){
+  const errs=[];
+  const bd=$("tt_bd").value.trim();
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(bd)) errs.push("Date of birth must be ISO YYYY-MM-DD.");
+  else if(isNaN(Date.parse(bd))) errs.push("Date of birth is not a real date.");
+  const h=parseFloat($("tt_h").value), w=parseFloat($("tt_w").value);
+  if(!(h>0)) errs.push("Height must be a positive number.");
+  if(!(w>0)) errs.push("Weight must be a positive number.");
+  let regions=null;
+  if($("tt_regions").value.trim()){
+    try{ regions=JSON.parse($("tt_regions").value); }
+    catch(e){ errs.push("Region preferences must be valid JSON."); }
+  }
+  return {errs,regions,bd,h,w};
+}
+
+$("tt_savebtn").onclick=()=>{
+  const out=$("tt_profileout");
+  const {errs,regions,bd,h,w}=ttValidate();
+  if(errs.length){ out.innerHTML=errs.map(e=>`<p class="err">${esc(e)}</p>`).join(""); return; }
+  TT_PROFILE={
+    name:$("tt_name").value.trim(),
+    user_id:$("tt_uid").value.trim(),
+    birthdate:bd, jurisdiction:$("tt_jur").value.trim()||"IN",
+    height:h, weight:w, sex:parseInt($("tt_sex").value,10),
+    fit_feel:TT_PREF, region_preferences:regions,
+    // account/DOB assumed verified for a team member running the test
+    account_present:true, dob_verified:true,
+  };
+  let h1="";
+  h1+=kv("Name",esc(TT_PROFILE.name||"—"));
+  h1+=kv("user_id",esc(TT_PROFILE.user_id||"— (guest — twin not persisted)"));
+  h1+=kv("DOB · jurisdiction",`${esc(TT_PROFILE.birthdate)} · ${esc(TT_PROFILE.jurisdiction)}`);
+  h1+=kv("Vitals",`${TT_PROFILE.height} cm · ${TT_PROFILE.weight} kg · ${TT_PROFILE.sex===1?"male":"female"}`);
+  h1+=kv("Fit feel",esc(TT_PROFILE.fit_feel));
+  h1+=kv("Region prefs",TT_PROFILE.region_preferences?esc(JSON.stringify(TT_PROFILE.region_preferences)):"—");
+  h1+='<p class="hint" style="margin-top:.8rem">Profile saved. Step 2 (add photos) unlocks below — wiring comes next.</p>';
+  out.innerHTML=h1;
+  $("tt_step2").hidden=false;
+  ttRenderSlots();
+  $("tt_step2").scrollIntoView({behavior:"smooth",block:"nearest"});
+};
+
+// ---------- TWIN TEST · Step 2: the prescribed 5-photo set ----------
+// kind routes the photo in Step 3: "face" -> /capture/session, "body" -> /body/measure.
+const TT_SLOTS=[
+  {id:"face",  kind:"face", title:"Front-face selfie",     guide:"Clear, front-on, no sunglasses/hat. Drives skin tone, hair, eye, recognition."},
+  {id:"front", kind:"body", title:"Full body — front",     guide:"Straight-on, whole body in frame, arms slightly out. The measurement scale anchor."},
+  {id:"side",  kind:"body", title:"Full body — side",      guide:"90° profile. Tests depth + body shape."},
+  {id:"three", kind:"body", title:"Full body — 3/4 turn",  guide:"Angled between front and side. Tests landmark robustness."},
+  {id:"retake",kind:"body", title:"Full body — retake",    guide:"A second front-ish full-body shot. Tests capture consolidation (recency-weighted)."},
+];
+const TT_FILES={};   // slot id -> File
+
+function ttRenderSlots(){
+  const wrap=$("tt_slots"); if(wrap.dataset.built) return; wrap.dataset.built="1";
+  wrap.innerHTML=TT_SLOTS.map(s=>`
+    <div class="slot" id="slot-${s.id}">
+      <div class="ph" id="thumb-${s.id}">+</div>
+      <div>
+        <div><span class="stitle">${esc(s.title)}</span><span class="skind">${s.kind}</span></div>
+        <div class="note">${esc(s.guide)}</div>
+        <input class="sfile" type="file" accept="image/*" data-slot="${s.id}">
+      </div>
+    </div>`).join("");
+  wrap.querySelectorAll("input[type=file]").forEach(inp=>inp.onchange=ttOnPick);
+}
+
+function ttOnPick(e){
+  const id=e.target.dataset.slot, f=e.target.files[0], slot=$("slot-"+id), ph=$("thumb-"+id);
+  if(!f){ delete TT_FILES[id]; slot.classList.remove("ready"); ttUpdateRun(); return; }
+  TT_FILES[id]=f; slot.classList.add("ready");
+  const rd=new FileReader();
+  rd.onload=()=>{ ph.outerHTML=`<img class="thumb" id="thumb-${id}" src="${rd.result}" alt="">`; };
+  rd.readAsDataURL(f);
+  ttUpdateRun();
+}
+
+function ttUpdateRun(){
+  // Minimum to run the algo meaningfully: the face selfie + the front full-body (the scale anchor).
+  const haveFace=!!TT_FILES.face, haveFront=!!TT_FILES.front;
+  const n=Object.keys(TT_FILES).length;
+  const btn=$("tt_runbtn"), out=$("tt_step2out");
+  btn.disabled=!(haveFace&&haveFront);
+  if(btn.disabled){
+    const need=[!haveFace?"front-face selfie":null,!haveFront?"full-body front":null].filter(Boolean);
+    out.innerHTML=`<p class="note">Add at least the ${need.join(" + ")} to run. (${n}/5 added — all 5 gives the best test.)</p>`;
+  } else {
+    out.innerHTML=`<p class="note">${n}/5 added${n<5?" — the remaining full-body angles sharpen measurement + consolidation":""}. Ready to run.</p>`;
+  }
+}
+
+// ---------- TWIN TEST · Step 3: run the set through the existing endpoints ----------
+function ttGate(fd){                       // gate + identity from the saved profile
+  const p=TT_PROFILE;
+  fd.append("account_present",p.account_present);
+  fd.append("dob_verified",p.dob_verified);
+  fd.append("birthdate",p.birthdate);
+  fd.append("jurisdiction",p.jurisdiction);
+  if(p.user_id)fd.append("user_id",p.user_id);
+  return fd;
+}
+function ttFilesByKind(kind){
+  return TT_SLOTS.filter(s=>s.kind===kind&&TT_FILES[s.id]).map(s=>TT_FILES[s.id]);
+}
+function section(title){return `<h3 style="margin:1.4rem 0 .4rem;font-size:.95rem;color:var(--gold-soft)">${title}</h3>`;}
+
+$("tt_runbtn").onclick=async()=>{
+  if(!TT_PROFILE){return;}
+  $("tt_step3").hidden=false;
+  const out=$("tt_resultsout");
+  out.innerHTML='<p class="hint">Running the set through the backend…</p>';
+  $("tt_step3").scrollIntoView({behavior:"smooth",block:"nearest"});
+  let html="";
+
+  // --- appearance: face slot -> /capture/session ---
+  const faceFiles=ttFilesByKind("face");
+  if(faceFiles.length){
+    const fd=new FormData();faceFiles.forEach(f=>fd.append("files",f));ttGate(fd);
+    const res=await post("/capture/session",fd,$("tt_runbtn"));
+    html+=section("Appearance — /capture/session");
+    if(res.err){html+=unreachable(res);}
+    else if(res.status===403){const d=(res.j&&res.j.detail)||{};html+=`<p class="err">403 — canRender: ${esc(d.reason||"blocked")}.</p>`;}
+    else if(!res.ok){html+=`<p class="err">HTTP ${res.status}.</p>`+raw(res.j);}
+    else{
+      const j=res.j;
+      html+=kv("Decision",esc(j.decision||"—"));
+      const idc=j.identity&&j.identity.overall; if(idc!=null)html+=kv("Identity confidence",(idc*100).toFixed(0)+"%");
+      html+=kv("Faces total / owner",`${j.n_faces_total!=null?j.n_faces_total:"—"} / ${j.n_user_faces!=null?j.n_user_faces:"—"}`);
+      const a=j.appearance||{};
+      const slot=(n)=>a[n]&&a[n].value!=null?esc(a[n].value):null;
+      if(slot("skin_tone"))html+=kv("Skin tone",slot("skin_tone"));
+      if(slot("hair_colour"))html+=kv("Hair colour",slot("hair_colour"));
+      if(slot("hair_texture"))html+=kv("Hair texture",slot("hair_texture"));
+      if(slot("eye_colour"))html+=kv("Eye colour",slot("eye_colour"));
+      html+=kv("Persisted",j.saved?"yes":"no");
+      html+=raw(j);
+    }
+  }
+
+  // --- measurements: body slots -> /body/measure ---
+  const bodyFiles=ttFilesByKind("body");
+  if(bodyFiles.length){
+    const p=TT_PROFILE;const fd=new FormData();bodyFiles.forEach(f=>fd.append("files",f));
+    fd.append("height",p.height);fd.append("weight",p.weight);fd.append("sex",p.sex);ttGate(fd);
+    const res=await post("/body/measure",fd,$("tt_runbtn"));
+    html+=section("Measurements — /body/measure");
+    if(res.err){html+=unreachable(res);}
+    else if(res.status===403){const d=(res.j&&res.j.detail)||{};html+=`<p class="err">403 — canRender: ${esc(d.reason||"blocked")}.</p>`;}
+    else if(res.status===503){html+='<p class="err">Pose model not on the server (503) — deploy with the models to test measurements.</p>';}
+    else if(!res.ok){html+=`<p class="err">HTTP ${res.status}.</p>`+raw(res.j);}
+    else{
+      const j=res.j;
+      html+=kv("Decision",esc(j.decision||"—"));
+      html+=kv("Measurable frames",j.n_measurable!=null?j.n_measurable:"—");
+      html+=kv("Persisted",j.saved?"yes":"no");
+      if(j.measurements)html+=renderMeasurements({measurements:j.measurements,body_shape:j.body_shape,accuracy_ledger:j.accuracy_ledger});
+      html+=raw(j);
+    }
+  }
+
+  // --- persisted record: /twins/{user_id} ---
+  if(TT_PROFILE.user_id){
+    const res=await req("/twins/"+encodeURIComponent(TT_PROFILE.user_id),{},$("tt_runbtn"));
+    html+=section("Stored twin — /twins/"+esc(TT_PROFILE.user_id));
+    if(res.err){html+=unreachable(res);}
+    else if(res.status===404){html+='<p class="note">No record stored (guest, or nothing persisted this run).</p>';}
+    else if(!res.ok){html+=`<p class="err">HTTP ${res.status}.</p>`;}
+    else{html+='<p class="note">Compact derived record (never raw photos):</p>'+raw(res.j);}
+  } else {
+    html+=section("Stored twin");
+    html+='<p class="note">No user_id set in Step 1 — nothing persisted. Add one to review the stored record.</p>';
+  }
+
+  out.innerHTML=html;
+};
+
+// ---------- IDENTITY: the user-identification algo (/capture/session) ----------
+const ID_DECISION={
+  accept:            {cls:"b-ok",  label:"Accept",              note:"confident it's one consistent person"},
+  reconfirm:         {cls:"b-snug",label:"Reconfirm",          note:"likely them — one-tap 'is this you?', not a re-upload"},
+  retake_low_confidence:{cls:"b-warn",label:"Retake — low confidence", note:"couldn't be sure; ask for a clearer set"},
+  retake_no_face:    {cls:"b-warn",label:"Retake — no face",   note:"no usable face detected"},
+};
+$("id_runbtn").onclick=async()=>{
+  const fs=$("id_files").files; const out=$("id_out");
+  if(!fs.length){out.innerHTML='<p class="err">Add at least one photo (a few of the same person works best).</p>';return;}
+  out.innerHTML='<p class="hint">Detecting + matching faces…</p>';
+  const fd=new FormData();for(const f of fs)fd.append("files",f);
+  fd.append("account_present",$("id_acct").value);
+  fd.append("dob_verified",$("id_dob").value);
+  if($("id_bd").value)fd.append("birthdate",$("id_bd").value);
+  if($("id_jur").value)fd.append("jurisdiction",$("id_jur").value);
+  const res=await post("/capture/session",fd,$("id_runbtn"));
+  if(res.err){out.innerHTML=unreachable(res);return;}
+  if(res.status===403){gate403(out,res);return;}
+  if(!res.ok){out.innerHTML=`<p class="err">HTTP ${res.status}.</p>`+raw(res.j);return;}
+  const j=res.j, id=j.identity||{}, tl=j.timeline||{};
+  const dec=ID_DECISION[j.decision]||{cls:"b-snug",label:esc(j.decision||"—"),note:""};
+  let h="";
+  // decision + headline confidence
+  h+=`<div style="margin:.2rem 0 .6rem"><span class="badge ${dec.cls}">${dec.label}</span> <span class="note">${esc(dec.note)}</span></div>`;
+  if(id.overall!=null)h+=`<div class="big">${(id.overall*100).toFixed(0)}%</div><p class="note">identity confidence (backend-only — never shown to the real user)</p>`;
+
+  // owner detection — the core of the algo
+  h+=section("Owner detection");
+  const total=j.n_faces_total, owner=j.n_user_faces;
+  h+=kv("Faces detected (all people)", total!=null?total:"—");
+  h+=kv("Owner faces (the picked subject)", owner!=null?owner:"—");
+  h+=kv("Bystander faces rejected", (total!=null&&owner!=null)?Math.max(0,total-owner):"—");
+
+  // confidence breakdown
+  h+=section("Confidence breakdown");
+  if(id.consistency!=null)h+=kv("Consistency (how tightly matched faces agree)",(id.consistency*100).toFixed(0)+"%");
+  if(id.evidence!=null)h+=kv("Evidence (coverage vs 5-photo target)",(id.evidence*100).toFixed(0)+"%");
+  if(id.mean_cosine!=null)h+=kv("Mean cosine similarity",id.mean_cosine);
+  if(id.n_frames!=null)h+=kv("Owner frames used",id.n_frames);
+  if(id.n_dates!=null)h+=kv("Distinct capture dates",id.n_dates);
+
+  // timeline
+  if(tl && (tl.oldest||tl.newest||tl.n_dated!=null)){
+    h+=section("Timeline");
+    h+=kv("Oldest → newest",`${esc(tl.oldest||"—")} → ${esc(tl.newest||"—")}`);
+    h+=kv("Dated / undated photos",`${tl.n_dated!=null?tl.n_dated:"—"} / ${tl.n_undated!=null?tl.n_undated:"—"}`);
+  }
+  h+=kv("Persisted to store",j.saved?"yes":"no");
+  out.innerHTML=h+raw(j);
+};
+
+// ---------- TWIN: face ----------
 $("facebtn").onclick=async()=>{
   const f=$("facefile").files[0]; const out=$("faceout");
   if(!f){out.innerHTML='<p class="err">Pick a face photo first.</p>';return;}
@@ -142,7 +634,7 @@ $("facebtn").onclick=async()=>{
   const skin=await post("/twin/extract-skin",fd1,$("facebtn"));
   const fd2=new FormData();fd2.append("file",f);
   const face=await post("/twin/extract-face",fd2,$("facebtn"));
-  if(skin.err){out.innerHTML=`<p class="err">Could not reach the backend (${skin.err}). Is it deployed? Set the API base above.</p>`;return;}
+  if(skin.err){out.innerHTML=unreachable(skin);return;}
   let html="";
   const mt=skin.j&&skin.j.monk_tone;
   if(mt){
@@ -159,10 +651,11 @@ $("facebtn").onclick=async()=>{
     if(bm.eye_colour) html+=kv("Eye colour", (bm.eye_colour.value||"—"));
     if(bm.avatar_confidence) html+=kv("Recognition score", (bm.avatar_confidence.overall!=null?(bm.avatar_confidence.overall*100).toFixed(0)+"%":"—"));
   }
-  html+=`<details><summary>Raw JSON</summary><pre>${JSON.stringify({skin:skin.j,face:face.j},null,2)}</pre></details>`;
+  html+=raw({skin:skin.j,face:face.j});
   out.innerHTML=html;
 };
 
+// ---------- TWIN: body (single photo) ----------
 $("bodybtn").onclick=async()=>{
   const f=$("bodyfile").files[0]; const out=$("bodyout");
   if(!f){out.innerHTML='<p class="err">Pick a full-body photo first.</p>';return;}
@@ -170,22 +663,79 @@ $("bodybtn").onclick=async()=>{
   const fd=new FormData();fd.append("file",f);fd.append("height",$("height").value);
   fd.append("weight",$("weight").value);fd.append("sex",$("sex").value);
   const res=await post("/twin/extract-measurements",fd,$("bodybtn"));
-  if(res.err){out.innerHTML=`<p class="err">Could not reach the backend (${res.err}).</p>`;return;}
+  if(res.err){out.innerHTML=unreachable(res);return;}
   if(res.status===503){out.innerHTML='<p class="err">Pose model not on the server yet (503). It loads when the container is built with the models.</p>';return;}
   const bm=res.j&&res.j.body_models;
   if(!bm||!bm.measurements){out.innerHTML=`<p class="err">No body measured — ${(res.j.eligibility&&res.j.eligibility.quality_flags||[]).join(", ")||"retake"}.</p>`;return;}
+  out.innerHTML=renderMeasurements(bm)+raw(res.j);
+};
+
+function renderMeasurements(bm){
   let html="";
   const led=bm.accuracy_ledger||{};
   html+=kv("Body confidence", led.body_confidence!=null?(led.body_confidence*100).toFixed(0)+"%":"—");
   html+=kv("Landmark coverage", led.landmark_coverage!=null?(led.landmark_coverage*100).toFixed(0)+"%":"—");
   if(bm.body_shape){html+=kv("Body shape", (bm.body_shape.shape||"—"));html+=kv("BMI", bm.body_shape.bmi!=null?bm.body_shape.bmi:"—");}
   html+='<table><thead><tr><th>Part</th><th style="text-align:right">Circumf. (cm)</th><th style="text-align:right">Conf.</th></tr></thead><tbody>';
-  for(const [part,m] of Object.entries(bm.measurements)){
-    html+=`<tr><td class="cap">${part}</td><td style="text-align:right">${m.circumference_cm!=null?m.circumference_cm:"—"}</td><td style="text-align:right">${m.confidence!=null?(m.confidence*100).toFixed(0)+"%":"—"}</td></tr>`;
+  for(const [part,m] of Object.entries(bm.measurements||{})){
+    html+=`<tr><td class="cap">${esc(part)}</td><td style="text-align:right">${m.circumference_cm!=null?m.circumference_cm:"—"}</td><td style="text-align:right">${m.confidence!=null?(m.confidence*100).toFixed(0)+"%":"—"}</td></tr>`;
   }
   html+="</tbody></table>";
-  html+=`<details><summary>Raw JSON</summary><pre>${JSON.stringify(res.j,null,2)}</pre></details>`;
-  out.innerHTML=html;
+  return html;
+}
+
+// ---------- CAPTURE: shared gate fields ----------
+function appendGate(fd){
+  fd.append("account_present",$("cap_acct").value);
+  fd.append("dob_verified",$("cap_dob").value);
+  if($("cap_bd").value)fd.append("birthdate",$("cap_bd").value);
+  if($("cap_jur").value)fd.append("jurisdiction",$("cap_jur").value);
+  if($("cap_uid").value)fd.append("user_id",$("cap_uid").value);
+  return fd;
+}
+function gate403(out,res){
+  // FastAPI wraps the HTTPException detail dict under .detail
+  const d=(res.j&&res.j.detail)||res.j||{};
+  out.innerHTML=`<p class="err">403 — blocked at canRender: ${esc(d.reason||"not allowed")}${d.is_minor?" (minor)":""}.</p>`+raw(res.j);
+}
+
+$("capbtn").onclick=async()=>{
+  const fs=$("capfiles").files; const out=$("capout");
+  if(!fs.length){out.innerHTML='<p class="err">Pick one or more photos first.</p>';return;}
+  out.innerHTML='<p class="hint">Consolidating…</p>';
+  const fd=new FormData();for(const f of fs)fd.append("files",f);appendGate(fd);
+  const res=await post("/capture/session",fd,$("capbtn"));
+  if(res.err){out.innerHTML=unreachable(res);return;}
+  if(res.status===403){gate403(out,res);return;}
+  if(!res.ok){out.innerHTML=`<p class="err">HTTP ${res.status}.</p>`+raw(res.j);return;}
+  const j=res.j; let html="";
+  html+=`<div class="big">${esc(j.decision||"—")}</div>`;
+  const idc=j.identity&&j.identity.overall;
+  if(idc!=null)html+=kv("Identity confidence",(idc*100).toFixed(0)+"%");
+  html+=kv("Faces total",j.n_faces_total!=null?j.n_faces_total:"—");
+  html+=kv("Owner faces",j.n_user_faces!=null?j.n_user_faces:"—");
+  html+=kv("Persisted to store",j.saved?"yes":"no");
+  out.innerHTML=html+raw(j);
+};
+
+$("bmbtn").onclick=async()=>{
+  const fs=$("bmfiles").files; const out=$("bmout");
+  if(!fs.length){out.innerHTML='<p class="err">Pick one or more full-body photos first.</p>';return;}
+  out.innerHTML='<p class="hint">Measuring…</p>';
+  const fd=new FormData();for(const f of fs)fd.append("files",f);
+  fd.append("height",$("bm_h").value);fd.append("weight",$("bm_w").value);fd.append("sex",$("bm_sex").value);
+  appendGate(fd);
+  const res=await post("/body/measure",fd,$("bmbtn"));
+  if(res.err){out.innerHTML=unreachable(res);return;}
+  if(res.status===403){gate403(out,res);return;}
+  if(res.status===503){out.innerHTML='<p class="err">Pose model not on the server yet (503).</p>';return;}
+  if(!res.ok){out.innerHTML=`<p class="err">HTTP ${res.status}.</p>`+raw(res.j);return;}
+  const j=res.j; let html="";
+  html+=`<div class="big">${esc(j.decision||"—")}</div>`;
+  html+=kv("Measurable frames",j.n_measurable!=null?j.n_measurable:"—");
+  html+=kv("Persisted to store",j.saved?"yes":"no");
+  if(j.measurements)html+=renderMeasurements({measurements:j.measurements,body_shape:j.body_shape,accuracy_ledger:j.accuracy_ledger});
+  out.innerHTML=html+raw(j);
 };
 
 // ---------- FIT (offline, ported from fit_score.py) ----------
@@ -213,7 +763,8 @@ function recommend(body,g,pref){const cut=g.cut,st=g.fabric_stretch,give=RULES.s
     const c=ar.reduce((z,a)=>z+Math.abs((gi[a]-body[a]+give)-t),0);if(bc===null||c<bc){best=s;bc=c;}}
   if(best===null)return null;const sc=score(body,g.size_chart[best],cut,st,pref);sc.size=best;return sc;}
 const VL={fits:"Fits ✓",snug:"Snug",size_up:"Size up",size_down:"Size down"},VC={fits:"b-fits",snug:"b-snug",size_up:"b-up",size_down:"b-down"};
-function runFit(){const body={};[["chest","chest"],["waist","fwaist"],["hip","hip"]].forEach(([k,id])=>{const v=parseFloat($(id).value);if(!isNaN(v)&&v>0)body[k]=v;});
+function fitBody(){const body={};[["chest","chest"],["waist","fwaist"],["hip","hip"]].forEach(([k,id])=>{const v=parseFloat($(id).value);if(!isNaN(v)&&v>0)body[k]=v;});return body;}
+function runFit(){const body=fitBody();
   const g=CHARTS[$("garment").value];const r=recommend(body,g,PREF);const out=$("fitout");
   if(!r){out.innerHTML='<p class="err">No comparable regions.</p>';return;}
   let h=`<div class="big">${r.size}</div><div style="margin:.5rem 0"><span class="badge ${VC[r.v]}">${VL[r.v]}</span></div>`;
@@ -224,4 +775,97 @@ function runFit(){const body={};[["chest","chest"],["waist","fwaist"],["hip","hi
 document.querySelectorAll("#prefchips .chip").forEach(c=>c.onclick=()=>{document.querySelectorAll("#prefchips .chip").forEach(x=>x.classList.remove("on"));c.classList.add("on");PREF=c.dataset.p;runFit();});
 ["chest","fwaist","hip","garment"].forEach(id=>$(id).addEventListener("input",runFit));
 runFit();
+
+// ---------- FIT: cross-check on backend (/fit/recommend) ----------
+$("fitapibtn").onclick=async()=>{
+  const out=$("fitapiout");out.innerHTML='<p class="hint">Calling backend…</p>';
+  const g=CHARTS[$("garment").value];
+  const payload={body_cm:fitBody(),garment:g,style_profile:{fit_feel:PREF}};
+  const res=await postJSON("/fit/recommend",payload,$("fitapibtn"));
+  if(res.err){out.innerHTML=unreachable(res);return;}
+  if(!res.ok){out.innerHTML=`<p class="err">HTTP ${res.status}.</p>`+raw(res.j);return;}
+  const j=res.j;let h='<p class="note" style="margin-top:1.2rem">Backend /fit/recommend:</p>';
+  const size=j.best_size||j.size;
+  if(size)h+=`<div class="big">${esc(size)}</div>`;
+  if(j.verdict)h+=`<div style="margin:.4rem 0"><span class="badge ${VC[j.verdict]||"b-snug"}">${esc(VL[j.verdict]||j.verdict)}</span></div>`;
+  if(j.confidence!=null)h+=kv("Confidence",(j.confidence*100).toFixed(0)+"%");
+  if(j.binding_region)h+=kv("Binding region",esc(j.binding_region));
+  if(j.why)h+=`<p class="why">“${esc(j.why)}”</p>`;
+  out.innerHTML=h+raw(j);
+};
+
+// ---------- RENDER GATE (/render/authorize) ----------
+$("gatebtn").onclick=async()=>{
+  const out=$("gateout");out.innerHTML='<p class="hint">Authorizing…</p>';
+  const payload={plan:$("gt_plan").value,used_today:parseInt($("gt_used").value||"0",10),entry_point:"try_on"};
+  const res=await postJSON("/render/authorize",payload,$("gatebtn"));
+  if(res.err){out.innerHTML=unreachable(res);return;}
+  if(!res.ok){out.innerHTML=`<p class="err">HTTP ${res.status}.</p>`+raw(res.j);return;}
+  const j=res.j;let h="";
+  h+=`<div style="margin:.2rem 0 .6rem"><span class="badge ${j.allowed?"b-ok":"b-no"}">${j.allowed?"Allowed":"Blocked — "+esc(j.reason)}</span></div>`;
+  h+=kv("Plan",esc(j.label||j.plan||"—"));
+  h+=kv("GPU lane",esc(j.lane||"—"));
+  h+=kv("Daily quota",j.unlimited?"unlimited":(j.daily_quota!=null?j.daily_quota:"—"));
+  h+=kv("Renders left",j.unlimited?"∞":(j.renders_left!=null?j.renders_left:"—"));
+  const up=j.upsell||{};
+  if(up.show){h+=`<div class="panel" style="margin-top:1rem;background:var(--surface-2)"><b style="color:var(--gold)">Upsell fires</b> <span class="note">(${esc(up.reason)} · ${esc(up.moment||"")})</span><p class="why" style="margin-top:.4rem">“${esc(up.message||"")}”</p></div>`;}
+  else{h+=kv("Upsell","held — "+esc(up.reason||"n/a"));}
+  out.innerHTML=h+raw(j);
+};
+
+// ---------- UTILITIES: twin store ----------
+$("twgetbtn").onclick=async()=>{
+  const uid=$("tw_uid").value.trim();const out=$("twout");
+  if(!uid){out.innerHTML='<p class="err">Enter a user_id.</p>';return;}
+  const res=await req("/twins/"+encodeURIComponent(uid),{},$("twgetbtn"));
+  if(res.err){out.innerHTML=unreachable(res);return;}
+  if(res.status===404){out.innerHTML='<p class="err">404 — no twin stored for this user.</p>';return;}
+  if(!res.ok){out.innerHTML=`<p class="err">HTTP ${res.status}.</p>`+raw(res.j);return;}
+  out.innerHTML='<p class="note">Stored record:</p>'+raw(res.j);
+};
+$("twdelbtn").onclick=async()=>{
+  const uid=$("tw_uid").value.trim();const out=$("twout");
+  if(!uid){out.innerHTML='<p class="err">Enter a user_id.</p>';return;}
+  const res=await req("/twins/"+encodeURIComponent(uid),{method:"DELETE"},$("twdelbtn"));
+  if(res.err){out.innerHTML=unreachable(res);return;}
+  if(!res.ok){out.innerHTML=`<p class="err">HTTP ${res.status}.</p>`+raw(res.j);return;}
+  out.innerHTML=`<p class="hint">Erased: <b>${res.j&&res.j.erased?"yes":"no"}</b> (right-to-erasure).</p>`+raw(res.j);
+};
+
+// ---------- UTILITIES: style profile ----------
+$("spbtn").onclick=async()=>{
+  const out=$("spout");let regions=null;
+  try{ regions=$("sp_regions").value.trim()?JSON.parse($("sp_regions").value):null; }
+  catch(e){ out.innerHTML='<p class="err">Region preferences must be valid JSON.</p>';return; }
+  const payload={fit_feel:$("sp_feel").value,region_preferences:regions,source:$("sp_src").value};
+  const res=await postJSON("/style/profile",payload,$("spbtn"));
+  if(res.err){out.innerHTML=unreachable(res);return;}
+  if(!res.ok){out.innerHTML=`<p class="err">HTTP ${res.status}.</p>`+raw(res.j);return;}
+  const p=(res.j&&res.j.style_profile)||{};let h="";
+  h+=kv("Fit feel",esc(p.fit_feel||"—"));
+  h+=kv("Region prefs",Object.keys(p.region_preferences||{}).length?esc(JSON.stringify(p.region_preferences)):"—");
+  h+=kv("Source",esc(p.source||"—"));
+  out.innerHTML=h+raw(res.j);
+};
+
+// ---------- UTILITIES: feedback ----------
+$("fbbtn").onclick=async()=>{
+  const out=$("fbout");
+  const payload={screen:$("fb_screen").value,note:$("fb_note").value,severity:$("fb_sev").value,
+    device:$("fb_device").value,os:$("fb_os").value,os_version:$("fb_osv").value};
+  const res=await postJSON("/feedback",payload,$("fbbtn"));
+  if(res.err){out.innerHTML=unreachable(res);return;}
+  if(res.status===400){out.innerHTML=`<p class="err">400 — needs at least a note or a screen.</p>`+raw(res.j);return;}
+  if(!res.ok){out.innerHTML=`<p class="err">HTTP ${res.status}.</p>`+raw(res.j);return;}
+  const t=(res.j&&res.j.ticket)||{};let h="";
+  h+=kv("Status",esc((res.j&&res.j.status)||"—"));
+  h+=kv("Route",esc(t.route||"—"));
+  h+=kv("Severity",esc(t.severity||"—"));
+  h+=kv("Kind",esc(t.kind||"—"));
+  h+=kv("Device-specific",t.device_specific?"yes":"no");
+  out.innerHTML=h+raw(res.j);
+};
+
+// initial health ping (best-effort)
+ping();
 </script></body></html>
