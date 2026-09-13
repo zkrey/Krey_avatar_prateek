@@ -86,6 +86,7 @@
 
   <div class="tabs">
     <button class="tab on" data-tab="twintest">Twin test</button>
+    <button class="tab" data-tab="identity">Identity</button>
     <button class="tab" data-tab="twin">Twin</button>
     <button class="tab" data-tab="capture">Capture</button>
     <button class="tab" data-tab="fit">Fit</button>
@@ -151,6 +152,33 @@
         appearance; full-body slots drive measurements (height from Step 1 is the scale anchor). Compare against the
         real person to check accuracy.</p>
       <div class="out" id="tt_resultsout"></div>
+    </div>
+  </div>
+
+  <!-- =================== IDENTITY (user-identification algo) =================== -->
+  <div id="identity" hidden>
+    <p class="hint" style="margin-bottom:1rem">Tests the <b>user-identification algo</b> in <code>/capture/session</code>:
+      across the uploaded set it detects every face, matches them, picks the <b>owner</b> (the identity recurring across
+      the most photos/dates), scores how sure it is, and rejects bystanders. Upload the subject across several photos —
+      optionally with other people in frame — and check it picks the right person.</p>
+
+    <div class="panel">
+      <h3>Eligibility <span class="note">/capture/session ingests biometrics → passes canRender first</span></h3>
+      <div class="row4">
+        <div><label>Account present</label><select id="id_acct"><option value="true">true</option><option value="false">false</option></select></div>
+        <div><label>DOB verified</label><select id="id_dob"><option value="true">true</option><option value="false">false</option></select></div>
+        <div><label>Birthdate (ISO)</label><input id="id_bd" value="2000-01-01"></div>
+        <div><label>Jurisdiction</label><input id="id_jur" value="IN"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Photo set <span class="note">POST /capture/session</span></h3>
+      <p class="hint">Best test: 3–5 photos of the same subject (different days/angles) + a couple with bystanders.
+        The algo should tag the recurring subject as owner and count the rest as rejected faces.</p>
+      <input type="file" id="id_files" accept="image/*" multiple>
+      <button class="go" id="id_runbtn">Identify owner</button>
+      <div class="out" id="id_out"></div>
     </div>
   </div>
 
@@ -323,7 +351,7 @@
 const $=id=>document.getElementById(id);
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));t.classList.add("on");
-  ["twintest","twin","capture","fit","gate","util"].forEach(id=>$(id).hidden=(t.dataset.tab!==id));});
+  ["twintest","identity","twin","capture","fit","gate","util"].forEach(id=>$(id).hidden=(t.dataset.tab!==id));});
 
 const api=()=>($("api").value||"").replace(/\/$/,"");
 function lab2css(rgb){return rgb?`rgb(${rgb[0]},${rgb[1]},${rgb[2]})`:"transparent";}
@@ -543,6 +571,58 @@ $("tt_runbtn").onclick=async()=>{
   }
 
   out.innerHTML=html;
+};
+
+// ---------- IDENTITY: the user-identification algo (/capture/session) ----------
+const ID_DECISION={
+  accept:            {cls:"b-ok",  label:"Accept",              note:"confident it's one consistent person"},
+  reconfirm:         {cls:"b-snug",label:"Reconfirm",          note:"likely them — one-tap 'is this you?', not a re-upload"},
+  retake_low_confidence:{cls:"b-warn",label:"Retake — low confidence", note:"couldn't be sure; ask for a clearer set"},
+  retake_no_face:    {cls:"b-warn",label:"Retake — no face",   note:"no usable face detected"},
+};
+$("id_runbtn").onclick=async()=>{
+  const fs=$("id_files").files; const out=$("id_out");
+  if(!fs.length){out.innerHTML='<p class="err">Add at least one photo (a few of the same person works best).</p>';return;}
+  out.innerHTML='<p class="hint">Detecting + matching faces…</p>';
+  const fd=new FormData();for(const f of fs)fd.append("files",f);
+  fd.append("account_present",$("id_acct").value);
+  fd.append("dob_verified",$("id_dob").value);
+  if($("id_bd").value)fd.append("birthdate",$("id_bd").value);
+  if($("id_jur").value)fd.append("jurisdiction",$("id_jur").value);
+  const res=await post("/capture/session",fd,$("id_runbtn"));
+  if(res.err){out.innerHTML=unreachable(res);return;}
+  if(res.status===403){gate403(out,res);return;}
+  if(!res.ok){out.innerHTML=`<p class="err">HTTP ${res.status}.</p>`+raw(res.j);return;}
+  const j=res.j, id=j.identity||{}, tl=j.timeline||{};
+  const dec=ID_DECISION[j.decision]||{cls:"b-snug",label:esc(j.decision||"—"),note:""};
+  let h="";
+  // decision + headline confidence
+  h+=`<div style="margin:.2rem 0 .6rem"><span class="badge ${dec.cls}">${dec.label}</span> <span class="note">${esc(dec.note)}</span></div>`;
+  if(id.overall!=null)h+=`<div class="big">${(id.overall*100).toFixed(0)}%</div><p class="note">identity confidence (backend-only — never shown to the real user)</p>`;
+
+  // owner detection — the core of the algo
+  h+=section("Owner detection");
+  const total=j.n_faces_total, owner=j.n_user_faces;
+  h+=kv("Faces detected (all people)", total!=null?total:"—");
+  h+=kv("Owner faces (the picked subject)", owner!=null?owner:"—");
+  h+=kv("Bystander faces rejected", (total!=null&&owner!=null)?Math.max(0,total-owner):"—");
+
+  // confidence breakdown
+  h+=section("Confidence breakdown");
+  if(id.consistency!=null)h+=kv("Consistency (how tightly matched faces agree)",(id.consistency*100).toFixed(0)+"%");
+  if(id.evidence!=null)h+=kv("Evidence (coverage vs 5-photo target)",(id.evidence*100).toFixed(0)+"%");
+  if(id.mean_cosine!=null)h+=kv("Mean cosine similarity",id.mean_cosine);
+  if(id.n_frames!=null)h+=kv("Owner frames used",id.n_frames);
+  if(id.n_dates!=null)h+=kv("Distinct capture dates",id.n_dates);
+
+  // timeline
+  if(tl && (tl.oldest||tl.newest||tl.n_dated!=null)){
+    h+=section("Timeline");
+    h+=kv("Oldest → newest",`${esc(tl.oldest||"—")} → ${esc(tl.newest||"—")}`);
+    h+=kv("Dated / undated photos",`${tl.n_dated!=null?tl.n_dated:"—"} / ${tl.n_undated!=null?tl.n_undated:"—"}`);
+  }
+  h+=kv("Persisted to store",j.saved?"yes":"no");
+  out.innerHTML=h+raw(j);
 };
 
 // ---------- TWIN: face ----------
