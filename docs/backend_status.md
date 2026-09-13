@@ -23,5 +23,17 @@
 - **Hair texture** (coily/curly/wavy/straight) — the last recognition gap (90% → 100%); needs a small classifier/VLM, not colour maths. Hair *colour* + eye *colour* are done.
 - Dashboard / discovery / taste engine — broader app (master spec), separate workstream.
 
+## Data & validation
+- **Skin tone is deterministic (no training)** — CIELAB → Monk by **CIEDE2000**, with the
+  off-swatch ΔE folded into confidence + the §6 recapture nudge (`app/monk.py`,
+  `app/recognition.py`). What we need is **validation/calibration**, not a training set.
+- **Recognition targets + the ~85% bet vs the literature:** `docs/recognition_thresholds.md`.
+- **Open datasets assessed + wired:** `docs/skin_data_plan.md` + `data/` — registry
+  (`data/sources.json`), fetch (`scripts/fetch_datasets.sh`), and a report harness
+  (`bench/skin_report.py` → `data/reports/`). Adopt DermaCon-IN (Indian + Monk) + SCIN to
+  calibrate the mapping, IndicFairFace to validate on Indian faces; raw images stay out of git.
+- **Alpha tester is the ground-truth instrument:** `/alpha` (`docs/alpha_hosting_guide.md`)
+  emails each flag; the flag/confirm distribution recalibrates the thresholds on real users.
+
 ## Money
 Nothing spent. Everything above is free/CPU. The only paid step ahead is the one-off GPU render benchmark, which we'll do deliberately.
