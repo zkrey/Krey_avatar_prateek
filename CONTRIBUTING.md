@@ -1,23 +1,13 @@
 # Contributing
 
-## Branch naming
+## Branches & naming
 
-`type/scope-detail` — lowercase, hyphenated.
+`main` is the single source of truth. Branch **from `main`**, one concern per branch,
+PR back into `main`, delete after merge.
 
-| Type | Use for |
-|---|---|
-| `feat/` | new capability |
-| `fix/` | bug fix |
-| `docs/` | docs only |
-| `chore/` | deps, config, tooling |
-| `bench/` | benchmark / measurement work |
-
-Examples: `feat/frontend-tester`, `fix/fit-score`, `docs/doctrine`.
-
-- One concern per branch.
-- Branch off the branch that already holds the code you build on — not always `main`.
-- `claude/*` branches are session-generated working branches; keep the pattern
-  for automated sessions, use `type/scope-detail` for everything else.
+The branch-name taxonomy (`type/scope-detail`) and the full workflow live in one place —
+**[`docs/BRANCHING_SOP.md`](docs/BRANCHING_SOP.md)**. Read it before creating a branch.
+(Not repeated here, to keep one source.)
 
 ## Commits
 

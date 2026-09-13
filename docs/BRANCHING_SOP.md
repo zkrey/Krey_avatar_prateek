@@ -13,6 +13,44 @@ branch from `main`, merge back into `main`.
 There are **no** long-lived parallel branches. No `feat/*` vs `claude/*` "canonical"
 copies of the same thing. One line of history.
 
+## Taxonomy — the naming scheme (exact)
+
+Every branch name is **`type/scope-detail`**, all lowercase, words hyphenated.
+
+```
+      feat / wardrobe-tab
+      ────   ────────────
+      type    scope-detail
+```
+
+**`type`** — one of these, and only these:
+
+| Type | Use for | Example |
+|---|---|---|
+| `feat/` | a new capability or surface | `feat/wardrobe-tab` |
+| `fix/` | a bug fix | `fix/fit-score-rounding` |
+| `docs/` | docs only, no code | `docs/doctrine-update` |
+| `chore/` | deps, config, tooling, cleanup | `chore/bump-fastapi` |
+| `bench/` | benchmark / measurement work | `bench/catvton-gpu-seconds` |
+
+**`scope-detail`** — what's inside, specific enough to know before opening: the surface,
+module, or subject touched (`frontend-identity-tab`, `capture-session`, `railway-deploy`).
+Not vague (`update`, `changes`, `wip`), not a bare type (`feat/feat`).
+
+**Rules for the name:**
+- Lowercase, hyphen-separated; no spaces, no `/` beyond the single `type/` separator.
+- The name alone must say what the branch contains. If it doesn't, rename it.
+- One concern per branch — if you need "and" in the name, split it.
+
+**Reserved / special:**
+- `main` — the one canonical branch. Never a `type/` prefix; never deleted.
+- `claude/<name>-<id>` — **auto-generated** by Claude Code sessions (`claude/` = the
+  session, `<name>` = topic, `<id>` = uniqueness). Temporary only: land its work in
+  `main` via PR, then delete it. Never a second home for canonical code.
+
+Do **not** invent new top-level prefixes, and do **not** create a readable "alias" of an
+existing branch — rename through a PR into `main` instead.
+
 ## Starting new work
 
 ```bash
@@ -21,8 +59,8 @@ git pull origin main
 git checkout -b type/scope-detail      # e.g. feat/wardrobe-tab
 ```
 
-- **Branch name says what's inside** before anyone opens it: `type/scope-detail`,
-  lowercase, hyphenated. Types: `feat/`, `fix/`, `docs/`, `chore/`, `bench/`.
+- **Name it per the Taxonomy above** — `type/scope-detail`, and the name must say
+  what's inside before anyone opens it.
 - **One concern per branch.** Don't bundle unrelated changes.
 - **Branch from `main`,** never from another feature branch (that's how work splits).
 
