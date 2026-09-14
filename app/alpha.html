@@ -35,6 +35,9 @@
   .thumbs .thumb img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
   .thumbs .thumb.warn img{outline:2px solid var(--flag);outline-offset:-2px}
   .thumbs .thumb .badge{position:absolute;top:4px;right:4px;background:var(--flag);color:#25160a;font-size:.62rem;font-weight:800;border-radius:6px;padding:.06rem .32rem}
+  .thumbs .thumb .ph{width:100%;aspect-ratio:1;border-radius:8px;border:1px solid var(--line);background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--faint);font-size:1.2rem}
+  .thumbs .thumb.proc{opacity:.7} .thumbs .thumb.proc .ph{animation:pulse 1s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:.9}}
   .thumbs .thumb .rm{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;border:none;background:rgba(10,5,7,.74);color:#fff;font-size:.95rem;line-height:1;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;transition:background .12s}
   .thumbs .thumb .rm:hover{background:var(--warn)}
   .bigdrop.drag{border-color:var(--gold);background:#2f2029}
@@ -243,33 +246,64 @@ const isImageFile=f=>{ const t=f.type||"";
   if(t) return IMG_EXT.test(f.name||"");
   return true; };
 
+// Process ONE image at a time (mobile can't hold 5 full-res decodes at once — that was the
+// slow bulk-add + tab crash). Each is decoded, downscaled on-device to <=CLIENT_MAX_PX, and
+// kept as a small JPEG (faster upload); a tiny data-URL thumbnail is used for display.
+let _procChain=Promise.resolve();
+const CLIENT_MAX_PX=1600, THUMB_PX=180;
+
 function addFiles(list){
   let skippedFull=0, skippedType=0;
   for(const f of [...list]){
     if(!isImageFile(f)){ skippedType++; continue; }
     if(PICS.some(p=>p.key===picKey(f))) continue;   // silent dedupe (re-pick / drop overlap)
     if(PICS.length>=MAX_PICS){ skippedFull++; continue; }
-    const p={file:f,key:picKey(f),id:"pic"+(picSeq++),url:URL.createObjectURL(f),issues:[],probed:false};
-    PICS.push(p); probePic(p);
+    const p={file:f,orig:f,key:picKey(f),id:"pic"+(picSeq++),url:null,issues:[],probed:false,processing:true};
+    PICS.push(p);
+    _procChain=_procChain.then(()=>processPic(p)).catch(()=>{});   // serialize: one decode at a time
   }
   renderThumbs(skippedFull, skippedType);
 }
-function probePic(p){
-  const im=new Image();
-  im.onload=()=>{ const w=im.naturalWidth,h=im.naturalHeight; p.issues=[];
-    if(Math.min(w,h)<600) p.issues.push("low-res");
-    if(w>h*1.1) p.issues.push("landscape — full-body wants portrait");
-    p.probed=true; renderThumbs(); };
-  im.onerror=()=>{ p.issues=["unreadable"]; p.probed=true; renderThumbs(); };
-  im.src=p.url;
+async function processPic(p){
+  try{
+    const r=await downscaleFile(p.orig);
+    if(r.blob) p.file=new File([r.blob], ((p.orig.name||"photo").replace(/\.[^.]+$/,""))+".jpg", {type:"image/jpeg"});
+    p.url=r.thumb; p.issues=[];
+    if(r.w&&r.h){ if(Math.min(r.w,r.h)<600)p.issues.push("low-res");
+      if(r.w>r.h*1.1)p.issues.push("landscape — full-body wants portrait"); }
+  }catch(e){
+    p.file=p.orig; try{p.url=URL.createObjectURL(p.orig);}catch(_){p.url=null;}   // fallback: keep original
+    p.issues=["preview unavailable"];
+  }
+  p.processing=false; p.probed=true; renderThumbs();
+}
+async function downscaleFile(file){
+  let bmp=null;
+  try{ bmp=await createImageBitmap(file); }catch(_){ bmp=null; }   // efficient, off-main-thread
+  if(!bmp){ bmp=await new Promise((res,rej)=>{ const im=new Image(), u=URL.createObjectURL(file);
+    im.onload=()=>res(im); im.onerror=()=>{URL.revokeObjectURL(u);rej(new Error("decode"));}; im.src=u; }); }
+  const w=bmp.width||bmp.naturalWidth, h=bmp.height||bmp.naturalHeight;
+  const s=Math.min(1, CLIENT_MAX_PX/Math.max(w,h));
+  const cw=Math.max(1,Math.round(w*s)), ch=Math.max(1,Math.round(h*s));
+  const cv=document.createElement("canvas"); cv.width=cw; cv.height=ch;
+  cv.getContext("2d").drawImage(bmp,0,0,cw,ch);
+  const ts=Math.min(1, THUMB_PX/Math.max(cw,ch)); const tc=document.createElement("canvas");
+  tc.width=Math.max(1,Math.round(cw*ts)); tc.height=Math.max(1,Math.round(ch*ts));
+  tc.getContext("2d").drawImage(cv,0,0,tc.width,tc.height);
+  const thumb=tc.toDataURL("image/jpeg",0.7);
+  const blob=await new Promise(r=>cv.toBlob(r,"image/jpeg",0.85));
+  if(bmp.close)bmp.close();
+  return {blob,w,h,thumb};
 }
 function removePic(id){ const i=PICS.findIndex(p=>p.id===id);
-  if(i>=0){ URL.revokeObjectURL(PICS[i].url); PICS.splice(i,1); renderThumbs(); } }
+  if(i>=0){ if(PICS[i].url&&PICS[i].url.indexOf("blob:")===0)URL.revokeObjectURL(PICS[i].url);
+    PICS.splice(i,1); renderThumbs(); } }
 function renderThumbs(skippedFull, skippedType){
   const g=$("thumbs"); g.innerHTML="";
   PICS.forEach((p,i)=>{
-    const fig=document.createElement("div"); fig.className="thumb"+(p.issues.length?" warn":"");
-    const im=document.createElement("img"); im.src=p.url; im.alt=`photo ${i+1}`; fig.appendChild(im);
+    const fig=document.createElement("div"); fig.className="thumb"+(p.issues.length?" warn":"")+(p.processing?" proc":"");
+    if(p.url){ const im=document.createElement("img"); im.src=p.url; im.alt=`photo ${i+1}`; im.loading="lazy"; im.decoding="async"; fig.appendChild(im); }
+    else { const ph=document.createElement("div"); ph.className="ph"; ph.textContent="…"; fig.appendChild(ph); }
     if(p.issues.length){ const b=document.createElement("span"); b.className="badge"; b.textContent="⚠"; b.title=p.issues.join(", "); fig.appendChild(b); }
     const rm=document.createElement("button"); rm.type="button"; rm.className="rm"; rm.textContent="×";
     rm.title="Remove"; rm.setAttribute("aria-label",`Remove photo ${i+1}`); rm.onclick=()=>removePic(p.id);
@@ -338,9 +372,11 @@ function slotConf(a,n){ const s=a&&a[n]; return (s&&typeof s==="object"&&s.confi
 $("buildbtn").onclick=async()=>{
   const err=$("builderr");
   if(!$("consent").checked){ err.innerHTML='<p class="err">Please confirm you\'re 18+ and consent, so we can process the photos.</p>';return; }
+  if(!PICS.length){ err.innerHTML='<p class="err">Add at least one photo — that\'s all it takes.</p>';return; }
+  const b=$("buildbtn"); b.disabled=true; b.textContent="Preparing photos…";
+  await _procChain;                                   // let any on-device downscaling finish first
   const files=PICS.map(p=>p.file);
-  if(!files.length){ err.innerHTML='<p class="err">Add at least one photo — that\'s all it takes.</p>';return; }
-  err.innerHTML=''; const b=$("buildbtn"); b.disabled=true; b.textContent="Finding you & reading…";
+  err.innerHTML=''; b.textContent="Finding you & reading…";
 
   const fd=new FormData(); files.forEach(f=>fd.append("files",f)); addGate(fd);
   const uid=($("name").value.trim()||$("email").value.trim()); if(uid)fd.append("user_id",uid);
