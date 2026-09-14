@@ -112,7 +112,7 @@ def analyze_body(
     declared_body_type: Optional[str] = None,
     model_path: Optional[str] = None,
     user_reference: Optional[Sequence[float]] = None,
-    isolate: bool = True,
+    isolate: bool = None,
 ) -> dict:
     """
     Consolidate build across full-body frames. Returns:
@@ -123,12 +123,16 @@ def analyze_body(
     the user's face is located and the pose whose head sits there is measured, instead of
     whoever is most prominent. Without it, the single most-prominent pose is used.
 
-    isolate=True (default) runs each frame's pose pass in a SUBPROCESS, so MediaPipe's
-    occasional native abort on a bad frame (a SIGABRT no try/except can catch) kills only
-    that frame — the capture continues. Set False to measure in-process (tests / trusted
-    input).
+    isolate runs each frame's pose pass in a SUBPROCESS, so MediaPipe's occasional native
+    abort on a bad frame (a SIGABRT no try/except can catch) kills only that frame. But the
+    subprocess is a second Python interpreter (~300 MB) stacked on the models the capture
+    step leaves resident, which OOM-kills a 1 GB container. So it now defaults OFF (measure
+    in-process) to fit small hosts; set KREY_POSE_ISOLATE=1 on a larger host to get the
+    per-frame crash isolation back. Explicit arg still wins (tests pass isolate directly).
     """
     import os
+    if isolate is None:
+        isolate = (os.environ.get("KREY_POSE_ISOLATE") or "0") == "1"
 
     per_frame, good = [], []
     for path in sorted(image_paths):
