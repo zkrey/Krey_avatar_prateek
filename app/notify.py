@@ -123,7 +123,11 @@ def _send_via_resend(ticket: dict, c: dict, dedup: str) -> bool:
                           "subject": subject, "text": body}).encode("utf-8")
     req = urllib.request.Request(
         "https://api.resend.com/emails", data=payload, method="POST",
-        headers={"Authorization": f"Bearer {c['resend_key']}", "Content-Type": "application/json"})
+        headers={"Authorization": f"Bearer {c['resend_key']}", "Content-Type": "application/json",
+                 # A real User-Agent is required: the default 'Python-urllib' trips Cloudflare's
+                 # bot filter in front of api.resend.com (HTTP 403, 'error code: 1010') before the
+                 # request reaches Resend. Accept keeps the API returning JSON errors.
+                 "User-Agent": "Krey-Alpha-Feedback/1.0", "Accept": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=15) as r:
             ok = 200 <= r.status < 300
