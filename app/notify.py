@@ -17,11 +17,37 @@ from __future__ import annotations
 import logging
 import os
 import smtplib
+import socket
 import ssl
+import threading
 from email.message import EmailMessage
 from typing import Optional
 
 log = logging.getLogger("krey.notify")
+
+# Serialises sends so the brief IPv4-only DNS override below can't overlap another send.
+_send_lock = threading.Lock()
+
+
+class _force_ipv4:
+    """Context manager: resolve hostnames to IPv4 (A records) only, for its duration.
+
+    Railway (and many container hosts) hand the container an IPv6 address but no IPv6
+    egress route. Gmail's smtp host has AAAA records, so smtplib tries IPv6 first and
+    connect() fails immediately with OSError(101, 'Network is unreachable'). Pinning
+    getaddrinfo to AF_INET makes smtplib use the routable IPv4 path. smtplib keeps the
+    hostname for STARTTLS SNI + cert verification, so TLS is unaffected. Process-global
+    for its short window, so it runs under _send_lock.
+    """
+    def __enter__(self):
+        self._orig = socket.getaddrinfo
+        def ipv4_only(host, port, family=0, type=0, proto=0, flags=0):
+            return self._orig(host, port, socket.AF_INET, type, proto, flags)
+        socket.getaddrinfo = ipv4_only
+        return self
+    def __exit__(self, *exc):
+        socket.getaddrinfo = self._orig
+        return False
 
 
 def _cfg() -> dict:
@@ -81,17 +107,18 @@ def send_feedback_email(ticket: dict) -> bool:
     try:
         msg = build_message(ticket, c)
         ctx = ssl.create_default_context()
-        if c["port"] == 465:
-            with smtplib.SMTP_SSL(c["host"], c["port"], timeout=15, context=ctx) as s:
-                s.login(c["user"], c["pw"])
-                s.send_message(msg)
-        else:
-            with smtplib.SMTP(c["host"], c["port"], timeout=15) as s:
-                s.ehlo()
-                s.starttls(context=ctx)
-                s.ehlo()
-                s.login(c["user"], c["pw"])
-                s.send_message(msg)
+        with _send_lock, _force_ipv4():
+            if c["port"] == 465:
+                with smtplib.SMTP_SSL(c["host"], c["port"], timeout=15, context=ctx) as s:
+                    s.login(c["user"], c["pw"])
+                    s.send_message(msg)
+            else:
+                with smtplib.SMTP(c["host"], c["port"], timeout=15) as s:
+                    s.ehlo()
+                    s.starttls(context=ctx)
+                    s.ehlo()
+                    s.login(c["user"], c["pw"])
+                    s.send_message(msg)
         # Success is logged (not just the failure) so a working SMTP path is
         # observable in the host logs — the response's `emailed` flag only means
         # "configured", the real send happens here in the background.

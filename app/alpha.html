@@ -126,8 +126,9 @@
         <li><b>For body shape</b> — add one full-body photo (head-to-toe, front-on) + your height → <b>shape + measurements</b></li>
         <li><b>To sharpen</b> <span class="fine">(optional)</span> — a second face from another day, or a side/angled body shot → tighter fit</li>
       </ol>
-      <div class="rules">Clear, well-lit, whole subject in frame works best; full-body shots read best <b>tall/portrait</b>.
-        Screenshots, memes or group photos won't test well — they're flagged as you add them, and you can tap × to swap.</div>
+      <div class="rules"><b>Group photos are fine</b> — Krey finds you and ignores everyone else. Clear, well-lit,
+        whole subject in frame reads best; full-body shots read best <b>tall/portrait</b>. Screenshots and memes
+        won't test well and are flagged as you add them — but nothing is rejected; tap × any time to swap.</div>
     </div>
     <label class="bigdrop" id="drop">
       <span class="ic">📸</span><div class="t">Add photos</div><div class="s">tap or drop from your camera roll — one is enough · up to 5</div>
@@ -208,17 +209,26 @@ function addGate(fd){ for(const k in GATE)fd.append(k,GATE[k]); const uid=$("nam
 // pick so the SAME photo can be re-added and adding more APPENDS instead of replacing).
 const PICS=[]; let picSeq=0;
 const picKey=f=>`${f.name}|${f.size}|${f.lastModified||0}`;
+const IMG_EXT=/\.(jpe?g|png|gif|webp|bmp|heic|heif|tiff?|avif)$/i;
+// Accept broadly: an image MIME, OR an empty type (iOS HEIC / Android content-URIs /
+// cloud photos often report ""), OR an image extension. Only reject a file that has a
+// clearly non-image type AND no image extension. Group photos and low-res are NEVER
+// rejected here — the server picks the owner from a group, and low-res is only flagged.
+const isImageFile=f=>{ const t=f.type||"";
+  if(t.startsWith("image/")) return true;
+  if(t) return IMG_EXT.test(f.name||"");
+  return true; };
 
 function addFiles(list){
-  let skippedFull=0;
+  let skippedFull=0, skippedType=0;
   for(const f of [...list]){
-    if(!f.type||!f.type.startsWith("image/")) continue;
+    if(!isImageFile(f)){ skippedType++; continue; }
     if(PICS.some(p=>p.key===picKey(f))) continue;   // silent dedupe (re-pick / drop overlap)
     if(PICS.length>=MAX_PICS){ skippedFull++; continue; }
     const p={file:f,key:picKey(f),id:"pic"+(picSeq++),url:URL.createObjectURL(f),issues:[],probed:false};
     PICS.push(p); probePic(p);
   }
-  renderThumbs(skippedFull);
+  renderThumbs(skippedFull, skippedType);
 }
 function probePic(p){
   const im=new Image();
@@ -231,7 +241,7 @@ function probePic(p){
 }
 function removePic(id){ const i=PICS.findIndex(p=>p.id===id);
   if(i>=0){ URL.revokeObjectURL(PICS[i].url); PICS.splice(i,1); renderThumbs(); } }
-function renderThumbs(skippedFull){
+function renderThumbs(skippedFull, skippedType){
   const g=$("thumbs"); g.innerHTML="";
   PICS.forEach((p,i)=>{
     const fig=document.createElement("div"); fig.className="thumb"+(p.issues.length?" warn":"");
@@ -241,18 +251,21 @@ function renderThumbs(skippedFull){
     rm.title="Remove"; rm.setAttribute("aria-label",`Remove photo ${i+1}`); rm.onclick=()=>removePic(p.id);
     fig.appendChild(rm); g.appendChild(fig);
   });
-  summarizePics(skippedFull);
+  summarizePics(skippedFull, skippedType);
 }
-function summarizePics(skippedFull){
+function summarizePics(skippedFull, skippedType){
   const total=PICS.length, c=$("count"); c.hidden=!total;
   let msg=`${total} of ${MAX_PICS} added.`;
   if(total&&total<MAX_PICS) msg+=` Add ${MAX_PICS-total} more, or read now.`;
   else if(total>=MAX_PICS) msg=`Full set — ${MAX_PICS} of ${MAX_PICS}. Remove one (×) to swap.`;
   if(skippedFull) msg+=` (${skippedFull} not added — 5 is the max.)`;
+  if(skippedType) msg+=` (${skippedType} skipped — not an image file.)`;
   c.textContent=msg;
+  // Advisory only — flagged photos ARE added and Krey still reads them; this is a heads-up,
+  // not a rejection. Group photos are fine (the owner is picked server-side).
   const warns=PICS.map((p,i)=>p.issues.length?`#${i+1} ${p.issues.join(" · ")}`:null).filter(Boolean);
   const pw=$("picwarn");
-  if(warns.length){ pw.hidden=false; pw.innerHTML=`⚠ ${warns.length} photo${warns.length>1?"s":""} may not test well — ${esc(warns.join("; "))}. Tap × to drop one and add a sharp, portrait shot.`; }
+  if(warns.length){ pw.hidden=false; pw.innerHTML=`⚠ ${warns.length} photo${warns.length>1?"s":""} added, but may read less well — ${esc(warns.join("; "))}. Krey will still try; for the sharpest read, tap × to swap in a clearer, portrait shot.`; }
   else { pw.hidden=true; pw.textContent=""; }
 }
 // pick: append, then clear the input so re-picking the same file still fires onchange
