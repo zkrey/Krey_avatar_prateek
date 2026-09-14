@@ -104,6 +104,11 @@
   pre{background:#0f0709;border:1px solid var(--line);border-radius:8px;padding:.7rem;overflow:auto;font-size:.7rem;color:var(--gold-soft)}
   .apibar{font-size:.72rem;color:var(--faint);margin-top:1.4rem}
   .apibar input{display:inline-block;width:auto;min-width:14rem;font-size:.76rem;padding:.3rem .5rem}
+  .sendbar{position:fixed;left:0;right:0;bottom:0;z-index:50;background:var(--surface);border-top:1px solid var(--line);padding:.7rem 1.15rem;display:flex;gap:.8rem;align-items:center;justify-content:space-between;box-shadow:0 -8px 24px rgba(0,0,0,.4)}
+  .sendbar .lbl{font-size:.82rem;color:var(--muted);line-height:1.25}.sendbar .lbl b{color:var(--gold-soft)}
+  .sendbar button{flex:none;background:var(--gold);color:#211217;border:none;font-family:var(--sans);font-weight:700;font-size:.92rem;border-radius:11px;padding:.62rem 1.15rem;cursor:pointer;transition:filter .15s}
+  .sendbar button:hover{filter:brightness(1.06)} .sendbar button:disabled{opacity:.55;cursor:not-allowed;filter:none}
+  body.hasbar .wrap{padding-bottom:6rem}
   [hidden]{display:none!important}
 </style></head>
 <body><div class="wrap">
@@ -187,6 +192,12 @@
     needs no account, and stores nothing — the twin is derived and the photos discarded. Casual photos give estimates;
     a guided capture gives fit-grade.</p>
   <div class="apibar">Advanced · API base <input id="api" placeholder="(same server — leave blank)" value=""></div>
+</div>
+
+<!-- sticky submit — always in view once a read is shown, so a flag can be sent from anywhere -->
+<div class="sendbar" id="sendbar" hidden>
+  <span class="lbl"><b id="barflags">0</b> flagged · <b id="barok">0</b> confirmed — <span id="barhint">tap Flag/Fix on anything wrong</span></span>
+  <button id="stickysend">Send feedback ▸</button>
 </div>
 
 <script>
@@ -405,18 +416,21 @@ function wireControls(){
   document.querySelectorAll("[data-comment]").forEach(t=>{ if(t.dataset.w)return; t.dataset.w="1";
     t.oninput=()=>{const k=t.dataset.comment; if(FLAGS[k])FLAGS[k].comment=t.value;};});
 }
-function refreshCount(){ $("flagcount").textContent=Object.keys(FLAGS).length; const cc=$("confirmcount"); if(cc)cc.textContent=Object.keys(CONFIRMED).length; }
+function refreshCount(){
+  const nf=Object.keys(FLAGS).length, nc=Object.keys(CONFIRMED).length;
+  $("flagcount").textContent=nf; const cc=$("confirmcount"); if(cc)cc.textContent=nc;
+  const bf=$("barflags"), bo=$("barok"); if(bf)bf.textContent=nf; if(bo)bo.textContent=nc;
+  const hint=$("barhint"); if(hint) hint.textContent = (nf||nc)?"ready to send" : "or just send with a note";
+  // The sticky Send bar is visible whenever a read is on screen, so the CTA is always reachable
+  // right after flagging a field (the Step-3 button alone was too far down to find).
+  const show = !$("feedbackpanel").hidden;
+  $("sendbar").hidden=!show; document.body.classList.toggle("hasbar", show);
+}
 
-document.addEventListener("click",e=>{
-  if(e.target&&e.target.id==="minigo"){ const v=$("minih").value; if(v){$("height").value=v; $("optdetails").open=true;} $("buildbtn").click(); }
-  if(e.target&&e.target.id==="dismisssharper"){ const s=$("sharper"); if(s)s.hidden=true; }
-  if(e.target&&e.target.id==="dismissrecap"){ const s=$("recapbox"); if(s)s.hidden=true; }
-});
-
-// ---- send flags to the team via /feedback ----
-$("sendbtn").onclick=async()=>{
+async function submitFeedback(btn){
   const out=$("sendout"), overall=$("overall").value.trim(), flags=Object.values(FLAGS);
-  if(!flags.length && !overall){ out.innerHTML='<p class="err">Flag something wrong, or add a note, before sending.</p>';return; }
+  if(!flags.length && !overall){ out.innerHTML='<p class="err">Flag something wrong, or add a note below, before sending.</p>';
+    $("feedbackpanel").scrollIntoView({behavior:"smooth",block:"center"}); return; }
   const who=[$("name").value.trim(),$("email").value.trim()].filter(Boolean).join(" · ");
   let note="ALPHA TWIN CHECK — flagged as wrong:\n";
   if(flags.length) flags.forEach(f=>{ note+=`• ${f.label}: shown "${f.value}"${f.comment?` → should be: ${f.comment}`:" (no detail)"}\n`; });
@@ -425,12 +439,26 @@ $("sendbtn").onclick=async()=>{
   if(overall) note+=`\nOther notes: ${overall}\n`;
   if(who) note+=`\nFrom: ${who}\n`;
   note+=`\nFull read: ${JSON.stringify(SNAPSHOT)}`;
-  const b=$("sendbtn"); b.disabled=true; b.textContent="Sending…";
+  const btns=[$("sendbtn"),$("stickysend")].filter(Boolean);
+  btns.forEach(b=>{b.disabled=true;}); if($("sendbtn"))$("sendbtn").textContent="Sending…"; if($("stickysend"))$("stickysend").textContent="Sending…";
   const res=await postJSON("/feedback",{screen:"alpha-twin-check",note:note,severity:(flags.length>=3?"high":"normal"),source:"alpha"});
-  b.disabled=false; b.textContent="Send feedback to the team";
-  if(res.err||!res.ok){ out.innerHTML='<p class="err">Couldn\'t send just now — please try again.</p>'; return; }
+  if(res.err||!res.ok){ out.innerHTML='<p class="err">Couldn\'t send just now — please try again.</p>';
+    btns.forEach(b=>{b.disabled=false;}); if($("sendbtn"))$("sendbtn").textContent="Send feedback to the team"; if($("stickysend"))$("stickysend").textContent="Send feedback ▸"; return; }
   const emailed=res.j&&res.j.emailed;
-  out.innerHTML=`<p class="okmsg">✓ Thank you — ${emailed?"emailed to the Krey team":"sent to the team"}${flags.length?` (${flags.length} flag${flags.length>1?"s":""})`:""}. Ref: ${esc((res.j&&res.j.ticket&&res.j.ticket.dedup_key)||"received")}.</p>`;
-  b.disabled=true;
-};
+  const msg=`✓ Thank you — ${emailed?"emailed to the Krey team":"sent to the team"}${flags.length?` (${flags.length} flag${flags.length>1?"s":""})`:""}. Ref: ${esc((res.j&&res.j.ticket&&res.j.ticket.dedup_key)||"received")}.`;
+  out.innerHTML=`<p class="okmsg">${msg}</p>`;
+  if($("sendbtn"))$("sendbtn").textContent="Sent ✓";
+  if($("stickysend"))$("stickysend").textContent="Sent ✓";
+  // leave buttons disabled after a successful send
+}
+
+document.addEventListener("click",e=>{
+  if(e.target&&e.target.id==="minigo"){ const v=$("minih").value; if(v){$("height").value=v; $("optdetails").open=true;} $("buildbtn").click(); }
+  if(e.target&&e.target.id==="dismisssharper"){ const s=$("sharper"); if(s)s.hidden=true; }
+  if(e.target&&e.target.id==="dismissrecap"){ const s=$("recapbox"); if(s)s.hidden=true; }
+});
+
+// ---- send flags to the team via /feedback (both the Step-3 button and the sticky bar) ----
+$("sendbtn").onclick=()=>submitFeedback();
+$("stickysend").onclick=()=>submitFeedback();
 </script></body></html>
