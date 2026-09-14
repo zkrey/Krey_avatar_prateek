@@ -34,6 +34,27 @@ _mp_lock = threading.Lock()
 _landmarkers: dict = {}
 _segmenter = {"path": None, "obj": None}
 
+
+def release_models():
+    """Free the cached MediaPipe face models (landmarker + segmenter). Called before the
+    body/pose pass so a small host (1 GB) isn't holding identity + face-parse + pose model
+    families at once — they don't fit together. They rebuild lazily on the next face read."""
+    global _segmenter
+    with _mp_lock:
+        for fl in list(_landmarkers.values()):
+            try:
+                fl.close()
+            except Exception:
+                pass
+        _landmarkers.clear()
+        obj = _segmenter.get("obj")
+        if obj is not None:
+            try:
+                obj.close()
+            except Exception:
+                pass
+        _segmenter = {"path": None, "obj": None}
+
 # MediaPipe FaceLandmarker iris landmark indices (478-pt model): [centre, ring x4].
 LEFT_IRIS = [468, 469, 470, 471, 472]
 RIGHT_IRIS = [473, 474, 475, 476, 477]

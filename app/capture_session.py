@@ -52,6 +52,19 @@ def _get_app(det_size: int = None):
     return _analysis_app
 
 
+def release_app():
+    """Drop the cached InsightFace analyzer to free its onnxruntime sessions (~200 MB).
+    Called before the pose pass on a small host so identity + pose don't both sit resident;
+    it rebuilds lazily on the next /capture/session."""
+    global _analysis_app
+    _analysis_app = None
+    try:
+        import gc
+        gc.collect()
+    except Exception:
+        pass
+
+
 def _exif_datetime(path: str) -> Optional[str]:
     try:
         from PIL import Image

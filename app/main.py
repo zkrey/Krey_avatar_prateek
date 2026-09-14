@@ -478,6 +478,16 @@ async def body_measure_ep(
     raws = [r for r in [await f.read() for f in files] if r]
     if not raws:
         raise HTTPException(400, "no images")
+    # Free the identity + face-parse models before the pose pass: on a 1 GB host all three
+    # model families can't sit resident together (the pose step OOM-killed the container even
+    # in-process). They rebuild lazily on the next capture. Best-effort.
+    try:
+        from app import face_pipeline as _fp
+        _fp.release_models()
+        from app import capture_session as _cs
+        _cs.release_app()
+    except Exception:
+        pass
     paths, d = _save_uploads(raws)
     try:
         from app import body_session as bs
