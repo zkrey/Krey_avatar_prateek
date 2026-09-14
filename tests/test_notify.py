@@ -36,8 +36,9 @@ def test_build_message_carries_note_and_headers(monkeypatch):
     msg = notify.build_message(TICKET)
     assert msg["To"] == "team@example.com"
     assert msg["From"] == "krey@example.com"             # defaults to SMTP user
-    assert msg["Subject"].startswith("Feedback from alpha test")
-    assert "high" in msg["Subject"] and "abc123" in msg["Subject"]
+    assert msg["Subject"].startswith("Krey alpha feedback")
+    # severity in the subject; a note snippet replaces the (constant) dedup when present
+    assert "high" in msg["Subject"] and "green" in msg["Subject"]
     body = msg.get_content()
     assert "should be green" in body and "severity : high" in body
 

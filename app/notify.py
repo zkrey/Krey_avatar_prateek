@@ -83,7 +83,26 @@ def _subject_and_body(ticket: dict) -> tuple:
     sev = ticket.get("severity", "normal")
     kind = ticket.get("kind", "?")
     dedup = ticket.get("dedup_key", "")
-    subject = f"Feedback from alpha test · {sev} · {kind} · {dedup}"
+    # Unique, informative subject per ticket. The old subject was identical every time
+    # (dedup is derived from severity/kind, not the note), so Gmail threaded them all into
+    # one collapsed conversation and spam filters disliked the repetition. Include the
+    # timestamp + a snippet of what the user actually said so each email is distinct.
+    created = ticket.get("created_at", "") or ""
+    tshort = created[5:16].replace("T", " ") if len(created) >= 16 else created  # MM-DD HH:MM
+    note = ticket.get("note") or ""
+    snippet = ""
+    for line in note.splitlines():
+        ls = line.strip()
+        if ls.startswith("Other notes:"):
+            snippet = ls[len("Other notes:"):].strip(); break
+    if not snippet:
+        for line in note.splitlines():
+            ls = line.strip().lstrip("•").strip()
+            if ls and not ls.startswith(("ALPHA TWIN", "From:", "Full read", "Confirmed", "(no")):
+                snippet = ls; break
+    if len(snippet) > 60:
+        snippet = snippet[:59] + "…"
+    subject = f"Krey alpha feedback · {tshort} · {sev}" + (f" · {snippet}" if snippet else f" · {dedup}")
     body = "\n".join([
         "New alpha Twin Check feedback.",
         "",
