@@ -92,6 +92,32 @@ def _attributes_for_crop(crop_bgr) -> Optional[dict]:
                               hair_features=feats)
 
 
+def _owner_thumb(faces, idxs, max_px: int = 220) -> Optional[str]:
+    """A small base64 JPEG crop of the owner's best face, for the user to confirm identity.
+    Best-effort: returns None if it can't be produced. Not persisted (derive-and-discard)."""
+    try:
+        import base64
+        import cv2
+        # best available owner face: highest det_score among the given indices
+        i = max(idxs, key=lambda j: faces[j].get("det", 0.0))
+        f = faces[i]
+        x0, y0, x1, y1 = f["bbox"]; H, W = f["shape"]
+        pad = int(0.45 * max(x1 - x0, y1 - y0))          # include hair + a little margin
+        crop = f["img"][max(0, y0 - pad):min(H, y1 + pad), max(0, x0 - pad):min(W, x1 + pad)]
+        if not getattr(crop, "size", 0):
+            return None
+        ch, cw = crop.shape[:2]
+        s = min(1.0, max_px / float(max(ch, cw)))
+        if s < 1.0:
+            crop = cv2.resize(crop, (max(1, int(cw * s)), max(1, int(ch * s))))
+        ok, buf = cv2.imencode(".jpg", crop, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+        if not ok:
+            return None
+        return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode("ascii")
+    except Exception:
+        return None
+
+
 def analyze_capture(image_paths: List[str], read_attributes: bool = True,
                     max_frames: int = None) -> dict:
     """
@@ -149,6 +175,11 @@ def analyze_capture(image_paths: List[str], read_attributes: bool = True,
     picks = cc.select_best_frames(
         [{"index": i, "quality": _q(i), "date": faces[i]["date"]} for i in user_idx],
         target=max_frames)
+
+    # A small crop of the face Krey locked onto as the owner, returned so the user can
+    # eyeball 'yes, that's me' while checking the read. It's their own uploaded photo,
+    # returned transiently to their own session — not stored (derive-and-discard holds).
+    owner_thumb = _owner_thumb(faces, picks or user_idx)
 
     timeline = {
         "oldest": known[0] if known else None,
@@ -212,6 +243,7 @@ def analyze_capture(image_paths: List[str], read_attributes: bool = True,
         "timeline": timeline,
         "appearance": appearance,
         "frames": frames,
+        "owner_thumb": owner_thumb,      # small base64 crop of the picked owner face (transient)
         "n_faces_total": len(faces),
         "n_user_faces": len(user_idx),
         # owner-only retention: only the owner is profiled; everyone else in the pile is

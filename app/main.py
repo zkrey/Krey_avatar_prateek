@@ -43,9 +43,17 @@ from app.recognition import recognition_from_body_models
 
 app = FastAPI(title="Krey Avatar — Service A (twin extraction)", version="0.5.0")
 
-# Surface the krey.* diagnostic loggers (capture/body/notify) at INFO — uvicorn leaves the
-# root logger at WARNING, which was swallowing the per-slice read summaries.
-logging.getLogger("krey").setLevel(logging.INFO)
+# Surface the krey.* diagnostic loggers (capture/body/notify) at INFO. Setting the level
+# alone wasn't enough — with no INFO-level handler these records fell through to Python's
+# lastResort handler, which only emits WARNING+, so every INFO (email-sent, read summaries)
+# was silently dropped. Attach an explicit stdout handler so they actually reach the logs.
+_krey_log = logging.getLogger("krey")
+_krey_log.setLevel(logging.INFO)
+if not _krey_log.handlers:
+    _kh = logging.StreamHandler()
+    _kh.setFormatter(logging.Formatter("%(levelname)s:%(name)s: %(message)s"))
+    _krey_log.addHandler(_kh)
+    _krey_log.propagate = False
 
 
 @app.on_event("startup")
@@ -438,6 +446,7 @@ async def capture_session_ep(
         "identity": result["identity"],
         "timeline": result["timeline"],
         "appearance": result["appearance"],
+        "owner_thumb": result.get("owner_thumb"),   # transient crop of the picked owner face
         "n_faces_total": result["n_faces_total"],
         "n_user_faces": result["n_user_faces"],
         "saved": saved,
