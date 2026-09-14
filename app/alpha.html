@@ -55,6 +55,8 @@
   input:focus,select:focus,textarea:focus{outline:2px solid var(--gold-dim);outline-offset:1px;border-color:var(--gold-dim)}
   textarea{min-height:3rem;resize:vertical}
   .row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.6rem}.row2{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+  .hgrp{display:flex;gap:.4rem}.hgrp select{width:auto;flex:none}.hgrp input{flex:1}
+  .hgrp #ftin{display:flex;gap:.4rem;flex:1}.hgrp #ftin input{flex:1;min-width:0}
   @media(max-width:480px){.row2{grid-template-columns:1fr}}
   .consent{display:flex;gap:.55rem;align-items:flex-start;margin-top:1rem;font-size:.83rem;color:var(--muted)}
   .consent input{width:auto;margin-top:.15rem}
@@ -148,8 +150,19 @@
       <div class="optbody">
         <p class="fine" style="margin:.2rem 0">Shape &amp; proportions need no input. Height is the one number that
           unlocks absolute measurements — and lets Krey cross-check the read against you.</p>
-        <div class="row3">
-          <div><label for="height">Height (cm)</label><input type="number" id="height" placeholder="e.g. 170"></div>
+        <div>
+          <label for="height">Height <span class="fine">cm or feet/inches — unlocks measurements</span></label>
+          <div class="hgrp">
+            <select id="hunit"><option value="cm">cm</option><option value="ftin">ft / in</option></select>
+            <input type="number" id="height" placeholder="e.g. 170" inputmode="decimal" step="0.1">
+            <span id="ftin" hidden>
+              <input type="number" id="hft" placeholder="ft" inputmode="numeric" min="0" step="1">
+              <input type="number" id="hin" placeholder="in" inputmode="decimal" min="0" step="0.5">
+            </span>
+          </div>
+          <div class="fine" id="hconv" style="margin-top:.25rem"></div>
+        </div>
+        <div class="row2">
           <div><label for="weight">Weight (kg)</label><input type="number" id="weight" placeholder="optional"></div>
           <div><label for="sex">Sex</label><select id="sex"><option value="">—</option><option value="2">Female</option><option value="1">Male</option></select></div>
         </div>
@@ -286,6 +299,24 @@ const drop=$("drop");
 ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("drag");}));
 ["dragleave","dragend","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("drag");}));
 drop.addEventListener("drop",e=>{ const dt=e.dataTransfer; if(dt&&dt.files&&dt.files.length){ addFiles(dt.files); } });
+
+// ---- height: accept cm OR feet/inches; #height stays the canonical cm value the API gets ----
+function syncHeight(){
+  const u=$("hunit").value;
+  $("height").hidden=(u!=="cm"); $("ftin").hidden=(u!=="ftin");
+  if(u==="ftin"){
+    const ft=parseFloat($("hft").value)||0, inch=parseFloat($("hin").value)||0;
+    const cm=(ft||inch)?(ft*30.48+inch*2.54):0;
+    $("height").value=cm?cm.toFixed(1):"";                 // write canonical cm for the build
+    $("hconv").textContent=cm?`= ${cm.toFixed(1)} cm`:"";
+  } else {
+    const cm=parseFloat($("height").value)||0;
+    if(cm){ const totIn=cm/2.54, ft=Math.floor(totIn/12), inch=Math.round(totIn-ft*12);
+      $("hconv").textContent=`= ${ft}′ ${inch}″`; } else $("hconv").textContent="";
+  }
+}
+$("hunit").onchange=syncHeight; $("hft").oninput=syncHeight; $("hin").oninput=syncHeight; $("height").oninput=syncHeight;
+syncHeight();
 
 // ---- cards ----
 function fieldCard(key,label,valueHTML,plain,conf){
