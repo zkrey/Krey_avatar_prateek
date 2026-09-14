@@ -13,9 +13,12 @@ The reconciliation + decision are pure (tested without a model); the pose pass i
 Declared height is the scale anchor — without it there is no absolute size.
 """
 from __future__ import annotations
+import logging
 from typing import List, Optional, Sequence, Mapping
 from app import capture_core as cc
 from app import measure_core as core
+
+_log = logging.getLogger("krey.body")
 
 # soft-confirm ladder for the body capture (mirrors the face one)
 ACCEPT_FRAMES = 3
@@ -156,6 +159,10 @@ def analyze_body(
         ledger = None
 
     body_conf = ledger["body_confidence"] if ledger else 0.0
+    _log.info("body read: frames=%d measurable=%d parts=%d shape=%s decision=%s",
+              len(per_frame), len(good), len(measurements),
+              (body_shape or {}).get("shape") if body_shape else None,
+              body_capture_decision(len(good), body_conf))
     return {
         "decision": body_capture_decision(len(good), body_conf),
         "n_frames_total": len(per_frame),

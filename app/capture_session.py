@@ -15,11 +15,14 @@ swap for a licence-cleared model before commercial launch). Auto-downloads on fi
 """
 from __future__ import annotations
 from typing import List, Optional
+import logging
 import os
 
 from app import capture_core as cc
 from app import face
 from app import face_pipeline as fp
+
+log = logging.getLogger("krey.capture")
 
 # attribute -> aggregation strategy: identity-stable vs. time-varying (recency-weighted)
 _ATTR_MODE = {"skin_tone": "stable", "eye_colour": "stable",
@@ -144,6 +147,16 @@ def analyze_capture(image_paths: List[str], read_attributes: bool = True,
             pad = int(0.6 * max(x1 - x0, y1 - y0))       # include hair + a margin
             crop = f["img"][max(0, y0 - pad):min(H, y1 + pad), max(0, x0 - pad):min(W, x1 + pad)]
             rec = _attributes_for_crop(crop) if crop.size else None
+            # Diagnostic: appearance comes back empty when the face-parser finds no face in the
+            # crop (e.g. a downscaled full-body shot). Log crop size + which slices were read so
+            # a failed read is explainable from the host logs rather than guessed at.
+            if rec is None:
+                ch, cw = (crop.shape[0], crop.shape[1]) if getattr(crop, "size", 0) else (0, 0)
+                log.warning("attr read EMPTY: face=%dx%d crop=%dx%d photo=%s (face-parser found no face)",
+                            x1 - x0, y1 - y0, cw, ch, f["photo"])
+            else:
+                got = [a for a in _ATTR_MODE if (rec.get(a) or {}).get("value") is not None]
+                log.info("attr read OK: face=%dx%d photo=%s slices=%s", x1 - x0, y1 - y0, f["photo"], got or "none")
             slot = {"photo": f["photo"], "date": f["date"], "read": rec is not None}
             if rec:
                 for attr in _ATTR_MODE:
@@ -166,6 +179,13 @@ def analyze_capture(image_paths: List[str], read_attributes: bool = True,
             appearance[attr] = cc.aggregate_categorical(obs, mode="recent", dates=d)
         else:
             appearance[attr] = cc.aggregate_categorical(obs, mode="stable")
+
+    # Summary of the whole read so a partial/empty result is explainable from the logs:
+    # which appearance slices got a value, and how many faces/frames fed them.
+    filled = [a for a in _ATTR_MODE if (appearance.get(a) or {}).get("value") is not None]
+    log.info("capture read: faces=%d owner_faces=%d picks=%d frames_read=%d appearance_filled=%s decision=%s",
+             len(faces), len(user_idx), len(picks), sum(1 for s in frames if s.get("read")),
+             filled or "none", decision)
 
     return {
         "decision": decision,
