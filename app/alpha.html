@@ -35,6 +35,9 @@
   .thumbs .thumb img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
   .thumbs .thumb.warn img{outline:2px solid var(--flag);outline-offset:-2px}
   .thumbs .thumb .badge{position:absolute;top:4px;right:4px;background:var(--flag);color:#25160a;font-size:.62rem;font-weight:800;border-radius:6px;padding:.06rem .32rem}
+  .thumbs .thumb .rm{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;border:none;background:rgba(10,5,7,.74);color:#fff;font-size:.95rem;line-height:1;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;transition:background .12s}
+  .thumbs .thumb .rm:hover{background:var(--warn)}
+  .bigdrop.drag{border-color:var(--gold);background:#2f2029}
   .count{font-size:.8rem;color:var(--gold-soft);margin-top:.7rem;font-weight:600}
   .picwarn{font-size:.8rem;color:var(--flag);background:var(--flag-bg);border:1px solid var(--gold-dim);border-radius:9px;padding:.55rem .7rem;margin-top:.55rem}
   .guide{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:.9rem 1rem;margin:.1rem 0 .95rem}
@@ -130,7 +133,7 @@
         they'll be flagged as you add them.</div>
     </div>
     <label class="bigdrop" id="drop">
-      <span class="ic">📸</span><div class="t">Add photos</div><div class="s">up to 5 — follow the set above</div>
+      <span class="ic">📸</span><div class="t">Add photos</div><div class="s">tap or drop — a few now or all at once · up to 5</div>
       <input type="file" id="photos" accept="image/*" multiple>
     </label>
     <div class="thumbs" id="thumbs"></div>
@@ -203,37 +206,65 @@ async function postJSON(path, body){ try{ const r=await fetch(api()+path,{method
   let j=null; try{j=await r.json();}catch(_){} return {ok:r.ok,status:r.status,j}; }catch(e){ return {err:String(e)}; } }
 function addGate(fd){ for(const k in GATE)fd.append(k,GATE[k]); const uid=$("name").value.trim()||$("email").value.trim(); return fd; }
 
-// ---- capture set: up to 5 photos, flag poor ones as they're added ----
-$("photos").onchange=()=>{
-  const all=[...$("photos").files]; const fs=all.slice(0,MAX_PICS);
-  const g=$("thumbs"); g.innerHTML=""; const warns=[]; let pending=fs.length;
-  fs.forEach((f,i)=>{
-    const fig=document.createElement("div"); fig.className="thumb";
-    const im=document.createElement("img"); fig.appendChild(im); g.appendChild(fig);
-    const r=new FileReader();
-    r.onload=()=>{ im.src=r.result; const probe=new Image();
-      probe.onload=()=>{ const w=probe.naturalWidth,h=probe.naturalHeight,issues=[];
-        if(Math.min(w,h)<600) issues.push("low-res");
-        if(w>h*1.1) issues.push("landscape — full-body wants portrait");
-        if(issues.length){ fig.classList.add("warn");
-          const b=document.createElement("span"); b.className="badge"; b.textContent="⚠"; b.title=issues.join(", ");
-          fig.appendChild(b); warns.push(`#${i+1} ${issues.join(" · ")}`); }
-        if(--pending===0) summarizePics(all.length,warns); };
-      probe.onerror=()=>{ if(--pending===0) summarizePics(all.length,warns); };
-      probe.src=r.result; };
-    r.readAsDataURL(f);
+// ---- capture set: up to 5 photos, accumulated across picks/drops, poor ones flagged ----
+// PICS is the single source of truth (the file input is stateless — it's reset after each
+// pick so the SAME photo can be re-added and adding more APPENDS instead of replacing).
+const PICS=[]; let picSeq=0;
+const picKey=f=>`${f.name}|${f.size}|${f.lastModified||0}`;
+
+function addFiles(list){
+  let skippedFull=0;
+  for(const f of [...list]){
+    if(!f.type||!f.type.startsWith("image/")) continue;
+    if(PICS.some(p=>p.key===picKey(f))) continue;   // silent dedupe (re-pick / drop overlap)
+    if(PICS.length>=MAX_PICS){ skippedFull++; continue; }
+    const p={file:f,key:picKey(f),id:"pic"+(picSeq++),url:URL.createObjectURL(f),issues:[],probed:false};
+    PICS.push(p); probePic(p);
+  }
+  renderThumbs(skippedFull);
+}
+function probePic(p){
+  const im=new Image();
+  im.onload=()=>{ const w=im.naturalWidth,h=im.naturalHeight; p.issues=[];
+    if(Math.min(w,h)<600) p.issues.push("low-res");
+    if(w>h*1.1) p.issues.push("landscape — full-body wants portrait");
+    p.probed=true; renderThumbs(); };
+  im.onerror=()=>{ p.issues=["unreadable"]; p.probed=true; renderThumbs(); };
+  im.src=p.url;
+}
+function removePic(id){ const i=PICS.findIndex(p=>p.id===id);
+  if(i>=0){ URL.revokeObjectURL(PICS[i].url); PICS.splice(i,1); renderThumbs(); } }
+function renderThumbs(skippedFull){
+  const g=$("thumbs"); g.innerHTML="";
+  PICS.forEach((p,i)=>{
+    const fig=document.createElement("div"); fig.className="thumb"+(p.issues.length?" warn":"");
+    const im=document.createElement("img"); im.src=p.url; im.alt=`photo ${i+1}`; fig.appendChild(im);
+    if(p.issues.length){ const b=document.createElement("span"); b.className="badge"; b.textContent="⚠"; b.title=p.issues.join(", "); fig.appendChild(b); }
+    const rm=document.createElement("button"); rm.type="button"; rm.className="rm"; rm.textContent="×";
+    rm.title="Remove"; rm.setAttribute("aria-label",`Remove photo ${i+1}`); rm.onclick=()=>removePic(p.id);
+    fig.appendChild(rm); g.appendChild(fig);
   });
-  if(!fs.length) summarizePics(0,[]);
-};
-function summarizePics(total,warns){
-  const c=$("count"); c.hidden=!total;
-  let msg=total>MAX_PICS?`Using the first ${MAX_PICS} of ${total} — the set is ${MAX_PICS} photos. `:`${total} of ${MAX_PICS} added. `;
-  if(total&&total<MAX_PICS) msg+=`Add ${MAX_PICS-total} more for the full set.`;
-  c.textContent=msg.trim();
+  summarizePics(skippedFull);
+}
+function summarizePics(skippedFull){
+  const total=PICS.length, c=$("count"); c.hidden=!total;
+  let msg=`${total} of ${MAX_PICS} added.`;
+  if(total&&total<MAX_PICS) msg+=` Add ${MAX_PICS-total} more, or read now.`;
+  else if(total>=MAX_PICS) msg=`Full set — ${MAX_PICS} of ${MAX_PICS}. Remove one (×) to swap.`;
+  if(skippedFull) msg+=` (${skippedFull} not added — 5 is the max.)`;
+  c.textContent=msg;
+  const warns=PICS.map((p,i)=>p.issues.length?`#${i+1} ${p.issues.join(" · ")}`:null).filter(Boolean);
   const pw=$("picwarn");
-  if(warns.length){ pw.hidden=false; pw.innerHTML=`⚠ ${warns.length} photo${warns.length>1?"s":""} may not test well — ${esc(warns.join("; "))}. Swap for sharp, portrait shots from the set above.`; }
+  if(warns.length){ pw.hidden=false; pw.innerHTML=`⚠ ${warns.length} photo${warns.length>1?"s":""} may not test well — ${esc(warns.join("; "))}. Tap × to drop one and add a sharp, portrait shot.`; }
   else { pw.hidden=true; pw.textContent=""; }
 }
+// pick: append, then clear the input so re-picking the same file still fires onchange
+$("photos").onchange=()=>{ addFiles($("photos").files); $("photos").value=""; };
+// drag-and-drop onto the whole drop zone (desktop); the overlaid input also accepts native drops
+const drop=$("drop");
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("drag");}));
+["dragleave","dragend","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("drag");}));
+drop.addEventListener("drop",e=>{ const dt=e.dataTransfer; if(dt&&dt.files&&dt.files.length){ addFiles(dt.files); } });
 
 // ---- cards ----
 function fieldCard(key,label,valueHTML,plain,conf){
@@ -255,7 +286,7 @@ function slotConf(a,n){ const s=a&&a[n]; return (s&&typeof s==="object"&&s.confi
 $("buildbtn").onclick=async()=>{
   const err=$("builderr");
   if(!$("consent").checked){ err.innerHTML='<p class="err">Please confirm you\'re 18+ and consent, so we can process the photos.</p>';return; }
-  const files=[...$("photos").files].slice(0,MAX_PICS);
+  const files=PICS.map(p=>p.file);
   if(!files.length){ err.innerHTML='<p class="err">Add at least one photo — that\'s all it takes.</p>';return; }
   err.innerHTML=''; const b=$("buildbtn"); b.disabled=true; b.textContent="Finding you & reading…";
 
