@@ -14,11 +14,14 @@ When these aren't set, everything is a no-op and feedback still lands in the log
 Pure stdlib (smtplib + email); no dependencies.
 """
 from __future__ import annotations
+import logging
 import os
 import smtplib
 import ssl
 from email.message import EmailMessage
 from typing import Optional
+
+log = logging.getLogger("krey.notify")
 
 
 def _cfg() -> dict:
@@ -74,6 +77,7 @@ def send_feedback_email(ticket: dict) -> bool:
     if not smtp_configured():
         return False
     c = _cfg()
+    dedup = ticket.get("dedup_key", "?")
     try:
         msg = build_message(ticket, c)
         ctx = ssl.create_default_context()
@@ -88,6 +92,17 @@ def send_feedback_email(ticket: dict) -> bool:
                 s.ehlo()
                 s.login(c["user"], c["pw"])
                 s.send_message(msg)
+        # Success is logged (not just the failure) so a working SMTP path is
+        # observable in the host logs — the response's `emailed` flag only means
+        # "configured", the real send happens here in the background.
+        log.info("feedback email sent host=%s port=%s to=%s dedup=%s",
+                 c["host"], c["port"], c["to"], dedup)
         return True
-    except Exception:
+    except Exception as e:
+        # Best-effort: never raises into the request, but the reason MUST be
+        # visible — a silent swallow is why a misconfigured App Password looked
+        # like "emailed" while nothing arrived. %r keeps the SMTP class + code
+        # (e.g. SMTPAuthenticationError 535) without leaking the password.
+        log.warning("feedback email FAILED host=%s port=%s user=%s dedup=%s err=%r",
+                    c["host"], c["port"], c["user"], dedup, e)
         return False
