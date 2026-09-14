@@ -132,8 +132,47 @@ def _biometric_gate(account_present: bool, dob_verified: bool, birthdate: Option
     )
 
 
+# Cap the longest edge of ingested photos before the CV pipelines touch them. Phone
+# photos are commonly 3000-4000px (~36 MB once decoded to RGB); on a 1 GB host the peak
+# of image decode + buffalo_l + onnxruntime OOM-kills the container mid-read. Downscaling
+# to <= this many px cuts peak RAM several-fold and is safe for the algorithm: body
+# measurements scale off the *declared height* (a proportional resize preserves every
+# ratio), and skin/hair/eye are LAB colour reads (resize doesn't move colour), while a
+# face stays far above detection/recognition resolution. Override via KREY_MAX_IMAGE_PX.
+DOWNSCALE_MAX_PX = int(os.environ.get("KREY_MAX_IMAGE_PX") or "1600")
+
+
+def _downscale_jpeg(raw: bytes, max_px: int = DOWNSCALE_MAX_PX) -> bytes:
+    """Best-effort: return an EXIF-oriented JPEG capped to max_px on its longest edge.
+    Returns the original bytes unchanged on any failure (e.g. a format PIL can't read),
+    so ingestion never breaks — worst case is the pre-existing full-size behaviour."""
+    try:
+        import io
+        from PIL import Image, ImageOps
+        with Image.open(io.BytesIO(raw)) as im:
+            # draft() lets the JPEG decoder emit a reduced image without a full-res decode
+            # first — this is the real memory saving, not just the final resize.
+            try:
+                im.draft("RGB", (max_px, max_px))
+            except Exception:
+                pass
+            im = ImageOps.exif_transpose(im)          # honour phone rotation
+            if im.mode not in ("RGB", "L"):
+                im = im.convert("RGB")
+            w, h = im.size
+            if max(w, h) > max_px:
+                s = max_px / float(max(w, h))
+                im = im.resize((max(1, round(w * s)), max(1, round(h * s))))
+            out = io.BytesIO()
+            im.save(out, format="JPEG", quality=85, optimize=True)
+            return out.getvalue()
+    except Exception:
+        return raw
+
+
 def _save_uploads(raws) -> list:
     """Write in-memory uploads to short-lived temp files (paths for the cv2 pipelines).
+    Images are downscaled on the way in (see _downscale_jpeg) to survive small hosts.
     The caller MUST delete them after processing — derive-and-discard: raw biometrics are
     never retained past the extraction that derives the compact record."""
     import tempfile
@@ -142,7 +181,7 @@ def _save_uploads(raws) -> list:
     for i, raw in enumerate(raws):
         p = os.path.join(d, f"img_{i}.jpg")
         with open(p, "wb") as f:
-            f.write(raw)
+            f.write(_downscale_jpeg(raw))
         paths.append(p)
     return paths, d
 
