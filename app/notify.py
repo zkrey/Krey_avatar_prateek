@@ -58,6 +58,12 @@ def _cfg() -> dict:
         "pw": os.environ.get("KREY_SMTP_PASS"),
         "to": os.environ.get("KREY_FEEDBACK_EMAIL_TO"),
         "sender": os.environ.get("KREY_FEEDBACK_EMAIL_FROM") or os.environ.get("KREY_SMTP_USER"),
+        # HTTP email API (Resend) over 443 — the reliable path where the host blocks SMTP
+        # ports (Railway blocks 25/465/587). Sender defaults to Resend's shared onboarding
+        # address, which needs NO domain verification but can only deliver to the Resend
+        # account's own email — fine for alpha feedback landing in the team inbox.
+        "resend_key": os.environ.get("KREY_RESEND_API_KEY"),
+        "resend_from": os.environ.get("KREY_RESEND_FROM") or "Krey Alpha <onboarding@resend.dev>",
     }
 
 
@@ -67,17 +73,18 @@ def smtp_configured() -> bool:
     return bool(c["host"] and c["user"] and c["pw"] and c["to"])
 
 
-def build_message(ticket: dict, cfg: Optional[dict] = None) -> EmailMessage:
-    """Compose the plain-text feedback email from a /feedback ticket. No I/O."""
-    c = cfg or _cfg()
+def email_configured() -> bool:
+    """True when ANY transport can send: Resend (preferred) or SMTP, plus a recipient."""
+    c = _cfg()
+    return bool(c["to"] and (c["resend_key"] or (c["host"] and c["user"] and c["pw"])))
+
+
+def _subject_and_body(ticket: dict) -> tuple:
     sev = ticket.get("severity", "normal")
     kind = ticket.get("kind", "?")
     dedup = ticket.get("dedup_key", "")
-    msg = EmailMessage()
-    msg["Subject"] = f"Feedback from alpha test · {sev} · {kind} · {dedup}"
-    msg["From"] = c["sender"] or ""
-    msg["To"] = c["to"] or ""
-    body = [
+    subject = f"Feedback from alpha test · {sev} · {kind} · {dedup}"
+    body = "\n".join([
         "New alpha Twin Check feedback.",
         "",
         f"severity : {sev}",
@@ -89,9 +96,51 @@ def build_message(ticket: dict, cfg: Optional[dict] = None) -> EmailMessage:
         "",
         "--- what the user reported ---",
         ticket.get("note") or "(no note)",
-    ]
-    msg.set_content("\n".join(body))
+    ])
+    return subject, body
+
+
+def build_message(ticket: dict, cfg: Optional[dict] = None) -> EmailMessage:
+    """Compose the plain-text feedback email from a /feedback ticket. No I/O."""
+    c = cfg or _cfg()
+    subject, body = _subject_and_body(ticket)
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = c["sender"] or ""
+    msg["To"] = c["to"] or ""
+    msg.set_content(body)
     return msg
+
+
+def _send_via_resend(ticket: dict, c: dict, dedup: str) -> bool:
+    """Send through the Resend HTTP API over 443 (works where SMTP ports are blocked).
+    Best-effort; logs the outcome and never raises."""
+    import json
+    import urllib.request
+    subject, body = _subject_and_body(ticket)
+    recipients = [x.strip() for x in (c["to"] or "").split(",") if x.strip()]
+    payload = json.dumps({"from": c["resend_from"], "to": recipients,
+                          "subject": subject, "text": body}).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.resend.com/emails", data=payload, method="POST",
+        headers={"Authorization": f"Bearer {c['resend_key']}", "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            ok = 200 <= r.status < 300
+        log.info("feedback email sent via resend to=%s dedup=%s status=%s", c["to"], dedup, "ok" if ok else "?")
+        return ok
+    except Exception as e:
+        # urllib raises HTTPError with the API's reason (e.g. 403 domain not verified,
+        # 401 bad key) — surface it without leaking the key.
+        detail = getattr(e, "read", None)
+        body_txt = ""
+        try:
+            body_txt = detail().decode("utf-8")[:300] if detail else ""
+        except Exception:
+            pass
+        log.warning("feedback email FAILED via resend to=%s dedup=%s err=%r %s",
+                    c["to"], dedup, e, body_txt)
+        return False
 
 
 def send_feedback_email(ticket: dict) -> bool:
@@ -99,11 +148,16 @@ def send_feedback_email(ticket: dict) -> bool:
     Send the feedback ticket by email. Best-effort: returns True on a successful send,
     False if unconfigured OR on any error — it never raises into the caller (the endpoint
     stays fast and reliable; the log sink is always the backstop).
+
+    Transport order: Resend HTTP API (443) if a key is set — the reliable path on hosts
+    that block SMTP ports (Railway) — otherwise raw SMTP.
     """
-    if not smtp_configured():
-        return False
     c = _cfg()
     dedup = ticket.get("dedup_key", "?")
+    if c["resend_key"] and c["to"]:
+        return _send_via_resend(ticket, c, dedup)
+    if not smtp_configured():
+        return False
     try:
         msg = build_message(ticket, c)
         ctx = ssl.create_default_context()

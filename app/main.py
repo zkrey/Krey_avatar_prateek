@@ -18,6 +18,7 @@ Run locally:
     #                     http://127.0.0.1:8000/twin/extract-measurements
 """
 from __future__ import annotations
+import logging
 import os
 import uuid
 from typing import Optional
@@ -41,6 +42,25 @@ from app.analytics import Analytics, Spine, ENTRY_POINTS as analytics_entry_poin
 from app.recognition import recognition_from_body_models
 
 app = FastAPI(title="Krey Avatar — Service A (twin extraction)", version="0.5.0")
+
+# Surface the krey.* diagnostic loggers (capture/body/notify) at INFO — uvicorn leaves the
+# root logger at WARNING, which was swallowing the per-slice read summaries.
+logging.getLogger("krey").setLevel(logging.INFO)
+
+
+@app.on_event("startup")
+def _warm_models():
+    """Load the identity model at boot in a background thread so the first real /capture
+    doesn't pay a ~25s cold load. Best-effort; ignored if the CV stack isn't present."""
+    import threading
+
+    def _go():
+        try:
+            from app import capture_session as cs
+            cs._get_app()
+        except Exception:
+            pass
+    threading.Thread(target=_go, daemon=True).start()
 
 # Permissive CORS so the team QA page (/tester) works whether served here or opened locally
 # against a deployed URL. Tighten to the real client origin before production.
@@ -600,7 +620,7 @@ def feedback_ep(payload: dict = Body(...), background: BackgroundTasks = None):
     # Optionally email the ticket too, if SMTP is configured (docs/alpha_hosting_guide.md).
     # Background task so the user's "Send" stays instant; best-effort, never blocks/raises.
     emailed = False
-    if notify.smtp_configured():
+    if notify.email_configured():
         emailed = True
         if background is not None:
             background.add_task(notify.send_feedback_email, ticket)

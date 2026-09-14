@@ -19,9 +19,20 @@ Models: Apache-2.0, Google MediaPipe. Not bundled — large and fetched separate
 from __future__ import annotations
 from typing import List, Optional, Sequence, Tuple
 import os
+import threading
 import numpy as np
 
 RGB = Tuple[int, int, int]
+
+# MediaPipe task models are expensive to build (each create_from_options loads the graph
+# and spins up an XNNPACK delegate). They were being rebuilt on EVERY call — once per face
+# per frame — which dominated latency and thrashed memory (a repeat cause of OOM on a small
+# host). Build each once and reuse it; serialise inference under a lock because a single
+# MediaPipe task object is not safe to run concurrently from FastAPI's threadpool (and
+# serialising also stops two reads stacking peak memory at the same time).
+_mp_lock = threading.Lock()
+_landmarkers: dict = {}
+_segmenter = {"path": None, "obj": None}
 
 # MediaPipe FaceLandmarker iris landmark indices (478-pt model): [centre, ring x4].
 LEFT_IRIS = [468, 469, 470, 471, 472]
@@ -119,25 +130,51 @@ def iris_samples_from_landmarks(img_bgr, iris_pts_px: Sequence[Tuple[float, floa
 # ---------------------------------------------------------------------------
 # Model shells (lazy MediaPipe; degrade to empties when a model is absent)
 # ---------------------------------------------------------------------------
+def _get_segmenter(path):
+    """Cached MediaPipe ImageSegmenter for the hair model (built once, reused)."""
+    if _segmenter["obj"] is None or _segmenter["path"] != path:
+        from mediapipe.tasks import python as mp_python
+        from mediapipe.tasks.python import vision as mp_vision
+        options = mp_vision.ImageSegmenterOptions(
+            base_options=mp_python.BaseOptions(model_asset_path=path),
+            running_mode=mp_vision.RunningMode.IMAGE,
+            output_confidence_masks=True,
+        )
+        _segmenter["obj"] = mp_vision.ImageSegmenter.create_from_options(options)
+        _segmenter["path"] = path
+    return _segmenter["obj"]
+
+
+def _get_landmarker(path, num_faces, min_conf):
+    """Cached MediaPipe FaceLandmarker keyed by its options (built once, reused)."""
+    key = (path, num_faces, min_conf)
+    fl = _landmarkers.get(key)
+    if fl is None:
+        from mediapipe.tasks import python as mp_python
+        from mediapipe.tasks.python import vision as mp_vision
+        options = mp_vision.FaceLandmarkerOptions(
+            base_options=mp_python.BaseOptions(model_asset_path=path),
+            running_mode=mp_vision.RunningMode.IMAGE,
+            num_faces=num_faces,
+            min_face_detection_confidence=min_conf,
+        )
+        fl = mp_vision.FaceLandmarker.create_from_options(options)
+        _landmarkers[key] = fl
+    return fl
+
+
 def hair_mask(img_bgr, model_path: Optional[str] = None):
     """Hair-probability mask via MediaPipe hair_segmenter. None if the model is absent."""
     import cv2
     import mediapipe as mp
-    from mediapipe.tasks import python as mp_python
-    from mediapipe.tasks.python import vision as mp_vision
 
     path = model_path or _hair_model_path()
     if not os.path.exists(path):
         return None
     rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
-    options = mp_vision.ImageSegmenterOptions(
-        base_options=mp_python.BaseOptions(model_asset_path=path),
-        running_mode=mp_vision.RunningMode.IMAGE,
-        output_confidence_masks=True,
-    )
-    with mp_vision.ImageSegmenter.create_from_options(options) as seg:
-        result = seg.segment(mp_image)
+    with _mp_lock:                                   # one cached segmenter, one call at a time
+        result = _get_segmenter(path).segment(mp_image)
     masks = result.confidence_masks
     if not masks:
         return None
@@ -157,8 +194,6 @@ def run_face_landmarker(img_bgr, num_faces: int = 3, min_conf: float = 0.5,
     """
     import cv2
     import mediapipe as mp
-    from mediapipe.tasks import python as mp_python
-    from mediapipe.tasks.python import vision as mp_vision
 
     path = model_path or _face_model_path()
     if not os.path.exists(path):
@@ -168,14 +203,8 @@ def run_face_landmarker(img_bgr, num_faces: int = 3, min_conf: float = 0.5,
     det = cv2.resize(img_bgr, (int(w * scale), int(h * scale))) if scale < 1.0 else img_bgr
     rgb = cv2.cvtColor(det, cv2.COLOR_BGR2RGB)
     mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb))
-    options = mp_vision.FaceLandmarkerOptions(
-        base_options=mp_python.BaseOptions(model_asset_path=path),
-        running_mode=mp_vision.RunningMode.IMAGE,
-        num_faces=num_faces,
-        min_face_detection_confidence=min_conf,
-    )
-    with mp_vision.FaceLandmarker.create_from_options(options) as fl:
-        result = fl.detect(mp_image)
+    with _mp_lock:                                   # one cached landmarker, one call at a time
+        result = _get_landmarker(path, num_faces, min_conf).detect(mp_image)
     # normalized landmarks -> ORIGINAL pixel coords (w, h), independent of the det scale.
     return [[(lm.x * w, lm.y * h) for lm in face] for face in result.face_landmarks]
 

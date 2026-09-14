@@ -80,7 +80,7 @@ def _attributes_for_crop(crop_bgr) -> Optional[dict]:
 
 
 def analyze_capture(image_paths: List[str], read_attributes: bool = True,
-                    max_frames: int = 8) -> dict:
+                    max_frames: int = None) -> dict:
     """
     Consolidate a capture session into one user profile. Returns:
       {decision, identity, timeline, appearance, frames}
@@ -88,6 +88,12 @@ def analyze_capture(image_paths: List[str], read_attributes: bool = True,
     only) — useful for a fast 'is this a consistent person?' gate before the heavy read.
     """
     import cv2
+    if max_frames is None:
+        # Each attribute frame runs the MediaPipe face-mesh + hair-segmenter passes, so this
+        # is the main latency + memory knob. Appearance is aggregated across frames, so a
+        # small handful of the owner's best frames is plenty; default 3 (was 8) to stay fast
+        # and fit a small host. Override with KREY_ATTR_FRAMES.
+        max_frames = int(os.environ.get("KREY_ATTR_FRAMES") or "3")
     app = _get_app()
 
     faces = []   # one row per detected face
