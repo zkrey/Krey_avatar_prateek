@@ -1,0 +1,16 @@
+{
+  "dataset": "indiasize_template",
+  "n_rows": 6,
+  "shape_distribution": {
+    "Rectangle": 2,
+    "Hourglass": 1,
+    "Pear / Triangle": 1,
+    "Rectangle / Straight": 1,
+    "Triangle": 1
+  },
+  "out_of_plausible_range": 0,
+  "out_of_range_rate": 0.0,
+  "whr_mean": 0.834,
+  "whtr_mean": 0.485,
+  "note": "Shape from measure_core.classify_body_shape (deterministic). Use out-of-range rate to recalibrate PLAUSIBLE_CIRC_CM / size charts for the Indian population; never prior an individual's shape by ethnicity (fit must be exact)."
+}

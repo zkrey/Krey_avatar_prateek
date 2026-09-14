@@ -7,3 +7,7 @@
 !sources.json
 !reports/
 !reports/**
+# Body-calibration template + schema are tracked; real IndiaSize CSVs dropped here are NOT.
+!indiasize/
+!indiasize/README.md
+!indiasize/*.template.csv
