@@ -50,7 +50,22 @@ _PART_LANDMARKS = {
 
 def _model_path() -> str:
     models_dir = os.environ.get("MODELS_DIR", "models")
-    return os.path.join(models_dir, "pose_landmarker_heavy.task")
+    # Pose model variant is env-selectable to fit the host. `lite` keeps the pose
+    # subprocess small enough that /body/measure survives a 1 GB cap (heavy + the
+    # models the capture step leaves resident OOM-kills it); `heavy` is more accurate
+    # on a larger host (KREY_POSE_MODEL=heavy). Default lite. Falls back to whatever
+    # pose model IS present so an older image without the lite file still works.
+    variant = (os.environ.get("KREY_POSE_MODEL") or "lite").lower()
+    name = {"lite": "pose_landmarker_lite.task", "full": "pose_landmarker_full.task",
+            "heavy": "pose_landmarker_heavy.task"}.get(variant, "pose_landmarker_lite.task")
+    p = os.path.join(models_dir, name)
+    if not os.path.exists(p):
+        for alt in ("pose_landmarker_lite.task", "pose_landmarker_heavy.task",
+                    "pose_landmarker_full.task"):
+            ap = os.path.join(models_dir, alt)
+            if os.path.exists(ap):
+                return ap
+    return p
 
 
 @dataclass

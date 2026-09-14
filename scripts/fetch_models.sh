@@ -15,6 +15,7 @@ mkdir -p "$DEST"
 # name -> canonical public URL (float16/float32 as published by MediaPipe).
 declare -A MODELS=(
   ["pose_landmarker_heavy.task"]="https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/latest/pose_landmarker_heavy.task"
+  ["pose_landmarker_lite.task"]="https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task"
   ["hair_segmenter.tflite"]="https://storage.googleapis.com/mediapipe-models/image_segmenter/hair_segmenter/float32/latest/hair_segmenter.tflite"
   ["face_landmarker.task"]="https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task"
 )
