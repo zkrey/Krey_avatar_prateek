@@ -627,15 +627,11 @@ def feedback_ep(payload: dict = Body(...), background: BackgroundTasks = None):
     # from the logs, or point the sink at a store (see docs/alpha_hosting_guide.md).
     analytics.sink({"event": "feedback_ticket", "surface": spine.surface,
                     "user_id": spine.user_id, "guest_id": spine.guest_id, "ticket": ticket})
-    # Optionally email the ticket too, if SMTP is configured (docs/alpha_hosting_guide.md).
-    # Background task so the user's "Send" stays instant; best-effort, never blocks/raises.
-    emailed = False
-    if notify.email_configured():
-        emailed = True
-        if background is not None:
-            background.add_task(notify.send_feedback_email, ticket)
-        else:
-            notify.send_feedback_email(ticket)
+    # Email the ticket if a transport is configured. Sent SYNCHRONOUSLY (not a BackgroundTask):
+    # a background send can be lost if the container restarts right after the response, and the
+    # `emailed` flag then lies. Inline send is a ~1-2s HTTPS call (Resend), always logs its
+    # result, and makes `emailed` reflect the ACTUAL outcome. Best-effort — never raises.
+    emailed = notify.send_feedback_email(ticket) if notify.email_configured() else False
     return {"status": "queued", "ticket": ticket, "emailed": emailed}
 
 

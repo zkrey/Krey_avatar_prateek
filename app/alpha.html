@@ -119,9 +119,9 @@
 <body><div class="wrap">
   <div class="brand">KREY</div>
   <h1>Twin <em>Check</em></h1>
-  <p class="lede"><b>One clear selfie is all it takes to start.</b> Krey finds you, ignores everyone else, and reads
-    your twin — skin tone, hair, eyes. Add a full-body photo and your height for body shape too. Use photos you
-    <b>already have</b>; no photoshoot. Nothing stored. Something look wrong? <b>Flag it</b> — straight to the team.</p>
+  <p class="lede"><b>One clear selfie is all it takes.</b> Krey finds you, ignores everyone else, and reads
+    your twin — skin tone, hair, eyes. Use photos you <b>already have</b>; no photoshoot. Nothing stored.
+    Something look wrong? <b>Flag it</b> — straight to the team. <span class="fine">(Body measurements are coming soon.)</span></p>
 
   <!-- STEP 1 -->
   <section class="panel">
@@ -133,8 +133,8 @@
       <div class="gt">The lazy ladder — each step is optional</div>
       <ol>
         <li><b>Just this to start</b> — one clear, front-on face photo (no sunglasses/hat) → <b>identity, skin, hair, eyes</b></li>
-        <li><b>For body shape</b> — add one full-body photo (head-to-toe, front-on) + your height → <b>shape + measurements</b></li>
-        <li><b>To sharpen</b> <span class="fine">(optional)</span> — a second face from another day, or a side/angled body shot → tighter fit</li>
+        <li><b>To sharpen</b> <span class="fine">(optional)</span> — a second face from another day or angle → tighter recognition</li>
+        <li><b>Body shape + measurements</b> <span class="fine">(coming soon)</span> — will use a full-body photo + your height</li>
       </ol>
       <div class="rules"><b>Group photos are fine</b> — Krey finds you and ignores everyone else. Clear, well-lit,
         whole subject in frame reads best; full-body shots read best <b>tall/portrait</b>. Screenshots and memes
@@ -222,6 +222,7 @@ const api=()=>($("api").value||"").replace(/\/$/,"");
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const FLAGS={}, CONFIRMED={}, SNAPSHOT={};
 const MAX_PICS=5, LOW=0.75;
+const MEASURE_ENABLED=false;   // body measurements need >1GB (pose model); off on the free tier
 // gate: alpha testers confirm 18+; the canRender wall is satisfied with a consenting-adult context.
 const GATE={account_present:"true", dob_verified:"true", birthdate:"2000-01-01", jurisdiction:"IN"};
 
@@ -382,8 +383,11 @@ $("buildbtn").onclick=async()=>{
   const uid=($("name").value.trim()||$("email").value.trim()); if(uid)fd.append("user_id",uid);
   const cap=await post("/capture/session",fd);
 
+  // Body measurements are OFF on the free tier: the pose pass needs more memory than the
+  // 1 GB host has alongside the appearance read (see docs). Flip MEASURE_ENABLED to re-enable
+  // on a larger host. We still read height to show it back and cross-check.
   let meas=null; const h=parseFloat($("height").value)||null;
-  if(h){ const fd2=new FormData(); files.forEach(f=>fd2.append("files",f));
+  if(MEASURE_ENABLED && h){ const fd2=new FormData(); files.forEach(f=>fd2.append("files",f));
     fd2.append("height",h); fd2.append("weight",$("weight").value||"0"); fd2.append("sex",$("sex").value||"2"); addGate(fd2);
     meas=await post("/body/measure",fd2); }
 
@@ -439,9 +443,13 @@ function renderResults(cap, meas, h){
   if(!skin&&!hc&&!ey&&!shape) out+='<p class="muted">Couldn\'t read appearance from that set — try clearer, front-on photos.</p>';
   $("fromphotos").innerHTML=out;
 
-  // measurements in cm
-  let m='<div class="seclabel">Measurements in cm</div>';
-  if(!h){ m+=`<div class="nudge"><div class="t">Want measurements in centimetres?</div>
+  // measurements section
+  let m='<div class="seclabel">Body measurements</div>';
+  if(!MEASURE_ENABLED){
+    m+=`<div class="nudge"><div class="t">Body measurements — coming soon</div>
+      <div class="s">Your appearance twin above is read from the photos. Full-body <b>shape, proportions and cm measurements</b> need more compute than this preview server has — we're switching them on shortly.${h?` (We've noted your height: <b>${esc(h)} cm</b>.)`:""}</div></div>`;
+  }
+  else if(!h){ m+=`<div class="nudge"><div class="t">Want measurements in centimetres?</div>
       <div class="s">Everything above needed <b>zero input</b>. Add your height and Krey scales exact measurements — and uses it to validate the read.</div>
       <div class="mini"><input type="number" id="minih" placeholder="Height (cm)"><button id="minigo">Get cm</button></div></div>`; }
   else if(meas&&meas.status===503){ m+='<p class="muted">Measurements aren\'t available on this server yet (the pose model isn\'t loaded).</p>'; }
