@@ -28,13 +28,17 @@ COPY models ./models
 # Bake the MediaPipe models into the image (~35 MB) so boot needs no network.
 RUN bash scripts/fetch_models.sh
 
-# Pre-warm InsightFace (buffalo_l, ~300 MB) at build so the identity algo (/capture/session)
-# works on the FIRST request and never depends on a runtime download. Required for reliable
-# testing on hosts with an ephemeral filesystem (Railway/Render), which would otherwise
-# re-download buffalo_l on every container restart. Downloads into /root/.insightface, the
-# same path the app reads at runtime (both run as root). Bigger image, but a dependable one.
-RUN python -c "from insightface.app import FaceAnalysis; \
-    a=FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider']); a.prepare(ctx_id=-1)"
+# Pre-warm the InsightFace model pack at build so the first /capture/session needs no
+# runtime download (hosts with an ephemeral filesystem, e.g. Railway/Render, would otherwise
+# re-fetch on every restart). Downloads into /root/.insightface, the path the app reads at
+# runtime. Default is buffalo_s (a ~15 MB MobileFaceNet recogniser) so the resident footprint
+# fits a 1 GB host — buffalo_l (ResNet50 ArcFace) OOM-kills a 1 GB container at model load.
+# Must match the runtime KREY_FACE_MODEL; on a larger host build with
+# --build-arg KREY_FACE_MODEL=buffalo_l and set the same env for best accuracy.
+ARG KREY_FACE_MODEL=buffalo_s
+ENV KREY_FACE_MODEL=${KREY_FACE_MODEL}
+RUN python -c "import os; from insightface.app import FaceAnalysis; \
+    a=FaceAnalysis(name=os.environ['KREY_FACE_MODEL'], providers=['CPUExecutionProvider']); a.prepare(ctx_id=-1)"
 
 EXPOSE 8000
 # Hosts (Railway/Render) inject $PORT; default to 8000 locally.

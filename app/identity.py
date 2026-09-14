@@ -13,12 +13,18 @@ from app import capture_core as cc
 _app = None
 
 
-def get_face_app(det_size: int = 1024):
+def get_face_app(det_size: int = None):
+    # Model + detection size are env-driven to fit small hosts: default buffalo_s @ 640px
+    # (fits a 1 GB cap); set KREY_FACE_MODEL=buffalo_l on a larger host for best accuracy.
+    # Kept in step with app/capture_session._get_app.
     global _app
     if _app is None:
+        import os
         from insightface.app import FaceAnalysis
-        a = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
-        a.prepare(ctx_id=-1, det_size=(det_size, det_size))
+        model = os.environ.get("KREY_FACE_MODEL") or "buffalo_s"
+        ds = det_size or int(os.environ.get("KREY_DET_SIZE") or "640")
+        a = FaceAnalysis(name=model, providers=["CPUExecutionProvider"])
+        a.prepare(ctx_id=-1, det_size=(ds, ds))
         _app = a
     return _app
 

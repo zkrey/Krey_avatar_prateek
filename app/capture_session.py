@@ -28,13 +28,23 @@ _ATTR_MODE = {"skin_tone": "stable", "eye_colour": "stable",
 _analysis_app = None
 
 
-def _get_app(det_size: int = 1024):
-    """Lazily build (and cache) the InsightFace analyzer on CPU."""
+def _get_app(det_size: int = None):
+    """Lazily build (and cache) the InsightFace analyzer on CPU.
+
+    Model + detection size are env-driven so the service fits small hosts: the default
+    is `buffalo_s` (a MobileFaceNet pack, ~15 MB recogniser) at 640px, which keeps the
+    resident footprint under a 1 GB cap — `buffalo_l` (ResNet50 ArcFace) + a 1024 det
+    size OOM-kills a 1 GB container at model load. On a larger host set
+    KREY_FACE_MODEL=buffalo_l (and rebuild so the image pre-warms it) for best accuracy.
+    """
     global _analysis_app
     if _analysis_app is None:
+        import os
         from insightface.app import FaceAnalysis
-        app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
-        app.prepare(ctx_id=-1, det_size=(det_size, det_size))
+        model = os.environ.get("KREY_FACE_MODEL") or "buffalo_s"
+        ds = det_size or int(os.environ.get("KREY_DET_SIZE") or "640")
+        app = FaceAnalysis(name=model, providers=["CPUExecutionProvider"])
+        app.prepare(ctx_id=-1, det_size=(ds, ds))
         _analysis_app = app
     return _analysis_app
 
