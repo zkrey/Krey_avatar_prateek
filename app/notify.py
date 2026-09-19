@@ -119,6 +119,46 @@ def _subject_and_body(ticket: dict) -> tuple:
     return subject, body
 
 
+def github_configured() -> bool:
+    """True when a token + repo are set for durable feedback logging to GitHub Issues."""
+    return bool(os.environ.get("KREY_GITHUB_TOKEN") and os.environ.get("KREY_GITHUB_REPO"))
+
+
+def create_feedback_issue(ticket: dict) -> bool:
+    """Durable, readable feedback log: open one GitHub Issue per ticket. Unlike a local file
+    (lost on the ephemeral container) or email (only in an inbox), an Issue is permanent, in
+    the repo, and triageable. Gated on KREY_GITHUB_TOKEN (a fine-grained PAT with Issues:write
+    on KREY_GITHUB_REPO, e.g. 'zkrey/krey_avatar_prateek'). Best-effort; never raises."""
+    if not github_configured():
+        return False
+    import json
+    import urllib.request
+    token = os.environ.get("KREY_GITHUB_TOKEN")
+    repo = os.environ.get("KREY_GITHUB_REPO")
+    dedup = ticket.get("dedup_key", "?")
+    subject, body = _subject_and_body(ticket)
+    labels = ticket.get("issue_labels") or ["alpha-feedback"]
+    payload = json.dumps({"title": subject, "body": body, "labels": labels}).encode("utf-8")
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{repo}/issues", data=payload, method="POST",
+        headers={"Authorization": f"Bearer {token}", "Accept": "application/vnd.github+json",
+                 "Content-Type": "application/json", "User-Agent": "Krey-Alpha-Feedback/1.0",
+                 "X-GitHub-Api-Version": "2022-11-28"})
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            ok = 200 <= r.status < 300
+        log.info("feedback issue created repo=%s dedup=%s status=%s", repo, dedup, "ok" if ok else "?")
+        return ok
+    except Exception as e:
+        detail = ""
+        try:
+            detail = e.read().decode("utf-8")[:300] if hasattr(e, "read") else ""
+        except Exception:
+            pass
+        log.warning("feedback issue FAILED repo=%s dedup=%s err=%r %s", repo, dedup, e, detail)
+        return False
+
+
 def build_message(ticket: dict, cfg: Optional[dict] = None) -> EmailMessage:
     """Compose the plain-text feedback email from a /feedback ticket. No I/O."""
     c = cfg or _cfg()

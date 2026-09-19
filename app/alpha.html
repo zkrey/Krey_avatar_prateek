@@ -28,8 +28,13 @@
   .hint{color:var(--muted);font-size:.83rem;margin:.15rem 0 1.05rem;max-width:52ch}
   .bigdrop{position:relative;background:var(--surface-2);border:1.5px dashed var(--line);border-radius:14px;padding:1.6rem 1rem;text-align:center;transition:border-color .15s}
   .bigdrop:hover{border-color:var(--gold-dim)}
-  .bigdrop .ic{font-size:1.9rem}.bigdrop .t{font-weight:600;font-size:1rem;margin-top:.35rem}.bigdrop .s{color:var(--faint);font-size:.78rem;margin-top:.15rem}
-  .bigdrop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+  .bigdrop .ic{font-size:1.9rem}.bigdrop .t{font-weight:600;font-size:1rem;margin-top:.35rem}.bigdrop .s{color:var(--faint);font-size:.78rem;margin-top:.55rem}
+  .pickrow{display:flex;gap:.6rem}
+  .pickbtn{flex:1;position:relative;display:flex;align-items:center;justify-content:center;gap:.4rem;background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:.95rem .6rem;font-weight:700;font-size:.95rem;color:var(--rose);cursor:pointer}
+  .pickbtn.cam{background:var(--gold);color:#211217;border-color:var(--gold)}
+  .pickbtn:hover{filter:brightness(1.05)}
+  .pickbtn input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+  @media(max-width:400px){.pickrow{flex-direction:column}}
   .thumbs{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:.5rem;margin-top:.9rem}
   .thumbs .thumb{position:relative}
   .thumbs .thumb img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
@@ -144,10 +149,15 @@
         whole subject in frame reads best; full-body shots read best <b>tall/portrait</b>. Screenshots and memes
         won't test well and are flagged as you add them — but nothing is rejected; tap × any time to swap.</div>
     </div>
-    <label class="bigdrop" id="drop">
-      <span class="ic">📸</span><div class="t">Add photos</div><div class="s">tap or drop from your camera roll — one is enough · up to 5</div>
-      <input type="file" id="photos" accept="image/*" multiple>
-    </label>
+    <div class="bigdrop" id="drop">
+      <div class="pickrow">
+        <label class="pickbtn cam">📸 Take a selfie
+          <input type="file" id="camera" accept="image/*" capture="user"></label>
+        <label class="pickbtn">🖼️ Choose from album
+          <input type="file" id="photos" accept="image/*" multiple></label>
+      </div>
+      <div class="s">No need to hunt — <b>snap a selfie</b>, or pick from your album. One photo is enough · up to 5.</div>
+    </div>
     <div class="thumbs" id="thumbs"></div>
     <div class="count" id="count" hidden></div>
     <div class="picwarn" id="picwarn" hidden></div>
@@ -334,6 +344,9 @@ function summarizePics(skippedFull, skippedType){
 }
 // pick: append, then clear the input so re-picking the same file still fires onchange
 $("photos").onchange=()=>{ addFiles($("photos").files); $("photos").value=""; };
+// camera: capture="user" opens the front camera directly (iOS Safari / Android / Pixel);
+// on desktop it falls back to a file dialog. Same accumulate pipeline.
+$("camera").onchange=()=>{ addFiles($("camera").files); $("camera").value=""; };
 // drag-and-drop onto the whole drop zone (desktop); the overlaid input also accepts native drops
 const drop=$("drop");
 ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("drag");}));

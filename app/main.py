@@ -641,7 +641,10 @@ def feedback_ep(payload: dict = Body(...), background: BackgroundTasks = None):
     # `emailed` flag then lies. Inline send is a ~1-2s HTTPS call (Resend), always logs its
     # result, and makes `emailed` reflect the ACTUAL outcome. Best-effort — never raises.
     emailed = notify.send_feedback_email(ticket) if notify.email_configured() else False
-    return {"status": "queued", "ticket": ticket, "emailed": emailed}
+    # Durable, readable log: open a GitHub Issue per ticket when configured (survives the
+    # ephemeral container + inbox; triageable in the repo). Best-effort, synchronous.
+    logged = notify.create_feedback_issue(ticket) if notify.github_configured() else False
+    return {"status": "queued", "ticket": ticket, "emailed": emailed, "logged": logged}
 
 
 @app.post("/capture/instagram")
