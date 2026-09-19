@@ -48,10 +48,21 @@ quality misses the bar.
 **and** render time is tolerable on a free/cheap GPU. Record the numbers, don't eyeball only.
 
 ## Run it
-`bench/render_colab.py` is a cell-marked script to paste into Google Colab (Runtime → GPU, free
-T4). It: checks the GPU, installs the model, renders each person × garment pair, saves outputs,
-and runs `bench/render_eval.py` on each. Set `KREY_FACE_MODEL=buffalo_l` in Colab so the scorer
-uses the accurate recognition model (Colab has the RAM).
+`bench/render_colab.py` is a **turnkey** cell-marked script to paste into Google Colab (Runtime →
+GPU, free T4). It: checks the GPU, installs **CatVTON** + its DensePose/SCHP mask stack, builds
+the pipeline once, renders each `(person, garment, cloth_type)` triple, saves outputs, and runs
+`bench/render_eval.py` on each. The one model-specific call (`run_tryon`) is filled from CatVTON's
+own `app.py` (repo `zhengchong/CatVTON`) — the checkpoint + mask weights auto-download on first
+run. You only supply the test images and list the triples. Set `KREY_FACE_MODEL=buffalo_l` in
+Colab so the scorer uses the accurate recognition model (Colab has the RAM).
+
+Two gotchas baked into the notebook:
+- **`cloth_type`** — CatVTON's AutoMasker needs the garment class per pair: `upper` (tee/shirt/
+  top), `lower` (trousers/skirt), `overall` (dress/jumpsuit). Match it to each garment image.
+- **detectron2** — the DensePose masker needs it; the install cell builds it (a few minutes). fp16
+  is forced because the free T4 (Turing) has no bf16.
+- **Verify vs the current README** if CatVTON has moved — the API is faithful to app.py as of the
+  fill, but VTON repos change.
 
 ## If it passes → the path (still cheap)
 1. Wrap the render as a **Modal** serverless-GPU function (free monthly credits, scale-to-zero
