@@ -56,13 +56,30 @@ own `app.py` (repo `zhengchong/CatVTON`) — the checkpoint + mask weights auto-
 run. You only supply the test images and list the triples. Set `KREY_FACE_MODEL=buffalo_l` in
 Colab so the scorer uses the accurate recognition model (Colab has the RAM).
 
-Two gotchas baked into the notebook:
+Gotchas baked into the notebook (learned the hard way on a first run):
 - **`cloth_type`** — CatVTON's AutoMasker needs the garment class per pair: `upper` (tee/shirt/
   top), `lower` (trousers/skirt), `overall` (dress/jumpsuit). Match it to each garment image.
-- **detectron2** — the DensePose masker needs it; the install cell builds it (a few minutes). fp16
-  is forced because the free T4 (Turing) has no bf16.
+- **torch pin** — CatVTON's `requirements.txt` pins `torch==2.4.0`, which Colab no longer serves.
+  The install cell strips torch/torchvision/torchaudio and keeps Colab's own torch+CUDA; never
+  let it reinstall torch.
+- **`av` + detectron2** — the DensePose masker needs both and neither is in the pins; the install
+  cell adds them (detectron2 builds from source, a few minutes). fp16 is forced (T4/Turing = no bf16).
+- **Self-contained scorer** — the identity scorer is inlined in the notebook (InsightFace buffalo_l
+  only), so the benchmark needs no private-repo checkout and survives a Colab runtime recycle.
 - **Verify vs the current README** if CatVTON has moved — the API is faithful to app.py as of the
   fill, but VTON repos change.
+
+### First-run finding (single-person input is non-negotiable)
+The first real run showed a bimodal result: group/party/angled photos scored ~0.41 (FAIL) while a
+cleaner single subject scored **0.81 (PASS)** with the garment landing correctly (right colour/cut).
+Same model, same scorer — the only variable was input quality. Takeaways:
+- The identity bet is **alive**: on a reasonable single subject CatVTON keeps the person
+  recognisably themselves *and* applies the garment. The failures were off-spec inputs, not the model.
+- **Product implication:** the render-capture UX must enforce a **single-person, front-on, roughly
+  waist-up** shot. A face that is a tiny fraction of a full-body/group frame gets softened by the
+  768×1024 inpainting; a proper waist-up crop keeps the face large enough to preserve.
+- Still to confirm on a clean solo capture: the identity score and a face clean enough to skip a
+  face-restore pass. If a restore is needed later, add CodeFormer/GFPGAN after the render.
 
 ## If it passes → the path (still cheap)
 1. Wrap the render as a **Modal** serverless-GPU function (free monthly credits, scale-to-zero

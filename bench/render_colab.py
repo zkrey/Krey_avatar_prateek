@@ -1,10 +1,18 @@
 # Krey render benchmark — Google Colab runner  (free T4 GPU)
 # ---------------------------------------------------------------------------
-# Paste each `# %%` block into a Colab cell (Runtime -> Change runtime type -> T4 GPU).
-# It proves whether a generative try-on keeps the user recognisably themselves, for $0.
-# The model is CatVTON (light, fits a free T4). The one model-specific call (run_tryon)
-# is filled from CatVTON's own app.py (zhengchong/CatVTON) — verify against the current
-# README if the repo has moved. Plan: docs/render_benchmark_plan.md
+# Paste each `# %%` block into a Colab cell (Runtime -> Change runtime type -> T4 GPU),
+# or open bench/render_colab.ipynb straight from GitHub and Run all.
+# It proves whether a generative try-on (CatVTON) keeps the user recognisably themselves,
+# for $0. The scorer is self-contained (no repo checkout needed); the model call (run_tryon)
+# is filled from CatVTON's own app.py. Plan: docs/render_benchmark_plan.md
+#
+# HARD-WON NOTES (baked in below so you don't rediscover them):
+#  - CatVTON's requirements.txt pins torch==2.4.0, which Colab no longer has. Do NOT let it
+#    reinstall torch — keep Colab's torch/CUDA and install everything else.
+#  - `av` (PyAV) and detectron2 are needed by the DensePose masker and aren't in the pins.
+#  - INPUT MUST BE SINGLE-PERSON, FRONT-ON, ROUGHLY WAIST-UP. Group/party/angled photos
+#    score badly because the masker grabs the wrong region and the face is tiny. This is a
+#    product finding too: the render-capture UX must enforce a clean single-subject shot.
 # ===========================================================================
 
 # %% [markdown]
@@ -15,42 +23,71 @@ import subprocess
 print(subprocess.run(["nvidia-smi"], capture_output=True, text=True).stdout or "NO GPU — Runtime->Change runtime type->T4 GPU")
 
 # %% [markdown]
-# ## 1. Get Krey's scorer (reuses our real ArcFace recognition)
-# Clone the repo so `bench/render_eval.py` + `app/identity.py` are importable. Private repo:
-# upload the two files manually, or paste a token into the clone URL when prompted.
+# ## 1. The identity scorer (self-contained — no repo checkout)
+# Uses Krey's real recognition model (InsightFace buffalo_l / ArcFace) to answer the only
+# question that matters: after the try-on, is it still recognisably the same person? This is
+# the same ArcFace cosine the product uses; inlined here so the benchmark needs nothing but
+# InsightFace (buffalo_l downloads once, ~166 MB).
 
 # %%
-import os, sys
 !pip -q install insightface onnxruntime opencv-python-headless pillow numpy
-# Private repo — upload app/ + bench/ manually, OR clone with a token:
-# !git clone https://<TOKEN>@github.com/zkrey/krey_avatar_prateek.git
-KREY_REPO = "/content/krey_avatar_prateek"          # adjust to your clone/upload path
-sys.path.insert(0, KREY_REPO)
-os.environ["KREY_FACE_MODEL"] = "buffalo_l"          # Colab has the RAM — use the accurate model
+import cv2, numpy as np
+from insightface.app import FaceAnalysis
+
+RECOGNISABLE_COSINE = 0.50          # starting line; recalibrate against tester judgements
+_face_app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
+_face_app.prepare(ctx_id=-1, det_size=(640, 640))
+
+def _best_face(img_bgr):
+    """Most prominent face in a frame (det_score x area), or None."""
+    faces = _face_app.get(img_bgr)
+    if not faces:
+        return None
+    def sc(f):
+        x0, y0, x1, y1 = f.bbox
+        return f.det_score * max(1, (x1 - x0) * (y1 - y0))
+    return max(faces, key=sc)
+
+def identity_similarity(original_path: str, render_path: str) -> float:
+    """ArcFace cosine between the original person and the rendered try-on."""
+    a, b = cv2.imread(original_path), cv2.imread(render_path)
+    if a is None or b is None:
+        raise SystemExit("could not read one of the images")
+    fa, fb = _best_face(a), _best_face(b)
+    if fa is None:
+        raise SystemExit("no face found in the ORIGINAL image")
+    if fb is None:
+        raise SystemExit("no face in the RENDER — the try-on hid/garbled the face")
+    ea, eb = fa.normed_embedding, fb.normed_embedding
+    return float(np.dot(ea, eb) / (np.linalg.norm(ea) * np.linalg.norm(eb) + 1e-9))
+
+print("scorer ready · floor =", RECOGNISABLE_COSINE)
 
 # %% [markdown]
 # ## 2. Install CatVTON + its mask stack
-# CatVTON is a light SD-inpainting try-on that fits a free T4 in fp16. Its AutoMasker uses
-# DensePose (detectron2) + SCHP; the CatVTON checkpoint repo bundles both, but detectron2
-# must be installed separately and takes a few minutes. Verify against the current CatVTON
-# README (repos move): https://github.com/Zheng-Chong/CatVTON
+# Keep Colab's torch/CUDA (strip CatVTON's torch pin); add PyAV + detectron2 (DensePose
+# backbone) which aren't in the pins. detectron2 builds from source — a few minutes.
+# Verify against the current CatVTON README if it has moved: https://github.com/Zheng-Chong/CatVTON
 
 # %%
-%cd /content
-!git clone https://github.com/Zheng-Chong/CatVTON.git
-%cd /content/CatVTON
-!pip -q install -r requirements.txt
-# detectron2 (DensePose backbone for AutoMasker) — build for the current torch/cuda:
+import os, sys
+!git clone https://github.com/Zheng-Chong/CatVTON.git /content/CatVTON 2>/dev/null || echo "CatVTON already cloned"
+# CatVTON pins torch==2.4.0 (not on Colab). Keep Colab's torch+CUDA; install everything else:
+!grep -viE '^(torch|torchvision|torchaudio)' /content/CatVTON/requirements.txt > /tmp/req_notorch.txt
+!pip -q install -r /tmp/req_notorch.txt
+!pip -q install av                                                 # DensePose video dep, not in pins
 !pip -q install 'git+https://github.com/facebookresearch/detectron2.git'
-sys.path.insert(0, "/content/CatVTON")               # so `model.*` and `utils` import
+sys.path.insert(0, "/content/CatVTON")                             # so `model.*` and `utils` import
+import torch
+print("CatVTON deps ready · torch:", torch.__version__, "· CUDA:", torch.cuda.is_available())
 
 # %% [markdown]
 # ## 3. Build the pipeline ONCE, then the model call
-# Faithful to CatVTON's app.py. fp16 for the T4 (it has no bf16). The checkpoint,
+# Faithful to CatVTON's app.py. fp16 for the T4 (no bf16 on Turing). The checkpoint,
 # DensePose and SCHP weights all download automatically from `zhengchong/CatVTON`.
 
 # %%
-import torch
+import os, sys, torch
 from PIL import Image
 from diffusers.image_processor import VaeImageProcessor
 from huggingface_hub import snapshot_download
@@ -79,10 +116,11 @@ _automasker = AutoMasker(
 )
 
 def run_tryon(person_path: str, garment_path: str, out_path: str,
-              cloth_type: str = "upper", steps: int = 50, guidance: float = 2.5,
+              cloth_type: str = "upper", steps: int = 40, guidance: float = 2.5,
               seed: int = 42) -> str:
     """Render `person` wearing `garment`, save to out_path, return out_path.
     cloth_type is one of AutoMasker's classes: 'upper', 'lower', or 'overall' (dress/full).
+    steps=40 is a good speed/quality point on a T4 (~90s); raise toward 50 for max quality.
     """
     person = resize_and_crop(Image.open(person_path).convert("RGB"), (W, H))
     cloth = resize_and_padding(Image.open(garment_path).convert("RGB"), (W, H))
@@ -96,26 +134,37 @@ def run_tryon(person_path: str, garment_path: str, out_path: str,
     result.save(out_path)
     return out_path
 
+print("pipeline ready · run_tryon(person, garment, out, cloth_type='upper'|'lower'|'overall')")
+
 # %% [markdown]
 # ## 4. Test set — (person, garment, cloth_type) triples
-# Upload a few person photos + garment images to Colab (left file panel), list them here.
-# Use 5–10: a couple of people x a few garment types. cloth_type must match the garment:
-#   'upper' = tee/shirt/top · 'lower' = trousers/skirt · 'overall' = dress/jumpsuit.
+# Upload SINGLE-PERSON, front-on, waist-up photos of yourself (left file panel). Pair each
+# with a garment. CatVTON ships example garments under /content/CatVTON/resource/demo/example/
+# condition/{upper,overall}/ — list them with the helper, or upload your own.
+# cloth_type: 'upper' = tee/shirt/top · 'lower' = trousers/skirt · 'overall' = dress/jumpsuit.
 
 # %%
+import glob
+print("CatVTON example garments you can use:")
+for p in sorted(glob.glob("/content/CatVTON/resource/demo/example/condition/upper/*")
+              + glob.glob("/content/CatVTON/resource/demo/example/condition/overall/*")):
+    print("  ", p)
+print("\nyour uploaded photos:")
+for p in sorted(glob.glob("/content/*.jpg")+glob.glob("/content/*.jpeg")+glob.glob("/content/*.png")):
+    print("  ", p)
+
 PAIRS = [
-    # (person_image, garment_image, cloth_type)
-    # ("/content/people/priya_1.jpg", "/content/garments/white_tee.jpg",  "upper"),
-    # ("/content/people/priya_1.jpg", "/content/garments/blue_dress.jpg", "overall"),
+    # (your_photo, garment_image, cloth_type)  — fill from the lists printed above
+    # ("/content/me.jpg", "/content/CatVTON/resource/demo/example/condition/upper/22790049_53294275_1000.jpg", "upper"),
 ]
-OUT_DIR = "/content/krey_renders"; os.makedirs(OUT_DIR, exist_ok=True)
 
 # %% [markdown]
 # ## 5. Run + score every pair (identity preserved? how fast?)
 
 # %%
-import time
-from bench.render_eval import identity_similarity, RECOGNISABLE_COSINE
+import time, os, statistics
+
+OUT_DIR = "/content/krey_renders"; os.makedirs(OUT_DIR, exist_ok=True)
 
 rows = []
 for i, (person, garment, ctype) in enumerate(PAIRS):
@@ -130,21 +179,22 @@ for i, (person, garment, ctype) in enumerate(PAIRS):
     except Exception as e:
         rows.append((os.path.basename(person), os.path.basename(garment), None, None, f"ERROR: {e}"))
 
-print(f"{'person':22} {'garment':18} {'id_cos':>7} {'secs':>6}  verdict")
+print(f"{'person':28} {'garment':22} {'id_cos':>7} {'secs':>6}  verdict")
 for r in rows:
-    print(f"{r[0]:22} {r[1]:18} {str(r[2]):>7} {str(r[3]):>6}  {r[4]}")
+    print(f"{r[0]:28} {r[1]:22} {str(r[2]):>7} {str(r[3]):>6}  {r[4]}")
 
 ok = [r for r in rows if r[2] is not None]
 if ok:
-    import statistics
     print(f"\nmean identity cosine = {statistics.mean(r[2] for r in ok):.3f}  "
           f"(floor {RECOGNISABLE_COSINE}) · mean {statistics.mean(r[3] for r in ok):.1f}s/render")
-print("\nAlso eyeball each render in", OUT_DIR, "for garment fidelity (colour/cut/print).")
+print("\nRenders saved in", OUT_DIR, "— open them to check garment fidelity (colour/cut/print).")
 
 # %% [markdown]
 # ## 6. Read the result
 # PASS bar (docs/render_benchmark_plan.md): identity cosine stays high across the set AND the
 # garment is clearly right AND render time is tolerable on a free/cheap GPU.
-# - Passes -> wrap run_tryon as a Modal serverless-GPU endpoint (free credits) and wire /render
-#   behind the existing canRender gate.
-# - Fails on identity -> try IDM-VTON (Colab Pro/A100) or a different model before deciding.
+# - A LOW score with a group/angled input = input problem, not model: re-test single-person,
+#   front-on, waist-up (this is the capture spec the product must enforce).
+# - Passes on clean inputs -> wrap run_tryon as a Modal serverless-GPU endpoint (free credits)
+#   and wire /render behind the existing canRender gate.
+# - Fails on identity even on clean inputs -> try IDM-VTON (Colab Pro/A100) before deciding.
