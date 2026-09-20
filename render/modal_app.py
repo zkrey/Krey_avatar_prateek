@@ -35,7 +35,8 @@ import sys
 
 import modal
 
-GPU = os.environ.get("KREY_RENDER_GPU", "L4")      # "T4" | "L4" | "A10G" | "A100"
+GPU = os.environ.get("KREY_RENDER_GPU", "T4")      # T4 = free tier (no card). L4/A10G/A100
+#                                                    are faster but need a Modal payment method.
 CATVTON_DIR = "/opt/CatVTON"
 CATVTON_REPO = "zhengchong/CatVTON"
 BASE_REPO = "runwayml/stable-diffusion-inpainting"
