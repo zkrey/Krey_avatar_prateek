@@ -115,14 +115,47 @@ _automasker = AutoMasker(
     device="cuda",
 )
 
+import cv2
+import numpy as np
+
+
+def smart_crop_box(img_bgr, face_frac: float = 0.20):
+    """Face-anchored 3:4 torso box (left, top, w, h), or None if no face.
+    Real-world photos are full-body/off-centre → the face ends up tiny and the masker
+    grabs the wrong region. Anchoring a head-to-hips crop on the detected face so the face
+    fills ~face_frac of the height fixed a real full-body shot from 0.24 -> 0.94 identity.
+    Reuses _face_app from the scorer cell — no extra model."""
+    faces = _face_app.get(img_bgr)
+    if not faces:
+        return None
+    f = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+    x0, y0, x1, y1 = f.bbox
+    fh = y1 - y0
+    cx = (x0 + x1) / 2.0
+    Hc = fh / face_frac
+    Wc = 0.75 * Hc                                  # 3:4 to match CatVTON's 768x1024
+    top = y0 - 0.15 * Hc                            # a little headroom above the face
+    left = cx - Wc / 2.0
+    ih, iw = img_bgr.shape[:2]
+    Wc = min(Wc, iw); Hc = min(Hc, ih)
+    left = 0 if Wc >= iw else max(0.0, min(left, iw - Wc))
+    top = 0 if Hc >= ih else max(0.0, min(top, ih - Hc))
+    return int(left), int(top), int(Wc), int(Hc)
+
+
 def run_tryon(person_path: str, garment_path: str, out_path: str,
               cloth_type: str = "upper", steps: int = 40, guidance: float = 2.5,
-              seed: int = 42) -> str:
+              seed: int = 42, auto_crop: bool = True, composite: bool = True) -> str:
     """Render `person` wearing `garment`, save to out_path, return out_path.
-    cloth_type is one of AutoMasker's classes: 'upper', 'lower', or 'overall' (dress/full).
-    steps=40 is a good speed/quality point on a T4 (~90s); raise toward 50 for max quality.
-    """
-    person = resize_and_crop(Image.open(person_path).convert("RGB"), (W, H))
+    auto_crop: face-anchor a torso crop first (makes real-world/full-body photos work).
+    composite: paste the rendered torso back into the FULL original (real photo in, real
+               photo dressed out). Set composite=False to save just the rendered crop
+               (that's the honest per-render identity measure — see the benchmark loop).
+    cloth_type: 'upper' | 'lower' | 'overall'. steps=40 ~ good speed/quality on a T4."""
+    orig = Image.open(person_path).convert("RGB")
+    box = smart_crop_box(cv2.cvtColor(np.array(orig), cv2.COLOR_RGB2BGR)) if auto_crop else None
+    src = orig.crop((box[0], box[1], box[0] + box[2], box[1] + box[3])) if box else orig
+    person = resize_and_crop(src, (W, H))
     cloth = resize_and_padding(Image.open(garment_path).convert("RGB"), (W, H))
     mask = _automasker(person, cloth_type)["mask"]
     mask = _mask_processor.blur(mask, blur_factor=9)
@@ -131,10 +164,31 @@ def run_tryon(person_path: str, garment_path: str, out_path: str,
         image=person, condition_image=cloth, mask=mask,
         num_inference_steps=steps, guidance_scale=guidance, generator=generator,
     )[0]
-    result.save(out_path)
+    if composite and box:
+        l, t, wc, hc = box
+        # mask-aware composite: swap ONLY the garment-mask pixels back into the full photo, so
+        # face/hands/background stay the real originals (fixes generative-model hand artifacts).
+        m = (mask.convert("L") if hasattr(mask, "convert")
+             else Image.fromarray(np.asarray(mask)).convert("L")).resize((wc, hc))
+        base = orig.crop((l, t, l + wc, t + hc)).convert("RGB")
+        comp = Image.composite(result.resize((wc, hc)), base, m)
+        canvas = orig.copy()
+        canvas.paste(comp, (l, t))
+        canvas.save(out_path)
+    else:
+        result.save(out_path)
     return out_path
 
-print("pipeline ready · run_tryon(person, garment, out, cloth_type='upper'|'lower'|'overall')")
+
+def crop_for_score(person_path: str, out_path: str) -> str:
+    """Save the same face-anchored crop run_tryon uses, so the benchmark scores like-for-like
+    (crop identity vs rendered-crop identity), not a tiny full-frame face vs a large one."""
+    orig = Image.open(person_path).convert("RGB")
+    box = smart_crop_box(cv2.cvtColor(np.array(orig), cv2.COLOR_RGB2BGR))
+    (orig.crop((box[0], box[1], box[0] + box[2], box[1] + box[3])) if box else orig).save(out_path)
+    return out_path
+
+print("pipeline ready · run_tryon(person, garment, out, cloth_type=..., auto_crop=True, composite=True)")
 
 # %% [markdown]
 # ## 4. Test set — (person, garment, cloth_type) triples
@@ -168,12 +222,16 @@ OUT_DIR = "/content/krey_renders"; os.makedirs(OUT_DIR, exist_ok=True)
 
 rows = []
 for i, (person, garment, ctype) in enumerate(PAIRS):
-    out = os.path.join(OUT_DIR, f"tryon_{i}.png")
+    render = os.path.join(OUT_DIR, f"tryon_{i}.png")           # rendered crop (for the honest score)
+    full = os.path.join(OUT_DIR, f"tryon_{i}_full.png")        # dressed FULL photo (for eyeballing)
     t0 = time.time()
     try:
-        run_tryon(person, garment, out, cloth_type=ctype)
+        # face-anchored crop makes real-world/full-body photos work (0.24 -> 0.94 on a real shot)
+        crop = crop_for_score(person, os.path.join(OUT_DIR, f"crop_{i}.jpg"))
+        run_tryon(person, garment, render, cloth_type=ctype, auto_crop=True, composite=False)
+        run_tryon(person, garment, full, cloth_type=ctype, auto_crop=True, composite=True)
         secs = time.time() - t0
-        sim = identity_similarity(person, out)           # our real ArcFace "is it still them?"
+        sim = identity_similarity(crop, render)               # like-for-like: crop vs rendered crop
         rows.append((os.path.basename(person), os.path.basename(garment), round(sim, 3),
                      round(secs, 1), "PASS" if sim >= RECOGNISABLE_COSINE else "FAIL"))
     except Exception as e:
@@ -187,14 +245,17 @@ ok = [r for r in rows if r[2] is not None]
 if ok:
     print(f"\nmean identity cosine = {statistics.mean(r[2] for r in ok):.3f}  "
           f"(floor {RECOGNISABLE_COSINE}) · mean {statistics.mean(r[3] for r in ok):.1f}s/render")
-print("\nRenders saved in", OUT_DIR, "— open them to check garment fidelity (colour/cut/print).")
+print("\nSaved in", OUT_DIR, ": tryon_*.png (rendered crop, scored) and tryon_*_full.png "
+      "(your FULL photo dressed — real photo in, real photo out). Eyeball garment fidelity on both.")
 
 # %% [markdown]
 # ## 6. Read the result
 # PASS bar (docs/render_benchmark_plan.md): identity cosine stays high across the set AND the
 # garment is clearly right AND render time is tolerable on a free/cheap GPU.
-# - A LOW score with a group/angled input = input problem, not model: re-test single-person,
-#   front-on, waist-up (this is the capture spec the product must enforce).
-# - Passes on clean inputs -> wrap run_tryon as a Modal serverless-GPU endpoint (free credits)
-#   and wire /render behind the existing canRender gate.
-# - Fails on identity even on clean inputs -> try IDM-VTON (Colab Pro/A100) before deciding.
+# - smart_crop makes REAL-WORLD photos work: a full-body arms-out shot went 0.24 -> 0.94 just by
+#   face-anchoring the crop. CatVTON only inpaints the masked garment region, so face/background/
+#   hair pass through untouched — most "noise" (background, on-face skin/texture) needs no fix.
+# - What DOES need handling, measure-first (ablation): face size (solved by smart_crop), pose
+#   (torso crop helps), lighting/white-balance + face-restore only if a test moves the score.
+# - Passes -> deploy render/modal_app.py (Modal serverless GPU) and wire /render behind the
+#   existing canRender gate (render/README.md).

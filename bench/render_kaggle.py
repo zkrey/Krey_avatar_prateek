@@ -115,11 +115,44 @@ _automasker = AutoMasker(
     device="cuda",
 )
 
+import cv2
+import numpy as np
+
+
+def smart_crop_box(img_bgr, face_frac: float = 0.20):
+    """Face-anchored 3:4 torso box (left, top, w, h), or None if no face.
+    Real photos are full-body/off-centre → face tiny, masker grabs the wrong region. A
+    head-to-hips crop anchored on the face (face ~face_frac of height) fixed a real full-body
+    shot 0.24 -> 0.94. Reuses _face_app from the scorer cell — no extra model."""
+    faces = _face_app.get(img_bgr)
+    if not faces:
+        return None
+    f = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
+    x0, y0, x1, y1 = f.bbox
+    fh = y1 - y0
+    cx = (x0 + x1) / 2.0
+    Hc = fh / face_frac
+    Wc = 0.75 * Hc
+    top = y0 - 0.15 * Hc
+    left = cx - Wc / 2.0
+    ih, iw = img_bgr.shape[:2]
+    Wc = min(Wc, iw); Hc = min(Hc, ih)
+    left = 0 if Wc >= iw else max(0.0, min(left, iw - Wc))
+    top = 0 if Hc >= ih else max(0.0, min(top, ih - Hc))
+    return int(left), int(top), int(Wc), int(Hc)
+
+
 def run_tryon(person_path: str, garment_path: str, out_path: str,
               cloth_type: str = "upper", steps: int = 40, guidance: float = 2.5,
-              seed: int = 42) -> str:
-    """Render `person` wearing `garment`. cloth_type: 'upper'|'lower'|'overall'."""
-    person = resize_and_crop(Image.open(person_path).convert("RGB"), (W, H))
+              seed: int = 42, auto_crop: bool = True, composite: bool = True) -> str:
+    """Render person wearing garment. auto_crop: face-anchor a torso crop first (real photos).
+    composite: paste the dressed torso back into the FULL original (real photo in/out).
+    composite=False saves just the rendered crop (the honest per-render score). cloth_type:
+    'upper'|'lower'|'overall'."""
+    orig = Image.open(person_path).convert("RGB")
+    box = smart_crop_box(cv2.cvtColor(np.array(orig), cv2.COLOR_RGB2BGR)) if auto_crop else None
+    src = orig.crop((box[0], box[1], box[0] + box[2], box[1] + box[3])) if box else orig
+    person = resize_and_crop(src, (W, H))
     cloth = resize_and_padding(Image.open(garment_path).convert("RGB"), (W, H))
     mask = _automasker(person, cloth_type)["mask"]
     mask = _mask_processor.blur(mask, blur_factor=9)
@@ -128,10 +161,30 @@ def run_tryon(person_path: str, garment_path: str, out_path: str,
         image=person, condition_image=cloth, mask=mask,
         num_inference_steps=steps, guidance_scale=guidance, generator=generator,
     )[0]
-    result.save(out_path)
+    if composite and box:
+        l, t, wc, hc = box
+        # mask-aware composite: swap ONLY the garment-mask pixels back into the full photo, so
+        # face/hands/background stay the real originals (fixes generative hand artifacts).
+        m = (mask.convert("L") if hasattr(mask, "convert")
+             else Image.fromarray(np.asarray(mask)).convert("L")).resize((wc, hc))
+        base = orig.crop((l, t, l + wc, t + hc)).convert("RGB")
+        comp = Image.composite(result.resize((wc, hc)), base, m)
+        canvas = orig.copy()
+        canvas.paste(comp, (l, t))
+        canvas.save(out_path)
+    else:
+        result.save(out_path)
     return out_path
 
-print("pipeline ready · run_tryon(person, garment, out, cloth_type='upper'|'lower'|'overall')")
+
+def crop_for_score(person_path: str, out_path: str) -> str:
+    """Save the same face-anchored crop run_tryon uses, so scoring is like-for-like."""
+    orig = Image.open(person_path).convert("RGB")
+    box = smart_crop_box(cv2.cvtColor(np.array(orig), cv2.COLOR_RGB2BGR))
+    (orig.crop((box[0], box[1], box[0] + box[2], box[1] + box[3])) if box else orig).save(out_path)
+    return out_path
+
+print("pipeline ready · run_tryon(person, garment, out, cloth_type=..., auto_crop=True, composite=True)")
 
 # %% [markdown]
 # ## 4. Test set — (person, garment, cloth_type) triples
@@ -166,12 +219,15 @@ OUT_DIR = "/kaggle/working/krey_renders"; os.makedirs(OUT_DIR, exist_ok=True)
 
 rows = []
 for i, (person, garment, ctype) in enumerate(PAIRS):
-    out = os.path.join(OUT_DIR, f"tryon_{i}.png")
+    render = os.path.join(OUT_DIR, f"tryon_{i}.png")           # rendered crop (scored)
+    full = os.path.join(OUT_DIR, f"tryon_{i}_full.png")        # dressed FULL photo (eyeball)
     t0 = time.time()
     try:
-        run_tryon(person, garment, out, cloth_type=ctype)
+        crop = crop_for_score(person, os.path.join(OUT_DIR, f"crop_{i}.jpg"))
+        run_tryon(person, garment, render, cloth_type=ctype, auto_crop=True, composite=False)
+        run_tryon(person, garment, full, cloth_type=ctype, auto_crop=True, composite=True)
         secs = time.time() - t0
-        sim = identity_similarity(person, out)
+        sim = identity_similarity(crop, render)               # like-for-like: crop vs rendered crop
         rows.append((os.path.basename(person), os.path.basename(garment), round(sim, 3),
                      round(secs, 1), "PASS" if sim >= RECOGNISABLE_COSINE else "FAIL"))
     except Exception as e:
@@ -185,7 +241,8 @@ ok = [r for r in rows if r[2] is not None]
 if ok:
     print(f"\nmean identity cosine = {statistics.mean(r[2] for r in ok):.3f}  "
           f"(floor {RECOGNISABLE_COSINE}) · mean {statistics.mean(r[3] for r in ok):.1f}s/render")
-print("\nRenders saved in", OUT_DIR, "— open the Output/Data panel to view them.")
+print("\nSaved in", OUT_DIR, ": tryon_*.png (rendered crop, scored) + tryon_*_full.png "
+      "(FULL photo dressed). Open the Output/Data panel to view them.")
 
 # %% [markdown]
 # ## 6. Read the result

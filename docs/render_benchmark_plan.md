@@ -69,17 +69,36 @@ Gotchas baked into the notebook (learned the hard way on a first run):
 - **Verify vs the current README** if CatVTON has moved — the API is faithful to app.py as of the
   fill, but VTON repos change.
 
-### First-run finding (single-person input is non-negotiable)
-The first real run showed a bimodal result: group/party/angled photos scored ~0.41 (FAIL) while a
-cleaner single subject scored **0.81 (PASS)** with the garment landing correctly (right colour/cut).
-Same model, same scorer — the only variable was input quality. Takeaways:
-- The identity bet is **alive**: on a reasonable single subject CatVTON keeps the person
-  recognisably themselves *and* applies the garment. The failures were off-spec inputs, not the model.
-- **Product implication:** the render-capture UX must enforce a **single-person, front-on, roughly
-  waist-up** shot. A face that is a tiny fraction of a full-body/group frame gets softened by the
-  768×1024 inpainting; a proper waist-up crop keeps the face large enough to preserve.
-- Still to confirm on a clean solo capture: the identity score and a face clean enough to skip a
-  face-restore pass. If a restore is needed later, add CodeFormer/GFPGAN after the render.
+### VERDICT: M1 PASSES — and real-world photos work (no ideal shots required)
+Runs on real tester photos, scored with our own ArcFace:
+- Group/party/angled full-frame → ~0.41 (FAIL); a reasonably-framed subject → **0.81 (PASS)**.
+- A **full-body, arms-out, busy-background** shot scored **0.244 raw** — then **0.944** after a
+  face-anchored **smart-crop**, on the *same photo*. Visual check: face clearly the same person,
+  garment (print/cut/trim) correct, skin tone + lighting consistent.
+
+The identity bet is **won**, and won the right way — the fix lives in the pipeline, not in demanding
+a perfect photo. Key architectural fact: **CatVTON is a masked inpainter** — it only regenerates the
+garment region, so face, hair, background and on-face skin **pass through the input untouched**. Most
+"noise" (background, on-face texture/skin) therefore needs **no correction** for identity.
+
+### The input conditioner (build test-first, measure each factor)
+What actually needs handling, ranked by measured/likely impact — add each only when an ablation on
+real photos moves the score (as smart-crop did, 0.24 → 0.94):
+1. **Face size / framing** — face-anchored **smart-crop** to a 3:4 head-to-hips box (face ~20% of
+   height). **Shipped** in `run_tryon` (benchmark) and the Modal `tryon` (production).
+2. **Composite-back, mask-aware** — paste ONLY the garment-mask pixels into the full original, so
+   face/**hands**/background stay the real photo. Fixes generative hand artifacts. **Shipped.**
+3. **Pose** — the torso crop mitigates arms-out; extreme poses remain edge cases.
+4. **Lighting / white-balance** (`app/whitebalance.py`) — add only if an ablation shows it helps
+   outdoor colour casts.
+5. **Face-restore** (CodeFormer/GFPGAN) — only if an input is genuinely blurry; the face is passed
+   through, so usually unnecessary.
+Plus an **input-quality classifier** (face size/count, blur, exposure) to route auto-fix vs a soft
+"use a clearer one" nudge — never a hard reject (capture doctrine).
+
+### Cost / speed (measured)
+~40 steps → **~75–80 s/render on a free T4**. Tunable via steps; L4/A10G on Modal cut it further.
+Feed seconds/render × GPU price into unit-econ before any always-on GPU.
 
 ### Decision (parked): capture requirement differs by 2D vs 3D
 The 5-image capture and the render are **two separate pipelines**. The 5-image capture
