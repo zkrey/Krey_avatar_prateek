@@ -81,6 +81,25 @@ Same model, same scorer — the only variable was input quality. Takeaways:
 - Still to confirm on a clean solo capture: the identity score and a face clean enough to skip a
   face-restore pass. If a restore is needed later, add CodeFormer/GFPGAN after the render.
 
+### Decision (parked): capture requirement differs by 2D vs 3D
+The 5-image capture and the render are **two separate pipelines**. The 5-image capture
+(`/capture/session` → `capture_core.py`) builds the *appearance twin* — owner-pick across frames,
+identity confidence, and appearance fusion that lifts per-attribute accuracy ~65% (1 photo) → ~84%
+(5 photos). It does **not** feed the renderer: CatVTON consumes exactly **one** person image, so
+extra frames only give a better pool to auto-pick the single cleanest render base from
+(`select_best_frames`), not richer render input.
+
+- **Alpha (now):** keep the current multi-image capture as-is. It hardens the twin/owner-pick code
+  under real test data and costs us nothing to leave running.
+- **Launch flow (to apply on the actual prototype design, not the alpha harness):**
+  - **2D render (M1):** require **one** clean single-person, front-on, waist-up photo; treat "add a
+    few more to sharpen your twin" as optional/progressive, never a signup gate. Eases signup, still
+    renders + gives a usable (lower-confidence) appearance read.
+  - **3D mirror twin (M2):** multiple **angles** become a genuine requirement (reconstruction needs
+    viewpoints) — the natural place to ask for more, when users are more invested.
+- Net: don't change the alpha capture now; split the requirement (1-photo 2D vs multi-angle 3D) when
+  reworking the real prototype signup.
+
 ## If it passes → the path (still cheap)
 1. Wrap the render as a **Modal** serverless-GPU function (free monthly credits, scale-to-zero
    — pay only per render). See `docs/scope_bakeins.md` cost notes.
