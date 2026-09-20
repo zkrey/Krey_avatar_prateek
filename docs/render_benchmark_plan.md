@@ -100,6 +100,43 @@ Plus an **input-quality classifier** (face size/count, blur, exposure) to route 
 ~40 steps → **~75–80 s/render on a free T4**. Tunable via steps; L4/A10G on Modal cut it further.
 Feed seconds/render × GPU price into unit-econ before any always-on GPU.
 
+### Garment × base-outfit matrix (6 renders, real + studio)
+Identity held everywhere (id_cos 0.85–0.94) — smart_crop closed that variable. The remaining
+question is *visual garment-fit*, which the (face-only) score can't see, so it's an eyeball call:
+
+| Combo | id_cos | fit verdict |
+|---|---|---|
+| real_top (you, in a skirt) × top | 0.939 | ✅ clean |
+| real_dress (you, in a skirt) × dress | 0.942 | ⚠️ awkward — floral read as a chest panel over the existing skirt |
+| clean0_top / clean0_dress (studio, leggings) | 0.91 / 0.90 | ✅ / ✅ clean |
+| clean1_top / clean1_dress (studio, jeans) | 0.86 / 0.85 | ✅ / ✅ clean |
+
+**Ship rules that fall out:**
+1. **The model is solid** — studio/clean inputs render uniformly clean on both tops and dresses.
+2. **Tops (`upper`) are the reliable v1** — clean on real *and* studio inputs. Ship tops first.
+3. **Render quality tracks garment↔base-outfit match**: clean when the target garment's coverage
+   matches the base outfit's structure (top→separates, dress→simple base); mismatches (top over a
+   full dress; dress over an existing distinct skirt) produce boundary/awkwardness. This is a
+   **routing rule** (detect base outfit → offer matching garment types), not a model fix — it
+   belongs in the subject router.
+4. **B2B mirror is the quality sweet spot** — controlled studio inputs render cleanest, reinforcing
+   B2B as the higher-quality, faster-to-revenue track.
+
+### Coverage plan — bottoms + grey areas (next mapping pass)
+Tops-first ships now; the matrix must be widened before broadening the catalog. Still to map:
+- **Bottoms (`lower`)**: trousers/skirts — untested (CatVTON's bundled examples are upper/overall
+  only; upload a lower-garment image to test). Confirm mask + fit behaviour.
+- **Base-outfit detection → routing**: classify the person's current outfit (separates vs
+  one-piece) and offer only matching garment types; the "grey" mismatches above are what this fixes.
+- **Indian wear**: saree, kurta, lehenga, dupatta layering — key for the market, likely a distinct
+  hard class.
+- **Body/fit grey areas**: plus-size, maternity (bump preservation), very loose/tight garments.
+- **Occlusions / pose**: holding objects, bags, crossed arms, non-frontal — measure degradation.
+- **Input hygiene**: multi-person, no clear subject, extreme lighting → route to soft nudge, not a
+  broken render.
+Each is an ablation on real images: add the fix only where it moves the eyeball verdict (the same
+measure-first discipline that took the crop from 0.24 → 0.94).
+
 ### Decision (parked): capture requirement differs by 2D vs 3D
 The 5-image capture and the render are **two separate pipelines**. The 5-image capture
 (`/capture/session` → `capture_core.py`) builds the *appearance twin* — owner-pick across frames,

@@ -22,8 +22,8 @@ import logging
 import os
 import uuid
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Body, BackgroundTasks
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Body, BackgroundTasks, Header
+from fastapi.responses import HTMLResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 import numpy as np
 
@@ -603,6 +603,84 @@ def render_authorize_ep(payload: dict = Body(...)):
                          fail_reason=None if decision["allowed"] else "daily_quota_reached",
                          source=decision["lane"])
     return decision
+
+
+@app.post("/render")
+async def render_ep(
+    person: UploadFile = File(...),                 # the person photo (real-world OK; auto-cropped)
+    garment: UploadFile = File(...),                # the garment image (flat-lay or on-model)
+    cloth_type: str = Form("upper"),                # upper (tops-first v1) | lower | overall
+    entry_point: str = Form("tap"),                 # play surface that triggered this render
+    plan: Optional[str] = Form(None),
+    used_today: int = Form(0),
+    token_balance: int = Form(0),
+    account_present: bool = Form(False),
+    dob_verified: bool = Form(False),
+    birthdate: Optional[str] = Form(None),
+    jurisdiction: Optional[str] = Form(None),
+    session_id: Optional[str] = Form(None),
+    user_id: Optional[str] = Form(None),
+    guest_id: Optional[str] = Form(None),
+    surface: Optional[str] = Form(None),
+    region: Optional[str] = Form(None),
+    app_version: Optional[str] = Form(None),
+    device_os: Optional[str] = Form(None),
+):
+    """
+    The try-on render (Service B). Doctrine intact: eligibility (canRender) + token hold live
+    HERE on Service A; the GPU runs on Modal (render/modal_app.py) which auto-crops + composites
+    so real-world photos work and only the garment pixels change. Derive-and-discard: images in,
+    PNG out, nothing stored. Inert (503) until KREY_MODAL_RENDER_URL + KREY_RENDER_SECRET are set,
+    so this is safe to ship dark and light up when the Modal endpoint is deployed.
+    """
+    import time
+    from render import client as render_client
+    if not render_client.render_configured():
+        raise HTTPException(503, "render backend not configured")
+
+    spine = _spine(session_id, user_id, guest_id, surface, region, app_version, device_os, None)
+    ep = entry_point if entry_point in analytics_entry_points else "tap"
+
+    # 1) daily quota + lane (pure policy) — same call /render/authorize uses.
+    authz = entitlements.authorize(plan, used_today)
+    if not authz["allowed"]:
+        analytics.render(spine, phase="requested", entry_point=ep,
+                         fail_reason="daily_quota_reached", source=authz.get("lane"))
+        raise HTTPException(429, {"reason": "daily_quota_reached", "upsell": authz.get("upsell")})
+
+    # 2) the single canRender wall (account + DOB + jurisdiction + funds).
+    bd = None
+    if birthdate:
+        try:
+            bd = date.fromisoformat(birthdate)
+        except ValueError:
+            bd = None
+    cost = entitlements.token_map()["OWNCOST"]      # barrier-1 cost; env-overridable
+    verdict = eligibility.can_render(
+        account_present=account_present, dob_verified=dob_verified, birthdate=bd,
+        today=date.today(), token_balance=token_balance, render_cost=cost,
+        jurisdiction=jurisdiction or eligibility.M1_JURISDICTION,
+        input_eligibility_passed=True,
+    )
+    if not verdict.allowed:
+        analytics.render(spine, phase="requested", entry_point=ep, fail_reason=verdict.reason)
+        raise HTTPException(403, {"reason": verdict.reason, "is_minor": verdict.is_minor})
+
+    # 3) reserve tokens → render on Modal → commit on success / release on failure.
+    remaining, hold = eligibility.place_hold(token_balance, cost)
+    t0 = time.monotonic()
+    try:
+        png = render_client.render_tryon(await person.read(), await garment.read(), cloth_type)
+        eligibility.commit_hold(hold)
+    except Exception as e:
+        eligibility.release_hold(remaining, hold)
+        analytics.render(spine, phase="failed", entry_point=ep, fail_reason="render_error")
+        raise HTTPException(502, f"render failed: {e}")
+
+    elapsed = time.monotonic() - t0                  # wall-clock proxy until Modal reports GPU secs
+    analytics.render(spine, phase="completed", entry_point=ep, source=authz.get("lane"),
+                     gpu_seconds=round(elapsed, 2), latency_ms=int(elapsed * 1000))
+    return Response(content=png, media_type="image/png")   # derive-and-discard: nothing stored
 
 
 @app.post("/feedback")
