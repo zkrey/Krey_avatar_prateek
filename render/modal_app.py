@@ -50,19 +50,24 @@ def _bake_weights():
     FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"]).prepare(ctx_id=-1, det_size=(640, 640))
 
 
-# Image mirrors the benchmark install: keep Modal's torch/CUDA, strip CatVTON's torch pin plus
-# the gradio/huggingface_hub pins that clash, add PyAV + detectron2 (DensePose) + insightface
-# (smart-crop), then bake all weights/models.
+# CatVTON's requirements.txt no longer resolves (pins diffusers-from-git needing hub>=1.31
+# against transformers 4.46.3 needing hub<1.0). So we DON'T use it — we install the exact set
+# proven on Kaggle (diffusers 0.29.2 + a compatible, pinned trio), plus torch (Modal's base has
+# none, unlike Kaggle), plus the DensePose/insightface stack, then bake all weights/models.
 image = (
     modal.Image.debian_slim(python_version="3.11")
     .apt_install("git", "libgl1", "libglib2.0-0", "libgomp1")
-    .run_commands(
-        f"git clone https://github.com/Zheng-Chong/CatVTON.git {CATVTON_DIR}",
-        f"grep -viE '^(torch|torchvision|torchaudio|gradio|huggingface[-_]hub)' "
-        f"{CATVTON_DIR}/requirements.txt > /tmp/req.txt",
-        "pip install -r /tmp/req.txt",
-        "pip install av insightface onnxruntime 'git+https://github.com/facebookresearch/detectron2.git'",
+    .run_commands(f"git clone https://github.com/Zheng-Chong/CatVTON.git {CATVTON_DIR}")
+    .pip_install(
+        "torch", "torchvision",                                   # CUDA wheels for the Modal GPU
+        "diffusers==0.29.2", "transformers==4.46.3", "accelerate==0.31.0",
+        "huggingface_hub==0.25.2",                                # satisfies diffusers + transformers
+        "numpy==1.26.4", "scipy", "opencv-python-headless", "pillow", "matplotlib",
+        "tqdm", "pyyaml", "scikit-image", "einops", "av",
+        "omegaconf", "pycocotools", "fvcore", "cloudpickle",      # DensePose/detectron2 deps
+        "insightface", "onnxruntime",                             # smart-crop face detector
     )
+    .run_commands("pip install 'git+https://github.com/facebookresearch/detectron2.git'")
     .run_function(_bake_weights)
 )
 
