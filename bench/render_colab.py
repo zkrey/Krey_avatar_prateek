@@ -73,7 +73,7 @@ print("scorer ready · floor =", RECOGNISABLE_COSINE)
 import os, sys
 !git clone https://github.com/Zheng-Chong/CatVTON.git /content/CatVTON 2>/dev/null || echo "CatVTON already cloned"
 # CatVTON pins torch==2.4.0 (not on Colab). Keep Colab's torch+CUDA; install everything else:
-!grep -viE '^(torch|torchvision|torchaudio)' /content/CatVTON/requirements.txt > /tmp/req_notorch.txt
+!grep -viE '^(torch|torchvision|torchaudio|gradio|huggingface[-_]hub)' /content/CatVTON/requirements.txt > /tmp/req_notorch.txt
 !pip -q install -r /tmp/req_notorch.txt
 !pip -q install av                                                 # DensePose video dep, not in pins
 !pip -q install 'git+https://github.com/facebookresearch/detectron2.git'

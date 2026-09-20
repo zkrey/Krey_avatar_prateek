@@ -73,7 +73,7 @@ import os, sys
 CAT = "/kaggle/working/CatVTON"
 !git clone https://github.com/Zheng-Chong/CatVTON.git {CAT} 2>/dev/null || echo "CatVTON already cloned"
 # CatVTON pins torch==2.4.0 (not on Kaggle). Keep Kaggle's torch+CUDA; install everything else:
-!grep -viE '^(torch|torchvision|torchaudio)' {CAT}/requirements.txt > /kaggle/working/req_notorch.txt
+!grep -viE '^(torch|torchvision|torchaudio|gradio|huggingface[-_]hub)' {CAT}/requirements.txt > /kaggle/working/req_notorch.txt
 !pip -q install -r /kaggle/working/req_notorch.txt
 !pip -q install av                                                 # DensePose video dep, not in pins
 !pip -q install 'git+https://github.com/facebookresearch/detectron2.git'
