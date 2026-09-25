@@ -436,10 +436,13 @@ function renderResults(cap, meas, h){
 
   // Show the face Krey locked onto as the owner, so the tester can validate 'yes, that's me'
   // before trusting the data points. A one-tap 'Not me' flag routes to feedback.
+  // Warm, personified greeting when they gave a name (first name only); graceful fallback otherwise.
+  const _nm=($("name").value.trim().split(/\s+/)[0]||"");
+  const _hello=_nm ? `${esc(_nm)}, Krey found you ✨` : "Krey found you ✨";
   $("ownerpick").innerHTML = cj.owner_thumb
     ? `<img src="${cj.owner_thumb}" alt="the face Krey identified as you">
-       <div><div class="opt">Krey identified <b>this</b> as you</div>
-         <div class="ops">Not the right person? Flag it so the read below can be discounted.</div>
+       <div><div class="opt">${_hello}</div>
+         <div class="ops">This is the face Krey locked onto. Not you? Flag it so the read below can be discounted.</div>
          <button class="flagbtn" data-flag="identity_img" data-label="Identified person" data-value="the highlighted face">🚩 Not me</button></div>`
     : "";
 
