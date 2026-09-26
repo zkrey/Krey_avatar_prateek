@@ -64,7 +64,7 @@ def _from_supabase(cloth_type: str | None, segment: str | None, limit: int) -> l
     base = os.environ["KREY_SUPABASE_URL"].rstrip("/")
     key = os.environ["KREY_SUPABASE_KEY"]
     url = (f"{base}/rest/v1/garments"
-           f"?select=garment_id,name,cloth_type,segment,category,color,image_url,source"
+           f"?select=garment_id,name,cloth_type,segment,subsegment,category,color,image_url,source"
            f"&limit={int(limit)}")
     if cloth_type in CLOTH_TYPES:
         url += f"&cloth_type=eq.{cloth_type}"

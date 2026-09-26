@@ -63,16 +63,46 @@ def segment(row):
     if use == "Sports":                                return "athleisure"
     return "casual"
 
+# --- subsegment (granular drilldown under segment) ---
+def subsegment(row, seg):
+    a = row["articleType"]; use = str(row.get("usage","")); season = str(row.get("season",""))
+    if seg == "intimate":
+        if a in {"Bra","Camisoles"}:                              return "lingerie"
+        if a in {"Shapewear","Petticoat"}:                        return "shapewear"
+        if a in {"Nightdress","Baby Dolls","Robe","Lounge Pants","Lounge Shorts"}: return "sleep-lounge"
+        return "innerwear-basics"
+    if seg == "wedding":
+        return "groom" if a == "Sherwani" else "bridal-festive"
+    if seg == "ethnic":
+        if a in {"Kurtas","Kurtis","Kurta Sets"}:                 return "kurta"
+        if a in {"Churidar","Salwar","Dupatta","Salwar and Dupatta"}: return "salwar"
+        return "indo-western"
+    if seg == "formal":
+        return "office-formal" if a in {"Blazers","Waistcoat","Suits"} else "formal-basics"
+    if seg == "party":
+        return "party-dress" if a in {"Dresses","Jumpsuit"} else "partywear"
+    if seg == "athleisure":
+        return "activewear" if a in {"Track Pants","Tracksuits","Tights"} else "gymwear"
+    # casual
+    if season == "Winter" and a in {"Sweaters","Sweatshirts","Jackets"}:  return "winterwear"
+    if use == "Smart Casual":                                     return "smart-casual"
+    return "everyday-casual"
+
 styles["cloth_type"] = styles["articleType"].map(cloth_type)
 styles["segment"]    = styles.apply(segment, axis=1)
+styles["subsegment"] = styles.apply(lambda r: subsegment(r, r["segment"]), axis=1)
 g = styles.dropna(subset=["cloth_type"])
 
 # balance the pull across SEGMENTS (the thesis buckets), not just cloth_type — so intimate /
 # wedding / ethnic aren't drowned out by the huge casual pile. N per segment, in-stock only.
 SEGMENTS = ("intimate","wedding","ethnic","formal","party","athleisure","casual")
-picks = pd.concat([g[g.segment==s].head(N_PER_TYPE) for s in SEGMENTS]).drop_duplicates("id")
+# pick per SUBSEGMENT so the granular buckets each get coverage, capped so the total stays sane.
+N_PER_SUB = 20
+picks = (pd.concat([sub.head(N_PER_SUB) for _, sub in g.groupby("subsegment")])
+           .drop_duplicates("id"))
 print("selected:", len(picks))
 print("  by segment   :", picks.segment.value_counts().to_dict())
+print("  by subsegment:", picks.subsegment.value_counts().to_dict())
 print("  by cloth_type:", picks.cloth_type.value_counts().to_dict())
 
 # %% [markdown]
@@ -109,7 +139,7 @@ for _, row in picks.iterrows():
     name = f"{row.get('baseColour','')} {row['articleType']}".strip()
     payload = json.dumps([{
         "garment_id": gid, "name": name, "cloth_type": row["cloth_type"],
-        "segment": row["segment"],
+        "segment": row["segment"], "subsegment": row["subsegment"],
         "category": str(row["articleType"]), "color": str(row.get("baseColour","")),
         "image_url": image_url, "source": "fashion-product-images-small",
         "licence": "research/non-commercial (validation test)",

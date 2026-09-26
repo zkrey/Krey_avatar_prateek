@@ -129,11 +129,13 @@ async function onAct(b,kind){
   const g=cardData(b);
   logEvent(g,kind);                         // record the thesis signal
   if(kind==="share"){
-    const url=location.origin+"/closet";
-    const text=`Check out this ${g.name} on Krey`;
+    // Once render is live this shares the /look/<id> page (you in the garment); until then the
+    // catalog item. Channel: native share sheet on mobile (WhatsApp/IG/etc), WhatsApp web on desktop.
+    const url=(g.look_url ? location.origin+g.look_url : location.origin+"/closet");
+    const text=`Check out this ${g.name} on Krey ✨`;
     try{
       if(navigator.share){ await navigator.share({title:"Krey",text,url}); }
-      else { await navigator.clipboard.writeText(text+" "+url); alert("Link copied — send it to a friend to vote on the look."); }
+      else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); }
     }catch(e){/* user cancelled share sheet */}
   } else {
     if(RENDER_LIVE) alert("Rendering "+g.name+" on your photo…");   // Service B hook lands here

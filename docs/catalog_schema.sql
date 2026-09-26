@@ -10,6 +10,7 @@ create table if not exists garments (
     name        text not null,              -- display name ("Blue Oxford Shirt")
     cloth_type  text not null check (cloth_type in ('upper','lower','overall')),  -- the render needs this
     segment     text,                       -- ANALYTICS bucket: intimate/wedding/ethnic/formal/party/athleisure/casual
+    subsegment  text,                       -- GRANULAR drilldown under segment (e.g. lingerie, bridal-festive, kurta)
     category    text,                       -- tee / shirt / jeans / dress …  (display + filter)
     color       text,                       -- hex or name (display + filter; tile fallback)
     image_url   text,                       -- public URL of the garment image (Storage bucket)
@@ -22,13 +23,15 @@ create table if not exists garments (
 
 create index if not exists garments_cloth_type_idx on garments (cloth_type);
 create index if not exists garments_segment_idx    on garments (segment);
+create index if not exists garments_subsegment_idx on garments (subsegment);
 
 -- Read-only public access for the anon key (browse the catalog). Writes are service-role only.
 alter table garments enable row level security;
 create policy "public read garments" on garments for select using (true);
 
--- If you already created `garments` before `segment` existed, add it in place:
+-- If you already created `garments` before these columns existed, add them in place:
 alter table garments add column if not exists segment text;
+alter table garments add column if not exists subsegment text;
 
 -- ---------------------------------------------------------------------------
 -- garment_events — the "what gets shared most" thesis. Durable so counts survive
@@ -61,6 +64,11 @@ create policy "anon insert events" on garment_events for insert with check (true
 --   which SEGMENT gets shared most (the thesis):
 --     select segment, count(*) shares from garment_events
 --       where event_type='share' group by segment order by shares desc;
+--   drilldown — SUBSEGMENT shares (JOIN to garments for the granular cut):
+--     select g.segment, g.subsegment, count(*) shares
+--       from garment_events e join garments g using (garment_id)
+--       where e.event_type='share' group by g.segment, g.subsegment
+--       order by shares desc;
 --   share-through rate by segment (shares / views):
 --     select segment,
 --            count(*) filter (where event_type='share')::float
