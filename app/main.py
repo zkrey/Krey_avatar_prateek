@@ -83,6 +83,7 @@ _LOOK = os.path.join(os.path.dirname(__file__), "look.html")
 _RANK = os.path.join(os.path.dirname(__file__), "rank.html")
 _STUDIO = os.path.join(os.path.dirname(__file__), "studio.html")
 _RESULTS = os.path.join(os.path.dirname(__file__), "results.html")
+_ADMIN = os.path.join(os.path.dirname(__file__), "admin.html")
 
 
 def _render_template(path: str, title: str, og_title: str, og_image: str, data: dict) -> str:
@@ -283,6 +284,46 @@ def results_data(set_id: str):
     """Vote tallies for a ballot (win-rate per look)."""
     from app import catalog as catalog_mod
     return catalog_mod.get_results(set_id) or {"set_id": set_id, "looks": [], "votes": 0}
+
+
+@app.post("/results/confidence")
+def results_confidence(payload: dict = Body(...)):
+    """Record a post-rank fit-confidence tap (phase='post') — the Δconfidence signal."""
+    from app import catalog as catalog_mod
+    ok = catalog_mod.record_confidence(
+        set_id=payload.get("set_id"), look_id=payload.get("look_id"),
+        owner_hint=payload.get("owner_hint"), phase=str(payload.get("phase") or "post"),
+        value=payload.get("value"),
+    )
+    return {"logged": bool(ok)}
+
+
+# --- analytics dashboard (token-gated) ---
+
+def _admin_authed(token: Optional[str]) -> bool:
+    want = os.environ.get("KREY_ADMIN_TOKEN")
+    return bool(want) and token == want
+
+
+@app.get("/admin", response_class=HTMLResponse)
+def admin_page(token: Optional[str] = None):
+    """Private analytics: Glicko-2 leaderboard, K-factor, confidence lift, share funnel.
+    Gated by ?token=... matching KREY_ADMIN_TOKEN (set it on Railway)."""
+    if not os.environ.get("KREY_ADMIN_TOKEN"):
+        raise HTTPException(503, "set KREY_ADMIN_TOKEN on the server to enable /admin")
+    if not _admin_authed(token):
+        raise HTTPException(401, "add ?token=YOUR_ADMIN_TOKEN")
+    return _render_template(_ADMIN, title="Krey · Admin", og_title="Krey Admin",
+                            og_image="", data={"token": token})
+
+
+@app.get("/admin/data")
+def admin_data(token: Optional[str] = None):
+    """JSON snapshot for the admin dashboard (same token gate)."""
+    from app import catalog as catalog_mod
+    if not _admin_authed(token):
+        raise HTTPException(401, "bad token")
+    return catalog_mod.admin_snapshot()
 
 # Default sink logs JSON lines; swap for the warehouse / Events service in production.
 analytics = Analytics()

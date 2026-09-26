@@ -264,6 +264,106 @@ def create_rank_set(owner_hint: str, look_ids: list[str], name: str | None = Non
     return set_id if ok else None
 
 
+def record_confidence(set_id: str | None, look_id: str | None, owner_hint: str | None,
+                      phase: str, value: int) -> bool:
+    """Record a fit-confidence tap (phase 'pre' or 'post'). Δ(post-pre) is the theory's payoff."""
+    if phase not in ("pre", "post"):
+        return False
+    try:
+        v = max(0, min(10, int(value)))
+    except Exception:
+        return False
+    return _post("confidence_marks", [{
+        "set_id": str(set_id)[:64] if set_id else None,
+        "look_id": str(look_id)[:64] if look_id else None,
+        "owner_hint": str(owner_hint)[:64] if owner_hint else None,
+        "phase": phase, "value": v,
+    }])
+
+
+def _get_all(path_select: str, limit: int = 10000) -> list:
+    """Bulk read for /admin analytics. Returns [] on any error."""
+    return _get(f"{path_select}&limit={int(limit)}") or []
+
+
+def admin_snapshot() -> dict:
+    """Aggregate everything the /admin dashboard needs, in one place (anon reads).
+
+    Glicko-2 leaderboard, K-factor, confidence lift, and the share funnel by segment + channel.
+    """
+    from app import rating
+
+    votes_raw = _get_all("rank_votes?select=winner_look_id,loser_look_id")
+    looks = _get_all("looks?select=look_id,name,image_url,owner_hint,segment,confidence_self")
+    referrals = _get_all("referrals?select=referrer_hint,activated")
+    events = _get_all("garment_events?select=event_type,segment,channel")
+    conf = _get_all("confidence_marks?select=set_id,look_id,owner_hint,phase,value")
+
+    # --- Glicko-2 leaderboard ---
+    look_by_id = {l["look_id"]: l for l in looks}
+    pairs = [(v.get("winner_look_id"), v.get("loser_look_id")) for v in votes_raw
+             if v.get("winner_look_id") and v.get("loser_look_id")]
+    ratings = rating.rate(list(look_by_id.keys()), pairs) if look_by_id else {}
+    leaderboard = []
+    for lid, rr in ratings.items():
+        if rr["games"] == 0:
+            continue
+        lk = look_by_id.get(lid, {})
+        leaderboard.append({"look_id": lid, "name": lk.get("name"), "image_url": lk.get("image_url"),
+                            "segment": lk.get("segment"), **rr})
+    leaderboard.sort(key=lambda x: x["rating"], reverse=True)
+
+    # --- K-factor (activations per distinct inviter) ---
+    inviters = {r.get("referrer_hint") for r in referrals if r.get("referrer_hint")}
+    activations = sum(1 for r in referrals if r.get("activated"))
+    k_factor = (activations / len(inviters)) if inviters else 0.0
+
+    # --- confidence lift (post - pre), per owner then averaged ---
+    pre_by_owner, post_by_owner = {}, {}
+    for c in conf:
+        o = c.get("owner_hint"); ph = c.get("phase"); val = c.get("value")
+        if o is None or val is None:
+            continue
+        (pre_by_owner if ph == "pre" else post_by_owner).setdefault(o, []).append(val)
+    # seed 'pre' from looks.confidence_self when no explicit pre mark exists
+    for l in looks:
+        o = l.get("owner_hint"); cs = l.get("confidence_self")
+        if o and cs is not None and o not in pre_by_owner:
+            pre_by_owner.setdefault(o, []).append(cs)
+    lifts = []
+    for o, posts in post_by_owner.items():
+        if o in pre_by_owner and pre_by_owner[o]:
+            lifts.append(sum(posts) / len(posts) - sum(pre_by_owner[o]) / len(pre_by_owner[o]))
+    avg_lift = (sum(lifts) / len(lifts)) if lifts else None
+
+    # --- share funnel ---
+    def _count(pred):
+        return sum(1 for e in events if pred(e))
+    by_segment, by_channel = {}, {}
+    for e in events:
+        if e.get("event_type") == "share":
+            s = e.get("segment") or "—"; c = e.get("channel") or "—"
+            by_segment[s] = by_segment.get(s, 0) + 1
+            by_channel[c] = by_channel.get(c, 0) + 1
+
+    return {
+        "leaderboard": leaderboard[:50],
+        "totals": {
+            "looks": len(looks),
+            "votes": len(pairs),
+            "views": _count(lambda e: e.get("event_type") == "view"),
+            "tries": _count(lambda e: e.get("event_type") == "try"),
+            "shares": _count(lambda e: e.get("event_type") == "share"),
+        },
+        "network": {"inviters": len(inviters), "activations": activations,
+                    "k_factor": round(k_factor, 3)},
+        "confidence": {"avg_lift": (round(avg_lift, 2) if avg_lift is not None else None),
+                       "samples": len(lifts)},
+        "shares_by_segment": by_segment,
+        "shares_by_channel": by_channel,
+    }
+
+
 def get_results(set_id: str) -> dict | None:
     """Tally a ballot's pairwise votes into a per-look win count (owner's results view).
 

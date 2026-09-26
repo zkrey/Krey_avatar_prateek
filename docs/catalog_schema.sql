@@ -170,6 +170,33 @@ create policy "anon upload looks" on storage.objects
 create policy "public read looks bucket" on storage.objects
     for select to anon using (bucket_id = 'looks');
 
+-- ---------------------------------------------------------------------------
+-- confidence_marks — the fit-confidence signal. phase 'pre' = before sharing (also mirrored on
+-- looks.confidence_self), 'post' = after seeing the ranking. Δ(post-pre) is the dose-response.
+create table if not exists confidence_marks (
+    id          bigint generated always as identity primary key,
+    set_id      text,
+    look_id     text,
+    owner_hint  text,
+    phase       text check (phase in ('pre','post')),
+    value       smallint,                    -- 0..10
+    created_at  timestamptz default now()
+);
+create index if not exists confidence_marks_set_idx on confidence_marks (set_id);
+alter table confidence_marks enable row level security;
+drop policy if exists "anon insert confidence" on confidence_marks;
+drop policy if exists "public read confidence" on confidence_marks;
+create policy "anon insert confidence" on confidence_marks for insert with check (true);
+create policy "public read confidence" on confidence_marks for select using (true);
+
+-- ---------------------------------------------------------------------------
+-- /admin analytics reads these with the anon key. Funnel counts are anonymous hints; fine for the
+-- closed test. Tighten (service-role only, or drop these) before any public launch.
+drop policy if exists "public read events"    on garment_events;
+drop policy if exists "public read referrals" on referrals;
+create policy "public read events"    on garment_events for select using (true);
+create policy "public read referrals" on referrals      for select using (true);
+
 -- Loop rollups:
 --   fit-confidence lift by segment (needs rendered looks + baselines):
 --     -- (computed app-side from rank_votes -> Glicko-2; see docs measurement plan)

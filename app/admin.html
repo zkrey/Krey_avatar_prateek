@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Krey · Admin</title>
+<style>
+  :root{--bg:#0f1012;--surface:#17181c;--surface-2:#1e2026;--line:#2a2d34;--text:#eceef2;
+        --muted:#9aa0aa;--gold:#d9b25a;--green:#4bbf73;--red:#e0685f}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;
+       padding:16px;max-width:900px;margin:0 auto}
+  h1{font-size:1.3rem;margin:.2rem 0}
+  h2{font-size:.95rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:1.4rem 0 .5rem}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.6rem}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:.8rem}
+  .kpi .n{font-size:1.5rem;font-weight:700}
+  .kpi .l{font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+  .kpi .s{font-size:.72rem;color:var(--muted);margin-top:.2rem}
+  .big{color:var(--gold)}
+  table{width:100%;border-collapse:collapse;margin-top:.4rem}
+  th,td{text-align:left;padding:.5rem .5rem;border-bottom:1px solid var(--line);font-size:.85rem}
+  th{color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .lk{display:flex;align-items:center;gap:.5rem}
+  .lk img{width:34px;aspect-ratio:3/4;object-fit:cover;border-radius:6px;background:#222}
+  .rd{color:var(--muted);font-size:.75rem}
+  .bar{height:7px;background:#2a2d34;border-radius:999px;overflow:hidden;min-width:80px}
+  .bar>i{display:block;height:100%;background:var(--gold)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+  @media(max-width:560px){.grid2{grid-template-columns:1fr}}
+  .btn{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:8px;padding:.5rem .9rem;cursor:pointer;font-size:.85rem}
+  .muted{color:var(--muted)}
+  .verdict{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:.8rem 1rem;margin-top:.5rem;font-size:.9rem}
+</style>
+</head>
+<body>
+  <h1>Krey · Social test <span class="muted" style="font-size:.8rem">live analytics</span></h1>
+  <button class="btn" id="refresh">↻ Refresh</button> <span class="muted" id="asof"></span>
+
+  <h2>The theses</h2>
+  <div class="kpis">
+    <div class="kpi"><div class="n big" id="k_lift">–</div><div class="l">Confidence lift</div><div class="s" id="k_lift_s">post − pre</div></div>
+    <div class="kpi"><div class="n big" id="k_k">–</div><div class="l">K-factor</div><div class="s" id="k_k_s">activations / inviter</div></div>
+    <div class="kpi"><div class="n" id="k_share">–</div><div class="l">Share rate</div><div class="s" id="k_share_s">shares / views</div></div>
+    <div class="kpi"><div class="n" id="k_votes">–</div><div class="l">Votes</div><div class="s" id="k_votes_s">pairwise</div></div>
+  </div>
+  <div class="verdict" id="verdict"></div>
+
+  <h2>Funnel</h2>
+  <div class="kpis">
+    <div class="kpi"><div class="n" id="f_looks">–</div><div class="l">Looks</div></div>
+    <div class="kpi"><div class="n" id="f_views">–</div><div class="l">Views</div></div>
+    <div class="kpi"><div class="n" id="f_tries">–</div><div class="l">Tries</div></div>
+    <div class="kpi"><div class="n" id="f_shares">–</div><div class="l">Shares</div></div>
+    <div class="kpi"><div class="n" id="f_inv">–</div><div class="l">Inviters</div></div>
+    <div class="kpi"><div class="n" id="f_act">–</div><div class="l">Activations</div></div>
+  </div>
+
+  <h2>Glicko-2 leaderboard <span class="muted" style="font-size:.75rem;text-transform:none">— rating ± RD (reliability)</span></h2>
+  <table id="lb"><thead><tr><th>#</th><th>Look</th><th>Segment</th><th class="num">Rating</th><th class="num">W/G</th></tr></thead><tbody></tbody></table>
+
+  <div class="grid2">
+    <div><h2>Shares by segment</h2><table id="seg"><tbody></tbody></table></div>
+    <div><h2>Shares by channel</h2><table id="chan"><tbody></tbody></table></div>
+  </div>
+
+<script>
+const DATA=__DATA__;   // {token}
+const $=id=>document.getElementById(id);
+const t=DATA.token||new URLSearchParams(location.search).get("token")||"";
+
+function rows(tbl, obj){
+  const body=$(tbl).querySelector("tbody")||$(tbl);
+  const ent=Object.entries(obj||{}).sort((a,b)=>b[1]-a[1]);
+  body.innerHTML = ent.length? ent.map(([k,v])=>`<tr><td>${k}</td><td class="num">${v}</td></tr>`).join("")
+    : `<tr><td class="muted">no data yet</td><td></td></tr>`;
+}
+
+async function load(){
+  let d={};
+  try{ const r=await fetch("/admin/data?token="+encodeURIComponent(t)); d=await r.json(); }catch(e){ return; }
+  const T=d.totals||{}, N=d.network||{}, C=d.confidence||{};
+  // theses
+  $("k_lift").textContent = (C.avg_lift==null)?"–":((C.avg_lift>0?"+":"")+C.avg_lift);
+  $("k_lift").style.color = (C.avg_lift==null)?"var(--muted)":(C.avg_lift>0?"var(--green)":"var(--red)");
+  $("k_lift_s").textContent = (C.samples||0)+" people";
+  $("k_k").textContent = (N.k_factor==null)?"–":N.k_factor;
+  $("k_k").style.color = (N.k_factor>=1)?"var(--green)":"var(--gold)";
+  const sr = (T.views? (T.shares/T.views) : 0);
+  $("k_share").textContent = T.views? (Math.round(sr*100)+"%") : "–";
+  $("k_votes").textContent = T.votes||0;
+  // funnel
+  $("f_looks").textContent=T.looks||0; $("f_views").textContent=T.views||0;
+  $("f_tries").textContent=T.tries||0; $("f_shares").textContent=T.shares||0;
+  $("f_inv").textContent=N.inviters||0; $("f_act").textContent=N.activations||0;
+  // verdict line
+  const bits=[];
+  if(C.avg_lift!=null) bits.push(C.avg_lift>0?`Ranking lifts confidence (+${C.avg_lift}) ✅`:`No confidence lift yet (${C.avg_lift})`);
+  if(N.k_factor!=null) bits.push(N.k_factor>=1?`Self-sustaining loop (K=${N.k_factor}) 🚀`:`Loop spreading, K=${N.k_factor}`);
+  $("verdict").textContent = bits.join("  ·  ") || "Collecting data — share a few ballots to populate this.";
+  // leaderboard
+  const lb=(d.leaderboard||[]);
+  const max=Math.max(1,...lb.map(x=>x.rating));
+  $("lb").querySelector("tbody").innerHTML = lb.length? lb.map((x,i)=>`
+    <tr><td>${i+1}</td>
+      <td><div class="lk">${x.image_url?`<img src="${x.image_url}">`:""}<span>${x.name||x.look_id}</span></div></td>
+      <td>${x.segment||"—"}</td>
+      <td class="num">${x.rating} <span class="rd">±${x.rd}</span></td>
+      <td class="num">${x.wins}/${x.games}</td></tr>`).join("")
+    : `<tr><td colspan="5" class="muted">no votes yet</td></tr>`;
+  rows("seg", d.shares_by_segment);
+  rows("chan", d.shares_by_channel);
+  $("asof").textContent = "updated "+new Date().toLocaleTimeString();
+}
+$("refresh").onclick=load;
+load();
+</script>
+</body>
+</html>

@@ -30,6 +30,15 @@
   <h1 id="hd">Your results</h1>
   <div class="sub" id="sub">Loading votes…</div>
   <div id="list"></div>
+
+  <!-- post-rank confidence re-tap: the Δconfidence signal (fires once votes exist) -->
+  <div id="confbox" hidden style="background:var(--surface);border:1px solid var(--gold-dim);border-radius:14px;padding:1rem;margin:1rem 0">
+    <div style="font-weight:600;margin-bottom:.2rem">Now that your friends have weighed in…</div>
+    <div class="muted" style="text-align:left;margin-bottom:.6rem">How confident are you to wear the winning fit?</div>
+    <div id="confrow" style="display:flex;gap:.4rem;flex-wrap:wrap"></div>
+    <div class="muted" id="confthanks" hidden style="margin-top:.5rem">Logged — thanks 💛</div>
+  </div>
+
   <button class="btn" id="refresh">↻ Refresh votes</button>
   <button class="btn primary" id="again">Make another ballot</button>
   <div class="muted" id="tip"></div>
@@ -52,7 +61,27 @@ async function load(){
         <div class="muted" style="text-align:left;margin-top:.3rem">${l.wins||0} win${(l.wins||0)!==1?'s':''} · ${l.comparisons||0} matchup${(l.comparisons||0)!==1?'s':''}</div>
       </div></div>`;
   }).join("") || `<div class="muted">This ballot has no looks.</div>`;
-  if(d.votes && looks.length){ $("tip").textContent = "Confident about the winner? Wear it. That's the whole point 💛"; }
+  if(d.votes && looks.length){
+    $("tip").textContent = "Confident about the winner? Wear it. That's the whole point 💛";
+    buildConf(looks[0]);   // winner
+  }
+}
+
+function sid(){ try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s;}catch(e){return "anon";} }
+let CONF_DONE=false;
+function buildConf(winner){
+  if(CONF_DONE) return;
+  const box=$("confbox"), row=$("confrow"); box.hidden=false; row.innerHTML="";
+  [["Still unsure 😐",2],["A bit more 🙂",5],["Yes, I'd wear it 😎",8],["Totally 🔥",10]].forEach(([label,val])=>{
+    const b=document.createElement("button"); b.className="btn"; b.style.flex="1"; b.style.minWidth="45%"; b.textContent=label;
+    b.onclick=()=>{
+      CONF_DONE=true;
+      try{ fetch("/results/confidence",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({set_id:DATA.set_id,look_id:winner&&winner.look_id,owner_hint:sid(),phase:"post",value:val})}); }catch(e){}
+      row.querySelectorAll("button").forEach(x=>x.disabled=true); $("confthanks").hidden=false;
+    };
+    row.appendChild(b);
+  });
 }
 $("refresh").onclick=load;
 $("again").onclick=()=>location.href="/studio";
