@@ -14,6 +14,7 @@ is for display + filtering. Bulk-loaded by bench/ingest_garments.py.
 from __future__ import annotations
 import json
 import os
+import urllib.parse
 import urllib.request
 
 CLOTH_TYPES = ("upper", "lower", "overall")
@@ -77,31 +78,122 @@ def _from_supabase(cloth_type: str | None, segment: str | None, limit: int) -> l
         return json.loads(r.read().decode())
 
 
-def log_event(garment_id: str, event_type: str, segment: str | None = None,
-              cloth_type: str | None = None, session_hint: str | None = None) -> bool:
-    """Record a view/try/share against a garment (the 'what gets shared most' thesis).
+def _sb():
+    """(base, key) for the anon Supabase API, or None when not configured."""
+    if not catalog_configured():
+        return None
+    return os.environ["KREY_SUPABASE_URL"].rstrip("/"), os.environ["KREY_SUPABASE_KEY"]
 
-    Writes to the durable Supabase `garment_events` table via the anon key (insert-only RLS).
-    Best-effort: returns False and never raises, so a logging hiccup never breaks the UI.
-    """
-    if event_type not in EVENT_TYPES or not garment_id or not catalog_configured():
+
+def _post(path: str, rows: list[dict], timeout: int = 10) -> bool:
+    """Best-effort insert into a Supabase table via the anon key. Never raises."""
+    sb = _sb()
+    if not sb:
         return False
-    base = os.environ["KREY_SUPABASE_URL"].rstrip("/")
-    key = os.environ["KREY_SUPABASE_KEY"]
-    payload = json.dumps([{
-        "garment_id": str(garment_id)[:128],
-        "event_type": event_type,
-        "segment": segment if segment in SEGMENTS else None,
-        "cloth_type": cloth_type if cloth_type in CLOTH_TYPES else None,
-        "session_hint": (str(session_hint)[:64] if session_hint else None),
-    }]).encode()
-    req = urllib.request.Request(f"{base}/rest/v1/garment_events", data=payload, method="POST")
+    base, key = sb
+    req = urllib.request.Request(f"{base}/rest/v1/{path}",
+                                 data=json.dumps(rows).encode(), method="POST")
     req.add_header("apikey", key)
     req.add_header("Authorization", f"Bearer {key}")
     req.add_header("Content-Type", "application/json")
     req.add_header("Prefer", "return=minimal")
     try:
-        with urllib.request.urlopen(req, timeout=10) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status in (200, 201, 204)
     except Exception:
         return False
+
+
+def _get(path: str, timeout: int = 15):
+    """Best-effort read from Supabase via the anon key. Returns parsed JSON or None."""
+    sb = _sb()
+    if not sb:
+        return None
+    base, key = sb
+    req = urllib.request.Request(f"{base}/rest/v1/{path}")
+    req.add_header("apikey", key)
+    req.add_header("Authorization", f"Bearer {key}")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode())
+    except Exception:
+        return None
+
+
+def log_event(garment_id: str, event_type: str, segment: str | None = None,
+              cloth_type: str | None = None, session_hint: str | None = None,
+              channel: str | None = None, referrer_hint: str | None = None) -> bool:
+    """Record a view/try/share against a garment (the 'what gets shared most' thesis).
+
+    Writes to the durable Supabase `garment_events` table via the anon key (insert-only RLS).
+    Best-effort: returns False and never raises, so a logging hiccup never breaks the UI.
+    """
+    if event_type not in EVENT_TYPES or not garment_id:
+        return False
+    return _post("garment_events", [{
+        "garment_id": str(garment_id)[:128],
+        "event_type": event_type,
+        "segment": segment if segment in SEGMENTS else None,
+        "cloth_type": cloth_type if cloth_type in CLOTH_TYPES else None,
+        "session_hint": (str(session_hint)[:64] if session_hint else None),
+        "channel": (str(channel)[:32] if channel else None),
+        "referrer_hint": (str(referrer_hint)[:64] if referrer_hint else None),
+    }])
+
+
+# --- the share -> rank -> confidence -> referral loop (social-testing experiment) ---
+
+def get_look(look_id: str) -> dict | None:
+    """One rendered look for the /look/<id> share page."""
+    rows = _get(f"looks?look_id=eq.{urllib.parse.quote(str(look_id))}&limit=1")
+    return rows[0] if rows else None
+
+
+def get_rank_set(set_id: str) -> dict | None:
+    """A ballot (rank_set) plus its looks, for the /rank/<id> voting page."""
+    rows = _get(f"rank_sets?set_id=eq.{urllib.parse.quote(str(set_id))}&limit=1")
+    if not rows:
+        return None
+    rs = rows[0]
+    ids = rs.get("look_ids") or []
+    if isinstance(ids, str):
+        try:
+            ids = json.loads(ids)
+        except Exception:
+            ids = []
+    looks = []
+    if ids:
+        inlist = ",".join(urllib.parse.quote(str(i)) for i in ids)
+        looks = _get(f"looks?look_id=in.({inlist})") or []
+        order = {str(i): n for n, i in enumerate(ids)}
+        looks.sort(key=lambda l: order.get(str(l.get("look_id")), 99))
+    rs["looks"] = looks
+    return rs
+
+
+def record_vote(set_id: str, winner_look_id: str, loser_look_id: str | None = None,
+                voter_hint: str | None = None, referrer_hint: str | None = None) -> bool:
+    """One pairwise vote on a ballot (anonymous — no signup)."""
+    if not winner_look_id:
+        return False
+    return _post("rank_votes", [{
+        "set_id": str(set_id)[:64] if set_id else None,
+        "winner_look_id": str(winner_look_id)[:64],
+        "loser_look_id": str(loser_look_id)[:64] if loser_look_id else None,
+        "voter_hint": str(voter_hint)[:64] if voter_hint else None,
+        "referrer_hint": str(referrer_hint)[:64] if referrer_hint else None,
+    }])
+
+
+def record_referral(referrer_hint: str, visitor_hint: str | None = None,
+                    source: str | None = None, activated: bool = False) -> bool:
+    """The network-effect edge: a visitor arrived via someone's share link (source=look/rank/closet),
+    and whether they activated (built their own fit). Feeds the K-factor rollup."""
+    if not referrer_hint:
+        return False
+    return _post("referrals", [{
+        "referrer_hint": str(referrer_hint)[:64],
+        "visitor_hint": str(visitor_hint)[:64] if visitor_hint else None,
+        "source": str(source)[:16] if source else None,
+        "activated": bool(activated),
+    }])

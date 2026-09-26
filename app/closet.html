@@ -66,10 +66,27 @@ function sid(){
   try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s; }
   catch(e){ return "anon"; }
 }
-function logEvent(g, event_type){
+// referral: if we arrived via someone's share link (?ref=), remember it and count the visit.
+const REF = (function(){
+  const q=new URLSearchParams(location.search).get("ref");
+  try{ if(q) localStorage.setItem("krey_ref",q); return q || localStorage.getItem("krey_ref") || ""; }
+  catch(e){ return q || ""; }
+})();
+let ACTIVATED=false;
+if(REF){ try{ fetch("/referral",{method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({referrer_hint:REF,visitor_hint:sid(),source:"closet"})}); }catch(e){} }
+
+function markActivated(){   // first real engagement by a referred visitor = a new node
+  if(ACTIVATED || !REF) return; ACTIVATED=true;
+  try{ fetch("/referral",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({referrer_hint:REF,visitor_hint:sid(),source:"closet",activated:true})}); }catch(e){}
+}
+
+function logEvent(g, event_type, channel){
   try{
     fetch("/closet/event",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({garment_id:g.garment_id,event_type,segment:g.segment,cloth_type:g.cloth_type,session_hint:sid()})});
+      body:JSON.stringify({garment_id:g.garment_id,event_type,segment:g.segment,cloth_type:g.cloth_type,
+                           session_hint:sid(),channel:channel||null,referrer_hint:REF||null})});
   }catch(e){}
 }
 
@@ -127,8 +144,9 @@ function cardData(b){ return JSON.parse(b.closest(".card").dataset.g); }
 
 async function onAct(b,kind){
   const g=cardData(b);
-  logEvent(g,kind);                         // record the thesis signal
+  markActivated();                          // a referred visitor engaging = a new node (K-factor)
   if(kind==="share"){
+    logEvent(g,kind, (navigator.share?"native":"whatsapp"));
     // Once render is live this shares the /look/<id> page (you in the garment); until then the
     // catalog item. Channel: native share sheet on mobile (WhatsApp/IG/etc), WhatsApp web on desktop.
     const url=(g.look_url ? location.origin+g.look_url : location.origin+"/closet");
@@ -138,6 +156,7 @@ async function onAct(b,kind){
       else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); }
     }catch(e){/* user cancelled share sheet */}
   } else {
+    logEvent(g,"try");
     if(RENDER_LIVE) alert("Rendering "+g.name+" on your photo…");   // Service B hook lands here
     else alert("Nice pick! Once the try-on render is live, this puts "+g.name+" on your photo.\n\nFor now, add your photo at /alpha to build your twin.");
   }

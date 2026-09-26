@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<meta property="og:title" content="__OG_TITLE__">
+<meta property="og:description" content="Help pick the best fit — one tap. Then try your own on Krey.">
+<meta property="og:image" content="__OG_IMAGE__">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root{--bg:#0f1012;--surface:#17181c;--line:#2a2d34;--text:#eceef2;--muted:#9aa0aa;
+        --gold:#d9b25a;--gold-dim:#5a4d2b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;
+       padding:16px;max-width:560px;margin:0 auto;text-align:center}
+  h1{font-size:1.15rem;margin:.3rem 0}
+  .muted{color:var(--muted);font-size:.85rem}
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin:1rem 0}
+  .opt{border:1px solid var(--line);background:var(--surface);border-radius:14px;overflow:hidden;cursor:pointer;padding:0}
+  .opt img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block}
+  .opt .ph{width:100%;aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem}
+  .opt .lab{padding:.5rem;font-size:.85rem;color:var(--gold);font-weight:600}
+  .or{color:var(--muted);font-size:.8rem;margin:.2rem 0}
+  .btn{border:1px solid var(--gold-dim);background:transparent;color:var(--gold);border-radius:10px;padding:.7rem 1rem;font-size:.95rem;cursor:pointer}
+  .btn.primary{background:var(--gold);color:#1a1400;border-color:var(--gold);font-weight:700;width:100%;padding:.8rem}
+  .cta{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1rem;margin-top:1.4rem}
+</style>
+</head>
+<body>
+  <h1 id="hd">Which fit works better?</h1>
+  <div class="muted" id="progress"></div>
+  <div id="stage"></div>
+
+  <div class="cta" id="cta" hidden>
+    <div style="font-weight:600;margin-bottom:.3rem">Nice — that helped! 🙌</div>
+    <div class="muted">Now see any outfit on <b>you</b> — takes one photo.</div>
+    <button class="btn primary" id="tryown" style="margin-top:.8rem">✨ Try your own fit</button>
+  </div>
+
+<script>
+const DATA = __DATA__;   // {set_id, owner_hint, ref, name, looks:[{look_id,name,image_url},...]}
+const $=id=>document.getElementById(id);
+function sid(){ try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s;}catch(e){return "anon";} }
+const REF = DATA.ref || DATA.owner_hint || new URLSearchParams(location.search).get("ref") || "";
+try{ if(REF) localStorage.setItem("krey_ref", REF); }catch(e){}
+if(REF){ try{ fetch("/referral",{method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({referrer_hint:REF,visitor_hint:sid(),source:"rank"})}); }catch(e){} }
+
+const looks = DATA.looks||[];
+// build all unique pairs (pairwise ballot); shuffle so order isn't a bias
+let pairs=[]; for(let i=0;i<looks.length;i++)for(let j=i+1;j<looks.length;j++)pairs.push([looks[i],looks[j]]);
+pairs = pairs.sort(()=>Math.random()-0.5);
+let idx=0;
+if(DATA.name) $("hd").textContent = "Help "+DATA.name+" pick — which works better?";
+
+function card(l){
+  return l.image_url
+    ? `<img src="${l.image_url}" alt="${(l.name||'look')}">`
+    : `<div class="ph">renders here<br>once try-on is live</div>`;
+}
+function render(){
+  if(idx>=pairs.length || looks.length<2){ finish(); return; }
+  const [a,b]=pairs[idx];
+  $("progress").textContent = `Pick ${idx+1} of ${pairs.length}`;
+  $("stage").innerHTML =
+    `<div class="pair">
+       <button class="opt" data-w="${a.look_id}" data-l="${b.look_id}">${card(a)}<div class="lab">This one</div></button>
+       <button class="opt" data-w="${b.look_id}" data-l="${a.look_id}">${card(b)}<div class="lab">This one</div></button>
+     </div><div class="or">tap the better look</div>`;
+  $("stage").querySelectorAll(".opt").forEach(btn=>btn.onclick=()=>{
+    try{ fetch("/rank/vote",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({set_id:DATA.set_id,winner_look_id:btn.dataset.w,loser_look_id:btn.dataset.l,voter_hint:sid(),referrer_hint:REF})}); }catch(e){}
+    idx++; render();
+  });
+}
+function finish(){
+  $("stage").innerHTML = `<div class="muted">All done — thanks for voting! 🎉</div>`;
+  $("progress").textContent=""; $("cta").hidden=false;
+}
+$("tryown").onclick=()=>{ location.href="/closet"+(REF?("?ref="+encodeURIComponent(REF)):""); };
+render();
+</script>
+</body>
+</html>

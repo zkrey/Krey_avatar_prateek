@@ -18,6 +18,7 @@ Run locally:
     #                     http://127.0.0.1:8000/twin/extract-measurements
 """
 from __future__ import annotations
+import json
 import logging
 import os
 import uuid
@@ -78,6 +79,20 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False,
 _WEBTEST = os.path.join(os.path.dirname(__file__), "webtest.html")
 _ALPHA = os.path.join(os.path.dirname(__file__), "alpha.html")
 _CLOSET = os.path.join(os.path.dirname(__file__), "closet.html")
+_LOOK = os.path.join(os.path.dirname(__file__), "look.html")
+_RANK = os.path.join(os.path.dirname(__file__), "rank.html")
+
+
+def _render_template(path: str, title: str, og_title: str, og_image: str, data: dict) -> str:
+    """Fill a landing-page template's OG tags (server-side, so link crawlers see them) + inject
+    its data blob. Kept dead simple — token replacement, no template engine dependency."""
+    import html as _html
+    with open(path, encoding="utf-8") as f:
+        tpl = f.read()
+    return (tpl.replace("__TITLE__", _html.escape(title))
+               .replace("__OG_TITLE__", _html.escape(og_title))
+               .replace("__OG_IMAGE__", _html.escape(og_image or ""))
+               .replace("__DATA__", json.dumps(data)))
 
 
 @app.get("/tester", response_class=HTMLResponse)
@@ -138,6 +153,72 @@ def closet_event(payload: dict = Body(...)):
         segment=payload.get("segment"),
         cloth_type=payload.get("cloth_type"),
         session_hint=payload.get("session_hint"),
+        channel=payload.get("channel"),
+        referrer_hint=payload.get("referrer_hint"),
+    )
+    return {"logged": bool(ok)}
+
+
+# --- the share -> rank -> confidence -> referral loop (social-testing experiment) ---
+
+@app.get("/look/{look_id}", response_class=HTMLResponse)
+def look_page(look_id: str):
+    """Public share page for one rendered look. OG tags (server-filled) make the link unfurl
+    into a thumbnail in WhatsApp/IG/X; the page carries the 'try your own fit' referral CTA."""
+    from app import catalog as catalog_mod
+    look = catalog_mod.get_look(look_id) or {"look_id": look_id, "name": None,
+                                             "image_url": None, "owner_hint": None}
+    name = look.get("name") or "A look"
+    return _render_template(
+        _LOOK, title=f"{name} · Krey", og_title=f"{name} on Krey ✨",
+        og_image=look.get("image_url") or "",
+        data={"look_id": look.get("look_id"), "name": look.get("name"),
+              "image_url": look.get("image_url"), "owner_hint": look.get("owner_hint")})
+
+
+@app.get("/rank/{set_id}", response_class=HTMLResponse)
+def rank_page(set_id: str):
+    """Pairwise ballot: friends tap the better look (no signup). OG-unfurls to a preview; ends on
+    the 'try your own fit' referral CTA. Feeds rank_votes -> Glicko-2 (offline)."""
+    from app import catalog as catalog_mod
+    rs = catalog_mod.get_rank_set(set_id)
+    if not rs:
+        rs = {"set_id": set_id, "owner_hint": None, "ref": None, "name": None, "looks": []}
+    og_img = ""
+    for l in rs.get("looks", []):
+        if l.get("image_url"):
+            og_img = l["image_url"]; break
+    name = rs.get("name") or "a friend"
+    return _render_template(
+        _RANK, title="Rank these fits · Krey", og_title=f"Help {name} pick the best fit 👗",
+        og_image=og_img,
+        data={"set_id": rs.get("set_id"), "owner_hint": rs.get("owner_hint"),
+              "ref": rs.get("ref"), "name": rs.get("name"), "looks": rs.get("looks", [])})
+
+
+@app.post("/rank/vote")
+def rank_vote(payload: dict = Body(...)):
+    """Record one pairwise vote / reaction (anonymous). Best-effort."""
+    from app import catalog as catalog_mod
+    ok = catalog_mod.record_vote(
+        set_id=str(payload.get("set_id") or ""),
+        winner_look_id=str(payload.get("winner_look_id") or ""),
+        loser_look_id=payload.get("loser_look_id"),
+        voter_hint=payload.get("voter_hint"),
+        referrer_hint=payload.get("referrer_hint"),
+    )
+    return {"logged": bool(ok)}
+
+
+@app.post("/referral")
+def referral(payload: dict = Body(...)):
+    """Record a referred visit or an activation (K-factor edge). Best-effort."""
+    from app import catalog as catalog_mod
+    ok = catalog_mod.record_referral(
+        referrer_hint=str(payload.get("referrer_hint") or ""),
+        visitor_hint=payload.get("visitor_hint"),
+        source=payload.get("source"),
+        activated=bool(payload.get("activated", False)),
     )
     return {"logged": bool(ok)}
 

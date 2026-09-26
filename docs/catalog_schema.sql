@@ -45,12 +45,17 @@ create table if not exists garment_events (
     segment     text,                       -- denormalised for fast slicing
     cloth_type  text,
     session_hint text,                      -- opaque per-browser id (analytics only, no PII)
+    channel     text,                       -- share channel: whatsapp/native/copy/... (share events)
+    referrer_hint text,                     -- who sent the link that led here (network-effect attribution)
     created_at  timestamptz default now()
 );
 
 create index if not exists garment_events_garment_idx on garment_events (garment_id);
 create index if not exists garment_events_type_idx    on garment_events (event_type);
 create index if not exists garment_events_segment_idx on garment_events (segment);
+-- backfill if the table predates these columns:
+alter table garment_events add column if not exists channel text;
+alter table garment_events add column if not exists referrer_hint text;
 
 -- Anon may INSERT events (the app logs shares/tries) but NOT read them back —
 -- keeps the funnel counts private to you (service key in the dashboard).
@@ -74,3 +79,81 @@ create policy "anon insert events" on garment_events for insert with check (true
 --            count(*) filter (where event_type='share')::float
 --              / nullif(count(*) filter (where event_type='view'),0) as share_rate
 --       from garment_events group by segment order by share_rate desc nulls last;
+
+-- ===========================================================================
+-- The share -> rank -> confidence -> referral loop (the social-testing experiment).
+-- All ids are opaque per-browser "hints", never a name/email. Populated once the render
+-- (Service B) is live; the landing pages read these via the anon key.
+-- ===========================================================================
+
+-- looks — a rendered "you in the garment" (the shareable unit). is_baseline = the plain/original
+-- photo used as the lift reference. confidence_self = the wearer's pre-share confidence tap.
+create table if not exists looks (
+    look_id       text primary key,          -- short slug used in /look/<id>
+    owner_hint    text,                       -- who created it (opaque)
+    garment_id    text,
+    name          text,
+    segment       text,
+    subsegment    text,
+    image_url     text,                       -- public URL of the rendered look (Storage)
+    is_baseline   boolean default false,
+    confidence_self smallint,                 -- 0..10 pre-share self-rating (fit-confidence)
+    created_at    timestamptz default now()
+);
+create index if not exists looks_owner_idx on looks (owner_hint);
+
+-- rank_sets — a ballot: 2-3 of my looks bundled to be ranked. `ref` = the owner (so a vote
+-- and the "try your own fit" CTA both attribute back to them for K-factor).
+create table if not exists rank_sets (
+    set_id     text primary key,              -- short slug used in /rank/<id>
+    owner_hint text,
+    look_ids   jsonb not null,                -- ["look_a","look_b",...]
+    ref        text,                          -- referrer hint (usually = owner_hint)
+    created_at timestamptz default now()
+);
+
+-- rank_votes — one pairwise vote (2-alternative forced choice). Feeds Glicko-2 later.
+create table if not exists rank_votes (
+    id            bigint generated always as identity primary key,
+    set_id        text,
+    winner_look_id text not null,
+    loser_look_id  text,
+    voter_hint    text,                       -- opaque; anonymous voting (no signup)
+    referrer_hint text,                       -- who invited the voter
+    created_at    timestamptz default now()
+);
+create index if not exists rank_votes_set_idx on rank_votes (set_id);
+
+-- referrals — the network-effect edge: a visitor who landed via someone's share link, and
+-- whether they activated (made their own fit). K-factor = activations / inviters.
+create table if not exists referrals (
+    id            bigint generated always as identity primary key,
+    referrer_hint text,                       -- who sent the link
+    visitor_hint  text,                       -- who arrived (opaque)
+    source        text,                       -- 'look' | 'rank' | 'closet'
+    activated     boolean default false,      -- flipped true when they build their own fit
+    created_at    timestamptz default now()
+);
+create index if not exists referrals_referrer_idx on referrals (referrer_hint);
+
+-- Landing pages need to READ looks + rank_sets with the anon key; votes/referrals are insert-only.
+alter table looks      enable row level security;
+alter table rank_sets  enable row level security;
+alter table rank_votes enable row level security;
+alter table referrals  enable row level security;
+create policy "public read looks"     on looks     for select using (true);
+create policy "public read rank_sets" on rank_sets for select using (true);
+create policy "anon insert looks"     on looks     for insert with check (true);
+create policy "anon insert rank_sets" on rank_sets for insert with check (true);
+create policy "anon insert votes"     on rank_votes for insert with check (true);
+create policy "anon insert referrals" on referrals for insert with check (true);
+
+-- Loop rollups:
+--   fit-confidence lift by segment (needs rendered looks + baselines):
+--     -- (computed app-side from rank_votes -> Glicko-2; see docs measurement plan)
+--   K-factor (activations per inviter):
+--     select count(*) filter (where activated)::float
+--            / nullif(count(distinct referrer_hint),0) as k_factor from referrals;
+--   which channel drives shares:
+--     select channel, count(*) from garment_events where event_type='share'
+--       group by channel order by 2 desc;

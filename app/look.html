@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>__TITLE__</title>
+<!-- OpenGraph: makes the link unfurl into a big thumbnail in WhatsApp/IG/X -->
+<meta property="og:title" content="__OG_TITLE__">
+<meta property="og:description" content="Rank this look on Krey — then try your own.">
+<meta property="og:image" content="__OG_IMAGE__">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root{--bg:#0f1012;--surface:#17181c;--line:#2a2d34;--text:#eceef2;--muted:#9aa0aa;
+        --gold:#d9b25a;--gold-dim:#5a4d2b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;
+       padding:16px;max-width:520px;margin:0 auto;text-align:center}
+  h1{font-size:1.2rem;margin:.4rem 0}
+  .look{width:100%;max-width:360px;aspect-ratio:3/4;object-fit:cover;border-radius:16px;
+        border:1px solid var(--line);background:var(--surface);margin:.4rem auto;display:block}
+  .ph{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.85rem}
+  .react{display:flex;gap:.6rem;justify-content:center;margin:1rem 0}
+  .btn{border:1px solid var(--gold-dim);background:transparent;color:var(--gold);border-radius:10px;
+       padding:.6rem 1rem;font-size:.95rem;cursor:pointer}
+  .btn.primary{background:var(--gold);color:#1a1400;border-color:var(--gold);font-weight:700;width:100%;margin-top:1rem;padding:.8rem}
+  .muted{color:var(--muted);font-size:.85rem}
+  .cta{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1rem;margin-top:1.4rem}
+</style>
+</head>
+<body>
+  <h1 id="hd">A look on Krey ✨</h1>
+  <div id="stage"></div>
+  <div class="react">
+    <button class="btn" id="fire">🔥 Love it</button>
+    <button class="btn" id="meh">😐 Meh</button>
+  </div>
+  <div class="muted" id="thanks" hidden>Thanks — your vote counts!</div>
+
+  <!-- the network-effect CTA: try your own fit, carrying the referrer -->
+  <div class="cta">
+    <div style="font-weight:600;margin-bottom:.3rem">Your turn 👀</div>
+    <div class="muted">See any outfit on <b>you</b> — takes one photo.</div>
+    <button class="btn primary" id="tryown">✨ Try your own fit</button>
+  </div>
+
+<script>
+const DATA = __DATA__;           // {look_id, name, image_url, owner_hint}
+const $=id=>document.getElementById(id);
+function sid(){ try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s;}catch(e){return "anon";} }
+const REF = DATA.owner_hint || new URLSearchParams(location.search).get("ref") || "";
+
+// remember who referred us so activation attributes back even after navigation
+try{ if(REF) localStorage.setItem("krey_ref", REF); }catch(e){}
+
+// count this as a referred visit (network-effect denominator)
+if(REF){ try{ fetch("/referral",{method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({referrer_hint:REF,visitor_hint:sid(),source:"look"})}); }catch(e){} }
+
+const stage=$("stage");
+if(DATA.name) $("hd").textContent = DATA.name+" — rate this look";
+stage.innerHTML = DATA.image_url
+  ? `<img class="look" src="${DATA.image_url}" alt="look">`
+  : `<div class="look ph">This look renders here once try-on is live ✨</div>`;
+
+function vote(kind){
+  try{ fetch("/rank/vote",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({winner_look_id:DATA.look_id,voter_hint:sid(),referrer_hint:REF,reaction:kind})}); }catch(e){}
+  $("fire").disabled=$("meh").disabled=true; $("thanks").hidden=false;
+}
+$("fire").onclick=()=>vote("fire");
+$("meh").onclick=()=>vote("meh");
+$("tryown").onclick=()=>{ location.href="/closet"+(REF?("?ref="+encodeURIComponent(REF)):""); };
+</script>
+</body>
+</html>
