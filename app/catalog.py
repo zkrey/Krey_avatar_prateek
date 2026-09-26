@@ -14,6 +14,7 @@ is for display + filtering. Bulk-loaded by bench/ingest_garments.py.
 from __future__ import annotations
 import json
 import os
+import secrets
 import urllib.parse
 import urllib.request
 
@@ -197,3 +198,96 @@ def record_referral(referrer_hint: str, visitor_hint: str | None = None,
         "source": str(source)[:16] if source else None,
         "activated": bool(activated),
     }])
+
+
+# --- self-serve creation: upload your own outfit photos, bundle a ballot, share (no render needed) ---
+LOOKS_BUCKET = os.environ.get("KREY_LOOKS_BUCKET", "looks")
+
+
+def upload_image(data: bytes, content_type: str = "image/jpeg", ext: str = "jpg") -> str | None:
+    """Upload a user outfit photo to the public `looks` Storage bucket. Returns its public URL.
+
+    Needs a PUBLIC bucket named `looks` with an anon-insert Storage policy (docs/catalog_schema.sql).
+    Best-effort: returns None on any failure so the flow degrades instead of 500-ing.
+    """
+    sb = _sb()
+    if not sb or not data:
+        return None
+    base, key = sb
+    name = f"{secrets.token_urlsafe(8)}.{ext}"
+    url = f"{base}/storage/v1/object/{LOOKS_BUCKET}/{name}"
+    req = urllib.request.Request(url, data=data, method="POST")
+    req.add_header("apikey", key)
+    req.add_header("Authorization", f"Bearer {key}")
+    req.add_header("Content-Type", content_type)
+    req.add_header("x-upsert", "true")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            if r.status in (200, 201):
+                return f"{base}/storage/v1/object/public/{LOOKS_BUCKET}/{name}"
+    except Exception:
+        pass
+    return None
+
+
+def create_look(owner_hint: str, name: str | None, image_url: str | None,
+                confidence_self: int | None = None, is_baseline: bool = False,
+                segment: str | None = None, subsegment: str | None = None) -> str | None:
+    """Insert a look row; returns its short look_id slug."""
+    look_id = secrets.token_urlsafe(7)
+    ok = _post("looks", [{
+        "look_id": look_id,
+        "owner_hint": str(owner_hint)[:64] if owner_hint else None,
+        "name": str(name)[:120] if name else None,
+        "image_url": image_url,
+        "confidence_self": int(confidence_self) if confidence_self is not None else None,
+        "is_baseline": bool(is_baseline),
+        "segment": segment if segment in SEGMENTS else None,
+        "subsegment": str(subsegment)[:48] if subsegment else None,
+    }])
+    return look_id if ok else None
+
+
+def create_rank_set(owner_hint: str, look_ids: list[str], name: str | None = None,
+                    ref: str | None = None) -> str | None:
+    """Bundle looks into a ballot; returns its short set_id slug."""
+    if not look_ids:
+        return None
+    set_id = secrets.token_urlsafe(7)
+    ok = _post("rank_sets", [{
+        "set_id": set_id,
+        "owner_hint": str(owner_hint)[:64] if owner_hint else None,
+        "look_ids": [str(i)[:64] for i in look_ids],
+        "ref": str(ref or owner_hint)[:64] if (ref or owner_hint) else None,
+        "name": str(name)[:120] if name else None,
+    }])
+    return set_id if ok else None
+
+
+def get_results(set_id: str) -> dict | None:
+    """Tally a ballot's pairwise votes into a per-look win count (owner's results view).
+
+    Needs a select policy on rank_votes (docs/catalog_schema.sql). Returns
+    {set_id, name, looks:[{look_id,name,image_url,wins,comparisons,win_rate}], votes}.
+    """
+    rs = get_rank_set(set_id)
+    if not rs:
+        return None
+    votes = _get(f"rank_votes?set_id=eq.{urllib.parse.quote(str(set_id))}"
+                 f"&select=winner_look_id,loser_look_id&limit=5000") or []
+    wins, comps = {}, {}
+    for v in votes:
+        w, l = v.get("winner_look_id"), v.get("loser_look_id")
+        if w:
+            wins[w] = wins.get(w, 0) + 1
+            comps[w] = comps.get(w, 0) + 1
+        if l:
+            comps[l] = comps.get(l, 0) + 1
+    looks = []
+    for lk in rs.get("looks", []):
+        lid = lk.get("look_id")
+        c = comps.get(lid, 0)
+        looks.append({**lk, "wins": wins.get(lid, 0), "comparisons": c,
+                      "win_rate": (wins.get(lid, 0) / c) if c else 0.0})
+    looks.sort(key=lambda x: (x["win_rate"], x["wins"]), reverse=True)
+    return {"set_id": set_id, "name": rs.get("name"), "looks": looks, "votes": len(votes)}

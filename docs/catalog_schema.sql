@@ -147,6 +147,17 @@ create policy "anon insert looks"     on looks     for insert with check (true);
 create policy "anon insert rank_sets" on rank_sets for insert with check (true);
 create policy "anon insert votes"     on rank_votes for insert with check (true);
 create policy "anon insert referrals" on referrals for insert with check (true);
+-- the ballot owner reads their own results (win tallies). Votes are anonymous hints, so this is
+-- fine for the closed friends-test; tighten before any public launch.
+create policy "public read votes"     on rank_votes for select using (true);
+
+-- ---------------------------------------------------------------------------
+-- STORAGE for self-serve uploads (/studio): a PUBLIC bucket named `looks` that anon may write to.
+-- Create the bucket first (Supabase → Storage → New bucket → name `looks`, Public ON), then:
+create policy "anon upload looks" on storage.objects
+    for insert to anon with check (bucket_id = 'looks');
+create policy "public read looks bucket" on storage.objects
+    for select to anon using (bucket_id = 'looks');
 
 -- Loop rollups:
 --   fit-confidence lift by segment (needs rendered looks + baselines):

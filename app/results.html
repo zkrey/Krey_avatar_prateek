@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Krey · Your results</title>
+<style>
+  :root{--bg:#0f1012;--surface:#17181c;--line:#2a2d34;--text:#eceef2;--muted:#9aa0aa;
+        --gold:#d9b25a;--gold-dim:#5a4d2b;--green:#4bbf73}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;
+       padding:16px;max-width:520px;margin:0 auto}
+  h1{font-size:1.25rem;margin:.2rem 0}
+  .sub{color:var(--muted);font-size:.9rem;margin-bottom:1rem}
+  .row{display:flex;gap:.8rem;align-items:center;background:var(--surface);border:1px solid var(--line);
+       border-radius:14px;padding:.7rem;margin-bottom:.7rem}
+  .row.win{border-color:var(--gold)}
+  .row img{width:72px;aspect-ratio:3/4;object-fit:cover;border-radius:10px;background:#222}
+  .ph{width:72px;aspect-ratio:3/4;border-radius:10px;background:#222;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.6rem;text-align:center}
+  .bar{height:8px;background:#2a2d34;border-radius:999px;overflow:hidden;margin-top:.4rem}
+  .bar > i{display:block;height:100%;background:var(--gold)}
+  .pct{font-weight:700}
+  .crown{font-size:1.1rem}
+  .btn{border:1px solid var(--gold-dim);background:transparent;color:var(--gold);border-radius:10px;
+       padding:.8rem;font-size:1rem;cursor:pointer;width:100%;margin-top:1rem}
+  .btn.primary{background:var(--gold);color:#1a1400;border-color:var(--gold);font-weight:700}
+  .muted{color:var(--muted);font-size:.85rem;text-align:center;margin-top:.6rem}
+</style>
+</head>
+<body>
+  <h1 id="hd">Your results</h1>
+  <div class="sub" id="sub">Loading votes…</div>
+  <div id="list"></div>
+  <button class="btn" id="refresh">↻ Refresh votes</button>
+  <button class="btn primary" id="again">Make another ballot</button>
+  <div class="muted" id="tip"></div>
+
+<script>
+const DATA=__DATA__;   // {set_id}
+const $=id=>document.getElementById(id);
+async function load(){
+  let d={looks:[],votes:0};
+  try{ const r=await fetch("/results/"+encodeURIComponent(DATA.set_id)+"/data"); d=await r.json(); }catch(e){}
+  const looks=d.looks||[];
+  $("sub").textContent = d.votes ? `${d.votes} vote${d.votes>1?"s":""} so far — your friends picked:` : "No votes yet — send the link to friends to see the ranking.";
+  $("list").innerHTML = looks.map((l,i)=>{
+    const pct=Math.round((l.win_rate||0)*100);
+    return `<div class="row ${i===0&&d.votes?'win':''}">
+      ${l.image_url?`<img src="${l.image_url}">`:`<div class="ph">no image</div>`}
+      <div style="flex:1">
+        <div>${i===0&&d.votes?'<span class="crown">👑</span> ':''}${l.name||'Fit '+(i+1)} <span class="pct" style="float:right">${pct}%</span></div>
+        <div class="bar"><i style="width:${pct}%"></i></div>
+        <div class="muted" style="text-align:left;margin-top:.3rem">${l.wins||0} win${(l.wins||0)!==1?'s':''} · ${l.comparisons||0} matchup${(l.comparisons||0)!==1?'s':''}</div>
+      </div></div>`;
+  }).join("") || `<div class="muted">This ballot has no looks.</div>`;
+  if(d.votes && looks.length){ $("tip").textContent = "Confident about the winner? Wear it. That's the whole point 💛"; }
+}
+$("refresh").onclick=load;
+$("again").onclick=()=>location.href="/studio";
+load();
+</script>
+</body>
+</html>

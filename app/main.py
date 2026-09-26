@@ -81,6 +81,8 @@ _ALPHA = os.path.join(os.path.dirname(__file__), "alpha.html")
 _CLOSET = os.path.join(os.path.dirname(__file__), "closet.html")
 _LOOK = os.path.join(os.path.dirname(__file__), "look.html")
 _RANK = os.path.join(os.path.dirname(__file__), "rank.html")
+_STUDIO = os.path.join(os.path.dirname(__file__), "studio.html")
+_RESULTS = os.path.join(os.path.dirname(__file__), "results.html")
 
 
 def _render_template(path: str, title: str, og_title: str, og_image: str, data: dict) -> str:
@@ -221,6 +223,66 @@ def referral(payload: dict = Body(...)):
         activated=bool(payload.get("activated", False)),
     )
     return {"logged": bool(ok)}
+
+
+# --- self-serve: upload your own outfit photos -> ballot -> share (runs without the render) ---
+
+@app.get("/studio", response_class=HTMLResponse)
+def studio():
+    """Create a 'rate my fit' ballot from your own outfit photos, then share it. Works today with
+    no GPU render — the generative try-on is a later layer, not a dependency for the social test."""
+    with open(_STUDIO, encoding="utf-8") as f:
+        return f.read()
+
+
+@app.post("/studio/create")
+async def studio_create(
+    name: str = Form(...),
+    owner_hint: str = Form(...),
+    files: list[UploadFile] = File(...),
+    confidence_self: Optional[int] = Form(None),
+    ref: Optional[str] = Form(None),
+):
+    """Upload 2–3 outfit photos, store them, bundle into a ballot, return the share + results URLs."""
+    from app import catalog as catalog_mod
+    if not catalog_mod.catalog_configured():
+        raise HTTPException(503, "catalog store not configured")
+    imgs = [f for f in (files or [])][:3]
+    if len(imgs) < 2:
+        raise HTTPException(400, "add at least 2 photos")
+    look_ids: list[str] = []
+    for i, up in enumerate(imgs):
+        data = await up.read()
+        if not data:
+            continue
+        ct = up.content_type or "image/jpeg"
+        ext = "png" if "png" in ct else "webp" if "webp" in ct else "jpg"
+        url = catalog_mod.upload_image(data, content_type=ct, ext=ext)
+        lid = catalog_mod.create_look(owner_hint=owner_hint, name=f"{name} · fit {i+1}",
+                                      image_url=url, confidence_self=confidence_self)
+        if lid:
+            look_ids.append(lid)
+    if len(look_ids) < 2:
+        raise HTTPException(502, "could not store the looks — check the Storage bucket + policy")
+    set_id = catalog_mod.create_rank_set(owner_hint=owner_hint, look_ids=look_ids,
+                                         name=name, ref=ref or owner_hint)
+    if not set_id:
+        raise HTTPException(502, "could not create the ballot")
+    return {"set_id": set_id, "share_url": f"/rank/{set_id}", "results_url": f"/results/{set_id}"}
+
+
+@app.get("/results/{set_id}", response_class=HTMLResponse)
+def results_page(set_id: str):
+    """The owner's view: how friends ranked their fits (drives the confidence payoff)."""
+    return _render_template(_RESULTS, title="Your results · Krey",
+                            og_title="My Krey results", og_image="", data={"set_id": set_id})
+
+
+@app.get("/results/{set_id}/data")
+def results_data(set_id: str):
+    """Vote tallies for a ballot (win-rate per look)."""
+    from app import catalog as catalog_mod
+    return catalog_mod.get_results(set_id) or {"set_id": set_id, "looks": [], "votes": 0}
 
 # Default sink logs JSON lines; swap for the warehouse / Events service in production.
 analytics = Analytics()
