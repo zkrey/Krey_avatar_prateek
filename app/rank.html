@@ -22,6 +22,10 @@
   .opt .ph{width:100%;aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem}
   .opt .lab{padding:.5rem;font-size:.85rem;color:var(--gold);font-weight:600}
   .or{color:var(--muted);font-size:.8rem;margin:.2rem 0}
+  .strip{margin:.6rem 0}
+  .striplab{color:var(--muted);font-size:.78rem;margin-bottom:.35rem}
+  .thumbs{display:flex;gap:.35rem;justify-content:center;flex-wrap:wrap}
+  .thumbs img,.thumbs .tph{width:38px;height:50px;object-fit:cover;border-radius:6px;border:1px solid var(--line);background:#222}
   .btn{border:1px solid var(--gold-dim);background:transparent;color:var(--gold);border-radius:10px;padding:.7rem 1rem;font-size:.95rem;cursor:pointer}
   .btn.primary{background:var(--gold);color:#1a1400;border-color:var(--gold);font-weight:700;width:100%;padding:.8rem}
   .cta{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1rem;margin-top:1.4rem}
@@ -30,6 +34,7 @@
 <body>
   <h1 id="hd">Which fit works better?</h1>
   <div class="muted" id="progress"></div>
+  <div id="strip" class="strip"></div>
   <div id="stage"></div>
 
   <div class="cta" id="cta" hidden>
@@ -54,6 +59,12 @@ pairs = pairs.sort(()=>Math.random()-0.5);
 let idx=0;
 if(DATA.name) $("hd").textContent = "Help "+DATA.name+" pick — which works better?";
 
+// show ALL fits in the ballot up front, so voters know it's pairwise (2 shown at a time)
+if(looks.length>2){
+  $("strip").innerHTML = `<div class="striplab">${looks.length} fits in this round — you'll compare them two at a time:</div>`
+    + `<div class="thumbs">` + looks.map(l=>l.image_url?`<img src="${l.image_url}" alt="">`:`<span class="tph"></span>`).join("") + `</div>`;
+}
+
 function card(l){
   return l.image_url
     ? `<img src="${l.image_url}" alt="${(l.name||'look')}">`
@@ -62,7 +73,7 @@ function card(l){
 function render(){
   if(idx>=pairs.length || looks.length<2){ finish(); return; }
   const [a,b]=pairs[idx];
-  $("progress").textContent = `Pick ${idx+1} of ${pairs.length}`;
+  $("progress").textContent = `Matchup ${idx+1} of ${pairs.length}`;
   $("stage").innerHTML =
     `<div class="pair">
        <button class="opt" data-w="${a.look_id}" data-l="${b.look_id}">${card(a)}<div class="lab">This one</div></button>
