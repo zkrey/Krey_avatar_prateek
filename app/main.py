@@ -133,12 +133,16 @@ def closet_garments(cloth_type: Optional[str] = None, segment: Optional[str] = N
     (analytics dimension: intimate/wedding/ethnic/...). `render_live` tells the page whether
     'see it on you' works yet (true only once the Modal render backend is configured)."""
     from app import catalog as catalog_mod
-    from render import client as render_client
+    try:
+        from render import client as render_client
+        render_live = render_client.render_configured()
+    except Exception:
+        render_live = False   # render/ package not on the image yet — never 500 the closet
     return {
         "garments": catalog_mod.list_garments(cloth_type, segment),
         "source": "supabase" if catalog_mod.catalog_configured() else "sample",
         "segments": list(catalog_mod.SEGMENTS),
-        "render_live": render_client.render_configured(),
+        "render_live": render_live,
     }
 
 

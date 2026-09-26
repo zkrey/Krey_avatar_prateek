@@ -24,6 +24,9 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 COPY app ./app
 COPY scripts ./scripts
 COPY models ./models
+# render.client (pure stdlib) is imported by Service A for the try-on render flag/call.
+# render.modal_app is NOT imported at runtime (it needs `modal`), only used for `modal deploy`.
+COPY render ./render
 
 # Bake the MediaPipe models into the image (~35 MB) so boot needs no network.
 RUN bash scripts/fetch_models.sh
