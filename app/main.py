@@ -199,6 +199,16 @@ def rank_page(set_id: str):
               "ref": rs.get("ref"), "name": rs.get("name"), "looks": rs.get("looks", [])})
 
 
+@app.get("/rank/{set_id}/next")
+def rank_next(set_id: str, seen: Optional[str] = None):
+    """Mixed adaptive sampler: the next pair to show this voter (concurrency-safe). `seen` is a
+    comma list of 'a|b' pair keys already shown. Returns {a,b,remaining} or {done:true}."""
+    from app import catalog as catalog_mod
+    seen_set = set((seen or "").split(",")) - {""}
+    pair = catalog_mod.next_pair(set_id, seen_set)
+    return pair or {"done": True}
+
+
 @app.post("/rank/vote")
 def rank_vote(payload: dict = Body(...)):
     """Record one pairwise vote / reaction (anonymous). Best-effort."""
@@ -242,6 +252,7 @@ async def studio_create(
     owner_hint: str = Form(...),
     files: list[UploadFile] = File(...),
     confidence_self: Optional[int] = Form(None),
+    confidences: Optional[str] = Form(None),   # per-file self-confidence, aligned to files order
     ref: Optional[str] = Form(None),
 ):
     """Upload 2–3 outfit photos, store them, bundle into a ballot, return the share + results URLs."""
@@ -251,6 +262,13 @@ async def studio_create(
     imgs = [f for f in (files or [])][:3]
     if len(imgs) < 2:
         raise HTTPException(400, "add at least 2 photos")
+    conf_list: list[Optional[int]] = []
+    if confidences:
+        for tok in confidences.split(","):
+            try:
+                conf_list.append(int(tok))
+            except Exception:
+                conf_list.append(None)
     look_ids: list[str] = []
     for i, up in enumerate(imgs):
         data = await up.read()
@@ -259,8 +277,9 @@ async def studio_create(
         ct = up.content_type or "image/jpeg"
         ext = "png" if "png" in ct else "webp" if "webp" in ct else "jpg"
         url = catalog_mod.upload_image(data, content_type=ct, ext=ext)
+        c = conf_list[i] if i < len(conf_list) else confidence_self
         lid = catalog_mod.create_look(owner_hint=owner_hint, name=f"{name} · fit {i+1}",
-                                      image_url=url, confidence_self=confidence_self)
+                                      image_url=url, confidence_self=c)
         if lid:
             look_ids.append(lid)
     if len(look_ids) < 2:

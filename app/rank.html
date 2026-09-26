@@ -53,27 +53,34 @@ if(REF){ try{ fetch("/referral",{method:"POST",headers:{"Content-Type":"applicat
   body:JSON.stringify({referrer_hint:REF,visitor_hint:sid(),source:"rank"})}); }catch(e){} }
 
 const looks = DATA.looks||[];
-// build all unique pairs (pairwise ballot); shuffle so order isn't a bias
-let pairs=[]; for(let i=0;i<looks.length;i++)for(let j=i+1;j<looks.length;j++)pairs.push([looks[i],looks[j]]);
-pairs = pairs.sort(()=>Math.random()-0.5);
-let idx=0;
 if(DATA.name) $("hd").textContent = "Help "+DATA.name+" pick — which works better?";
 
-// show ALL fits in the ballot up front, so voters know it's pairwise (2 shown at a time)
+// mixed adaptive sampler: the server picks each next pair (concurrency-safe). A voter does at
+// most K matchups (K = number of fits), so it stays short even for 5 fits (which have 10 pairs).
+const K = looks.length;
+const CAP = Math.min(K, K*(K-1)/2);   // never more than total unique pairs
+const seen = new Set();
+let done = 0;
+
+// show ALL fits up front so voters know it's pairwise (2 at a time)
 if(looks.length>2){
-  $("strip").innerHTML = `<div class="striplab">${looks.length} fits in this round — you'll compare them two at a time:</div>`
+  $("strip").innerHTML = `<div class="striplab">${looks.length} fits — you'll compare a few, two at a time:</div>`
     + `<div class="thumbs">` + looks.map(l=>l.image_url?`<img src="${l.image_url}" alt="">`:`<span class="tph"></span>`).join("") + `</div>`;
 }
-
+function pairKey(a,b){ return [a,b].sort().join("|"); }
 function card(l){
   return l.image_url
     ? `<img src="${l.image_url}" alt="${(l.name||'look')}">`
     : `<div class="ph">renders here<br>once try-on is live</div>`;
 }
-function render(){
-  if(idx>=pairs.length || looks.length<2){ finish(); return; }
-  const [a,b]=pairs[idx];
-  $("progress").textContent = `Matchup ${idx+1} of ${pairs.length}`;
+async function nextRound(){
+  if(looks.length<2 || done>=CAP){ finish(); return; }
+  let d={};
+  try{ const r=await fetch(`/rank/${encodeURIComponent(DATA.set_id)}/next?seen=`+encodeURIComponent([...seen].join(","))); d=await r.json(); }
+  catch(e){ finish(); return; }
+  if(d.done || !d.a || !d.b){ finish(); return; }
+  const a=d.a, b=d.b;
+  $("progress").textContent = `Matchup ${done+1} of ${CAP}`;
   $("stage").innerHTML =
     `<div class="pair">
        <button class="opt" data-w="${a.look_id}" data-l="${b.look_id}">${card(a)}<div class="lab">This one</div></button>
@@ -82,7 +89,7 @@ function render(){
   $("stage").querySelectorAll(".opt").forEach(btn=>btn.onclick=()=>{
     try{ fetch("/rank/vote",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({set_id:DATA.set_id,winner_look_id:btn.dataset.w,loser_look_id:btn.dataset.l,voter_hint:sid(),referrer_hint:REF})}); }catch(e){}
-    idx++; render();
+    seen.add(pairKey(a.look_id,b.look_id)); done++; nextRound();
   });
 }
 function finish(){
@@ -90,7 +97,7 @@ function finish(){
   $("progress").textContent=""; $("cta").hidden=false;
 }
 $("tryown").onclick=()=>{ location.href="/studio"+(REF?("?ref="+encodeURIComponent(REF)):""); };
-render();
+nextRound();
 </script>
 </body>
 </html>

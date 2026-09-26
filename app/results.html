@@ -30,6 +30,7 @@
   <h1 id="hd">Your results</h1>
   <div class="sub" id="sub">Loading votes…</div>
   <div id="list"></div>
+  <div id="converge" class="muted" style="margin:.6rem 0"></div>
 
   <!-- post-rank confidence re-tap: the Δconfidence signal (fires once votes exist) -->
   <div id="confbox" hidden style="background:var(--surface);border:1px solid var(--gold-dim);border-radius:14px;padding:1rem;margin:1rem 0">
@@ -59,16 +60,22 @@ async function load(){
     $("sub").innerHTML = `${d.votes} vote${d.votes>1?"s":""} · <b>too close to call</b> — pairwise ranking sharpens with more voters, so share it wider.`;
   }
   $("list").innerHTML = looks.map((l,i)=>{
+    const pb=Math.round(l.p_best||0);
     const score=Math.round(l.score||0);
     const lead = decisive && i===0;
     return `<div class="row ${lead?'win':''}">
       ${l.image_url?`<img src="${l.image_url}">`:`<div class="ph">no image</div>`}
       <div style="flex:1">
-        <div>${lead?'<span class="crown">👑</span> ':''}${l.name||'Fit '+(i+1)} <span class="pct" style="float:right">${d.votes?Math.round(l.rating):'—'}</span></div>
+        <div>${lead?'<span class="crown">👑</span> ':''}${l.name||'Fit '+(i+1)} <span class="pct" style="float:right">${d.votes?pb+'%':'—'}</span></div>
         <div class="bar"><i style="width:${d.votes?score:0}%"></i></div>
-        <div class="muted" style="text-align:left;margin-top:.3rem">${l.wins||0} win${(l.wins||0)!==1?'s':''} · ${l.games||0} matchup${(l.games||0)!==1?'s':''} · rating ${Math.round(l.rating)}±${Math.round(l.rd)}</div>
+        <div class="muted" style="text-align:left;margin-top:.3rem">${d.votes?('friends '+pb+'% sure this is your best · '):''}${l.wins||0} win${(l.wins||0)!==1?'s':''} · ${l.games||0} matchup${(l.games||0)!==1?'s':''}</div>
       </div></div>`;
   }).join("") || `<div class="muted">This ballot has no looks.</div>`;
+  // self vs crowd convergence
+  if(d.tau!=null){
+    const agree = d.tau>0.5 ? "matches your gut ✅" : (d.tau<0 ? "flips your gut 🔄" : "partly differs from your gut");
+    $("converge").innerHTML = `Your pick vs friends' pick: <b>${d.tau>0?'+':''}${d.tau}</b> agreement — ${agree}`;
+  } else { $("converge").textContent=""; }
   if(d.votes && looks.length){
     $("tip").textContent = decisive
       ? "Confident about the winner? Wear it. That's the whole point 💛"

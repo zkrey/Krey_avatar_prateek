@@ -40,6 +40,7 @@
   <h2>The theses</h2>
   <div class="kpis">
     <div class="kpi"><div class="n big" id="k_lift">–</div><div class="l">Confidence lift</div><div class="s" id="k_lift_s">post − pre</div></div>
+    <div class="kpi"><div class="n big" id="k_tau">–</div><div class="l">Self↔crowd agree</div><div class="s" id="k_tau_s">Kendall τ</div></div>
     <div class="kpi"><div class="n big" id="k_k">–</div><div class="l">K-factor</div><div class="s" id="k_k_s">activations / inviter</div></div>
     <div class="kpi"><div class="n" id="k_share">–</div><div class="l">Share rate</div><div class="s" id="k_share_s">shares / views</div></div>
     <div class="kpi"><div class="n" id="k_votes">–</div><div class="l">Votes</div><div class="s" id="k_votes_s">pairwise</div></div>
@@ -79,11 +80,14 @@ function rows(tbl, obj){
 async function load(){
   let d={};
   try{ const r=await fetch("/admin/data?token="+encodeURIComponent(t)); d=await r.json(); }catch(e){ return; }
-  const T=d.totals||{}, N=d.network||{}, C=d.confidence||{};
+  const T=d.totals||{}, N=d.network||{}, C=d.confidence||{}, CV=d.convergence||{};
   // theses
   $("k_lift").textContent = (C.avg_lift==null)?"–":((C.avg_lift>0?"+":"")+C.avg_lift);
   $("k_lift").style.color = (C.avg_lift==null)?"var(--muted)":(C.avg_lift>0?"var(--green)":"var(--red)");
   $("k_lift_s").textContent = (C.samples||0)+" people";
+  $("k_tau").textContent = (CV.avg_tau==null)?"–":((CV.avg_tau>0?"+":"")+CV.avg_tau);
+  $("k_tau").style.color = (CV.avg_tau==null)?"var(--muted)":(CV.avg_tau>0.5?"var(--green)":(CV.avg_tau<0?"var(--red)":"var(--gold)"));
+  $("k_tau_s").textContent = (CV.samples||0)+" ballots";
   $("k_k").textContent = (N.k_factor==null)?"–":N.k_factor;
   $("k_k").style.color = (N.k_factor>=1)?"var(--green)":"var(--gold)";
   const sr = (T.views? (T.shares/T.views) : 0);

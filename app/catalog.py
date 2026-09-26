@@ -264,6 +264,52 @@ def create_rank_set(owner_hint: str, look_ids: list[str], name: str | None = Non
     return set_id if ok else None
 
 
+def next_pair(set_id: str, seen: set[str] | None = None, explore: float = 0.75) -> dict | None:
+    """Mixed (epsilon-greedy) adaptive sampler for the pairwise ballot — concurrency-safe.
+
+    Reads the *live* votes each call (so parallel voters see fresh standings), then with
+    probability `explore` returns a RANDOM unseen pair (coverage + decorrelates parallel voters
+    so they don't herd onto the same pair), else an ADAPTIVE pair (the closest-rated contest, for
+    a top-1 boost). `seen` = pair keys 'a|b' (sorted) this voter already saw. Returns
+    {"a": {...look}, "b": {...look}} or None when this voter has seen every pair.
+    """
+    import itertools
+    import random as _random
+    from app import rating
+
+    seen = seen or set()
+    rs = get_rank_set(set_id)
+    if not rs:
+        return None
+    looks = rs.get("looks", [])
+    by_id = {l.get("look_id"): l for l in looks}
+    ids = list(by_id)
+    if len(ids) < 2:
+        return None
+
+    def key(a, b):
+        return "|".join(sorted((a, b)))
+
+    candidates = [(a, b) for a, b in itertools.combinations(ids, 2) if key(a, b) not in seen]
+    if not candidates:
+        return None
+
+    if _random.random() < explore or len(candidates) == 1:
+        a, b = _random.choice(candidates)
+    else:
+        votes = _get(f"rank_votes?set_id=eq.{urllib.parse.quote(str(set_id))}"
+                     f"&select=winner_look_id,loser_look_id&limit=5000") or []
+        pairs = [(v.get("winner_look_id"), v.get("loser_look_id")) for v in votes
+                 if v.get("winner_look_id") and v.get("loser_look_id")]
+        strengths = rating.bradley_terry(ids, pairs)
+        # adaptive: the unseen pair whose contestants are closest in strength (most uncertain)
+        a, b = min(candidates, key=lambda pr: abs(strengths.get(pr[0], 1) - strengths.get(pr[1], 1)))
+
+    if _random.random() < 0.5:  # randomize left/right to kill position bias
+        a, b = b, a
+    return {"a": by_id[a], "b": by_id[b], "remaining": len(candidates) - 1}
+
+
 def record_confidence(set_id: str | None, look_id: str | None, owner_hint: str | None,
                       phase: str, value: int) -> bool:
     """Record a fit-confidence tap (phase 'pre' or 'post'). Δ(post-pre) is the theory's payoff."""
@@ -293,11 +339,12 @@ def admin_snapshot() -> dict:
     """
     from app import rating
 
-    votes_raw = _get_all("rank_votes?select=winner_look_id,loser_look_id")
+    votes_raw = _get_all("rank_votes?select=set_id,winner_look_id,loser_look_id")
     looks = _get_all("looks?select=look_id,name,image_url,owner_hint,segment,confidence_self")
     referrals = _get_all("referrals?select=referrer_hint,activated")
     events = _get_all("garment_events?select=event_type,segment,channel")
     conf = _get_all("confidence_marks?select=set_id,look_id,owner_hint,phase,value")
+    sets = _get_all("rank_sets?select=set_id,look_ids")
 
     # --- Glicko-2 leaderboard ---
     look_by_id = {l["look_id"]: l for l in looks}
@@ -312,6 +359,33 @@ def admin_snapshot() -> dict:
         leaderboard.append({"look_id": lid, "name": lk.get("name"), "image_url": lk.get("image_url"),
                             "segment": lk.get("segment"), **rr})
     leaderboard.sort(key=lambda x: x["rating"], reverse=True)
+
+    # --- self <-> crowd convergence: avg Kendall's tau across ballots ---
+    votes_by_set = {}
+    for v in votes_raw:
+        sid_ = v.get("set_id")
+        if sid_ and v.get("winner_look_id") and v.get("loser_look_id"):
+            votes_by_set.setdefault(sid_, []).append((v["winner_look_id"], v["loser_look_id"]))
+    taus = []
+    for st in sets:
+        sid_ = st.get("set_id")
+        lids = st.get("look_ids") or []
+        if isinstance(lids, str):
+            try:
+                lids = json.loads(lids)
+            except Exception:
+                lids = []
+        vp = votes_by_set.get(sid_, [])
+        if len(lids) < 2 or not vp:
+            continue
+        conf_here = [(l, look_by_id.get(l, {}).get("confidence_self")) for l in lids]
+        have = [c for c in conf_here if c[1] is not None]
+        if len(have) < 2 or len({c[1] for c in have}) <= 1:
+            continue
+        self_order = [l for l, _ in sorted(have, key=lambda c: c[1], reverse=True)]
+        crowd = sorted(lids, key=lambda l: rating.bradley_terry(lids, vp).get(l, 1), reverse=True)
+        taus.append(rating.kendall_tau(self_order, crowd))
+    avg_tau = (sum(taus) / len(taus)) if taus else None
 
     # --- K-factor (activations per distinct inviter) ---
     inviters = {r.get("referrer_hint") for r in referrals if r.get("referrer_hint")}
@@ -359,6 +433,8 @@ def admin_snapshot() -> dict:
                     "k_factor": round(k_factor, 3)},
         "confidence": {"avg_lift": (round(avg_lift, 2) if avg_lift is not None else None),
                        "samples": len(lifts)},
+        "convergence": {"avg_tau": (round(avg_tau, 2) if avg_tau is not None else None),
+                        "samples": len(taus)},
         "shares_by_segment": by_segment,
         "shares_by_channel": by_channel,
     }
@@ -381,30 +457,49 @@ def get_results(set_id: str) -> dict | None:
                  f"&select=winner_look_id,loser_look_id&limit=5000") or []
     pairs = [(v.get("winner_look_id"), v.get("loser_look_id")) for v in votes
              if v.get("winner_look_id") and v.get("loser_look_id")]
-    ids = [lk.get("look_id") for lk in rs.get("looks", [])]
-    ratings = rating.rate(ids, pairs) if ids else {}
+    src = rs.get("looks", [])
+    ids = [lk.get("look_id") for lk in src]
+
+    # head-to-head tallies for display
+    wins, games = {i: 0 for i in ids}, {i: 0 for i in ids}
+    for w, l in pairs:
+        if w in wins:
+            wins[w] += 1; games[w] += 1
+        if l in games:
+            games[l] += 1
+
+    # Bradley-Terry / Plackett-Luce: strengths -> P(best) + per-rank probabilities
+    strengths = rating.bradley_terry(ids, pairs) if ids else {}
+    pbest = rating.p_best(strengths) if strengths else {}
+    rankp = rating.rank_probabilities(strengths) if strengths else {}
 
     looks = []
-    for lk in rs.get("looks", []):
+    for lk in src:
         lid = lk.get("look_id")
-        rr = ratings.get(lid, {"rating": 1500.0, "rd": 350.0, "wins": 0, "games": 0})
-        g = rr["games"]
-        looks.append({**lk, "rating": rr["rating"], "rd": rr["rd"],
-                      "wins": rr["wins"], "games": g,
-                      "win_rate": (rr["wins"] / g) if g else 0.0})
-    # sort by Glicko-2 rating (tiebreak: wins)
-    looks.sort(key=lambda x: (x["rating"], x["wins"]), reverse=True)
+        looks.append({**lk,
+                      "p_best": round(pbest.get(lid, 1.0 / max(1, len(ids))) * 100),
+                      "rank_probs": [round(x * 100) for x in rankp.get(lid, [])],
+                      "wins": wins.get(lid, 0), "games": games.get(lid, 0),
+                      "strength": round(strengths.get(lid, 1.0), 3)})
+    looks.sort(key=lambda x: x["p_best"], reverse=True)
+    for l in looks:  # bar score = P(best), floored so a nonzero bar always shows
+        l["score"] = max(4, l["p_best"]) if pairs else 0
 
-    # normalise to a 0..100 "score" for the bars (relative within this ballot)
-    rs_vals = [l["rating"] for l in looks] or [1500.0]
-    lo, hi = min(rs_vals), max(rs_vals)
-    for l in looks:
-        l["score"] = 100 if hi == lo else round(15 + 85 * (l["rating"] - lo) / (hi - lo))
+    crowd_order = [l["look_id"] for l in looks]
 
-    # "decisive" = a clear leader: enough votes AND a rating gap beyond noise
-    decisive = False
-    if len(looks) >= 2 and len(pairs) >= 3:
-        gap = looks[0]["rating"] - looks[1]["rating"]
-        decisive = gap >= 30.0
+    # self <-> crowd convergence (Kendall's tau). Self-order = owner's per-look confidence
+    # (higher confidence_self = they rate it better). Undefined if all equal / missing.
+    conf = [(lk.get("look_id"), lk.get("confidence_self")) for lk in src]
+    have_self = [c for c in conf if c[1] is not None]
+    self_order, tau = None, None
+    if len(have_self) >= 2 and len({c[1] for c in have_self}) > 1:
+        self_order = [lid for lid, _ in sorted(have_self, key=lambda c: c[1], reverse=True)]
+        if pairs:
+            tau = round(rating.kendall_tau(self_order, crowd_order), 2)
+
+    # decisive = clear leader: enough votes and a P(best) gap beyond noise
+    decisive = len(looks) >= 2 and len(pairs) >= 3 and (looks[0]["p_best"] - looks[1]["p_best"]) >= 12
+
     return {"set_id": set_id, "name": rs.get("name"), "looks": looks,
-            "votes": len(pairs), "decisive": decisive}
+            "votes": len(pairs), "decisive": decisive,
+            "self_order": self_order, "crowd_order": crowd_order, "tau": tau}

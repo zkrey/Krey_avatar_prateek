@@ -49,13 +49,9 @@
     <div class="slots" id="slots"></div>
 
     <div class="conf">
-      <label>Before you ask — how confident are you in these right now?</label>
-      <div class="row" id="conf">
-        <button class="pill" data-c="2">Not sure 😐</button>
-        <button class="pill" data-c="5">It's okay 🙂</button>
-        <button class="pill" data-c="8">Pretty good 😎</button>
-        <button class="pill" data-c="10">Love them 🔥</button>
-      </div>
+      <label>Your own guess — tap them best → worst (we'll compare it to what friends say)</label>
+      <div class="row" id="selfrank"></div>
+      <div class="muted" id="selfhint" style="font-size:.78rem;margin-top:.3rem"></div>
     </div>
 
     <button class="btn primary" id="go" disabled>Create ballot & share</button>
@@ -78,7 +74,7 @@ const REF=(function(){ const q=new URLSearchParams(location.search).get("ref"); 
 if(REF){ try{ fetch("/referral",{method:"POST",headers:{"Content-Type":"application/json"},
   body:JSON.stringify({referrer_hint:REF,visitor_hint:sid(),source:"studio"})}); }catch(e){} }
 
-const MAX=3; let files=[]; let conf=null;
+const MAX=3; let files=[]; let selfOrder=[];   // selfOrder = file indices, best first
 
 function drawSlots(){
   const box=$("slots"); box.innerHTML="";
@@ -86,7 +82,7 @@ function drawSlots(){
     const d=document.createElement("div"); d.className="slot";
     const img=document.createElement("img"); img.src=URL.createObjectURL(f); d.appendChild(img);
     const x=document.createElement("div"); x.className="x"; x.textContent="✕";
-    x.onclick=(e)=>{e.stopPropagation();files.splice(i,1);drawSlots();validate();}; d.appendChild(x);
+    x.onclick=(e)=>{e.stopPropagation();files.splice(i,1);selfOrder=[];drawSlots();drawSelf();validate();}; d.appendChild(x);
     box.appendChild(d);
   });
   if(files.length<MAX){
@@ -96,12 +92,24 @@ function drawSlots(){
 }
 function pick(){
   const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*";
-  inp.onchange=()=>{ if(inp.files[0]){ files.push(inp.files[0]); if(files.length>MAX)files=files.slice(0,MAX); drawSlots(); validate(); } };
+  inp.onchange=()=>{ if(inp.files[0]){ files.push(inp.files[0]); if(files.length>MAX)files=files.slice(0,MAX); selfOrder=[]; drawSlots(); drawSelf(); validate(); } };
   inp.click();
 }
-$("conf").querySelectorAll(".pill").forEach(p=>p.onclick=()=>{
-  conf=+p.dataset.c; $("conf").querySelectorAll(".pill").forEach(q=>q.classList.toggle("on",q===p)); validate();
-});
+// self-ranking: tap thumbnails best->worst; a badge shows the chosen order
+function drawSelf(){
+  const box=$("selfrank"); box.innerHTML="";
+  if(files.length<2){ $("selfhint").textContent=""; return; }
+  files.forEach((f,i)=>{
+    const pos=selfOrder.indexOf(i);
+    const d=document.createElement("div"); d.className="slot"; d.style.width="64px"; d.style.aspectRatio="3/4"; d.style.position="relative";
+    const img=document.createElement("img"); img.src=URL.createObjectURL(f); d.appendChild(img);
+    if(pos>=0){ const badge=document.createElement("div"); badge.className="x"; badge.style.background="var(--gold)"; badge.style.color="#1a1400"; badge.style.fontWeight="700"; badge.textContent=(pos+1); d.appendChild(badge); }
+    d.onclick=()=>{ const at=selfOrder.indexOf(i); if(at>=0) selfOrder.splice(at,1); else selfOrder.push(i); drawSelf(); };
+    box.appendChild(d);
+  });
+  $("selfhint").textContent = selfOrder.length===files.length
+    ? "Nice — we'll see if your friends agree." : "Tap all "+files.length+" in your order (optional).";
+}
 function validate(){ $("go").disabled = !(files.length>=2 && $("name").value.trim()); }
 $("name").oninput=validate;
 
@@ -111,7 +119,12 @@ $("go").onclick=async()=>{
   fd.append("name",$("name").value.trim());
   fd.append("owner_hint",sid());
   if(REF) fd.append("ref",REF);
-  if(conf!=null) fd.append("confidence_self",conf);
+  // per-file self-confidence from the owner's order (best gets highest); blank if not ranked
+  if(selfOrder.length===files.length){
+    const K=files.length;
+    const confs=files.map((_,i)=>{ const pos=selfOrder.indexOf(i); return Math.round(2 + 8*(K-1-pos)/(K-1)); });
+    fd.append("confidences", confs.join(","));   // aligned to files order
+  }
   files.forEach(f=>fd.append("files",f));
   try{
     const r=await fetch("/studio/create",{method:"POST",body:fd});
@@ -134,7 +147,7 @@ $("go").onclick=async()=>{
   }
 };
 
-drawSlots(); validate();
+drawSlots(); drawSelf(); validate();
 </script>
 </body>
 </html>

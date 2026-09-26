@@ -74,6 +74,90 @@ def _new_vol(phi, v, delta, vol):
     return math.exp(A / 2.0)
 
 
+def bradley_terry(items: list[str], votes: list[tuple[str, str]],
+                  prior: float = 0.5) -> dict[str, float]:
+    """Regularized Bradley-Terry (Zermelo MMM). Returns normalized strengths (sum = len(items)).
+
+    The `prior` adds a light virtual tie per pair so strengths stay finite even when an item wins
+    or loses all its matchups (the classic BT divergence with sparse data). Ideal for 2–5 fits.
+    """
+    items = list(items)
+    if not items:
+        return {}
+    wins = {i: 0.0 for i in items}
+    pair = {}  # (i,j) -> count i beat j
+    for w, l in votes:
+        if w in wins and l in wins and w != l:
+            wins[w] += 1.0
+            pair[(w, l)] = pair.get((w, l), 0) + 1
+    n = len(items)
+    p = {i: 1.0 for i in items}
+    for _ in range(200):
+        newp = {}
+        for i in items:
+            num = wins[i] + prior * (n - 1)
+            den = 0.0
+            for j in items:
+                if j == i:
+                    continue
+                nij = pair.get((i, j), 0) + pair.get((j, i), 0) + 2 * prior
+                den += nij / (p[i] + p[j])
+            newp[i] = num / den if den else p[i]
+        s = sum(newp.values()) or 1.0
+        p = {i: newp[i] / s * n for i in items}
+    return p
+
+
+def p_best(strengths: dict[str, float]) -> dict[str, float]:
+    """P(item is the single best) = strength share. Sums to 1."""
+    tot = sum(strengths.values()) or 1.0
+    return {i: s / tot for i, s in strengths.items()}
+
+
+def rank_probabilities(strengths: dict[str, float]) -> dict[str, list[float]]:
+    """Plackett-Luce P(item finishes at each position 1..k), exact by enumeration (k<=~7).
+
+    Returns {item: [P(1st), P(2nd), ...]}. This is the 'granular probability of each rank'."""
+    import itertools
+    items = list(strengths)
+    k = len(items)
+    if k == 0:
+        return {}
+    if k > 7:  # enumeration blows up; fall back to strength share in slot 0
+        pb = p_best(strengths)
+        return {i: [pb[i]] + [0.0] * (k - 1) for i in items}
+    probs = {i: [0.0] * k for i in items}
+    for perm in itertools.permutations(items):
+        # PL probability of this full ordering
+        pr = 1.0
+        remaining = sum(strengths.values())
+        for pos, it in enumerate(perm):
+            s = strengths[it]
+            pr *= s / remaining if remaining else 0.0
+            remaining -= s
+        for pos, it in enumerate(perm):
+            probs[it][pos] += pr
+    return probs
+
+
+def kendall_tau(order_a: list[str], order_b: list[str]) -> float:
+    """Kendall's tau between two rankings (agreement). +1 identical, -1 reversed, 0 unrelated.
+
+    Only items present in BOTH orders are compared."""
+    import itertools
+    common = [x for x in order_a if x in set(order_b)]
+    ra = {x: i for i, x in enumerate(order_a)}
+    rb = {x: i for i, x in enumerate(order_b)}
+    c = d = 0
+    for i, j in itertools.combinations(common, 2):
+        s = (ra[i] - ra[j]) * (rb[i] - rb[j])
+        if s > 0:
+            c += 1
+        elif s < 0:
+            d += 1
+    return (c - d) / (c + d) if (c + d) else 1.0
+
+
 def rate(look_ids: list[str], votes: list[tuple[str, str]]) -> dict[str, dict]:
     """Given look ids and (winner_id, loser_id) pairs, return
     {look_id: {rating, rd, wins, games}} after one Glicko-2 rating period.
