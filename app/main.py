@@ -77,6 +77,7 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=False,
 
 _WEBTEST = os.path.join(os.path.dirname(__file__), "webtest.html")
 _ALPHA = os.path.join(os.path.dirname(__file__), "alpha.html")
+_CLOSET = os.path.join(os.path.dirname(__file__), "closet.html")
 
 
 @app.get("/tester", response_class=HTMLResponse)
@@ -97,6 +98,28 @@ def alpha():
     directly. GPU-free: the pipeline stops before any render (Service B)."""
     with open(_ALPHA, encoding="utf-8") as f:
         return f.read()
+
+
+@app.get("/closet", response_class=HTMLResponse)
+def closet():
+    """Browse the garment catalog (the try-on 'supply' side). Reads /closet/garments, which is
+    Supabase-backed when configured, else a built-in sample set. 'Try on' wires to the render
+    (Service B) once it's live."""
+    with open(_CLOSET, encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/closet/garments")
+def closet_garments(cloth_type: Optional[str] = None):
+    """Catalog JSON for the closet UI. `render_live` tells the page whether 'see it on you' works
+    yet (true only once the Modal render backend is configured)."""
+    from app import catalog as catalog_mod
+    from render import client as render_client
+    return {
+        "garments": catalog_mod.list_garments(cloth_type),
+        "source": "supabase" if catalog_mod.catalog_configured() else "sample",
+        "render_live": render_client.render_configured(),
+    }
 
 # Default sink logs JSON lines; swap for the warehouse / Events service in production.
 analytics = Analytics()
