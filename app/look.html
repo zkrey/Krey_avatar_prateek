@@ -39,8 +39,8 @@
   <!-- the network-effect CTA: try your own fit, carrying the referrer -->
   <div class="cta">
     <div style="font-weight:600;margin-bottom:.3rem">Your turn 👀</div>
-    <div class="muted">See any outfit on <b>you</b> — takes one photo.</div>
-    <button class="btn primary" id="tryown">✨ Try your own fit</button>
+    <div class="muted">Add 2–3 of <b>your</b> fits and let friends pick. Takes a minute.</div>
+    <button class="btn primary" id="tryown">✨ Rate my fit</button>
   </div>
 
 <script>
@@ -69,7 +69,7 @@ function vote(kind){
 }
 $("fire").onclick=()=>vote("fire");
 $("meh").onclick=()=>vote("meh");
-$("tryown").onclick=()=>{ location.href="/closet"+(REF?("?ref="+encodeURIComponent(REF)):""); };
+$("tryown").onclick=()=>{ location.href="/studio"+(REF?("?ref="+encodeURIComponent(REF)):""); };
 </script>
 </body>
 </html>

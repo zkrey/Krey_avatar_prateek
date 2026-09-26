@@ -34,8 +34,8 @@
 
   <div class="cta" id="cta" hidden>
     <div style="font-weight:600;margin-bottom:.3rem">Nice — that helped! 🙌</div>
-    <div class="muted">Now see any outfit on <b>you</b> — takes one photo.</div>
-    <button class="btn primary" id="tryown" style="margin-top:.8rem">✨ Try your own fit</button>
+    <div class="muted">Your turn: add 2–3 of <b>your</b> fits and let friends pick. Takes a minute.</div>
+    <button class="btn primary" id="tryown" style="margin-top:.8rem">✨ Rate my fit</button>
   </div>
 
 <script>
@@ -78,7 +78,7 @@ function finish(){
   $("stage").innerHTML = `<div class="muted">All done — thanks for voting! 🎉</div>`;
   $("progress").textContent=""; $("cta").hidden=false;
 }
-$("tryown").onclick=()=>{ location.href="/closet"+(REF?("?ref="+encodeURIComponent(REF)):""); };
+$("tryown").onclick=()=>{ location.href="/studio"+(REF?("?ref="+encodeURIComponent(REF)):""); };
 render();
 </script>
 </body>

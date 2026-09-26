@@ -73,7 +73,10 @@
 <script>
 const $=id=>document.getElementById(id);
 function sid(){ try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s;}catch(e){return "anon"+Date.now();} }
-const REF=(function(){ const q=new URLSearchParams(location.search).get("ref"); try{return q||localStorage.getItem("krey_ref")||"";}catch(e){return q||"";} })();
+const REF=(function(){ const q=new URLSearchParams(location.search).get("ref"); try{if(q)localStorage.setItem("krey_ref",q);return q||localStorage.getItem("krey_ref")||"";}catch(e){return q||"";} })();
+// count the referred visit (K-factor denominator)
+if(REF){ try{ fetch("/referral",{method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({referrer_hint:REF,visitor_hint:sid(),source:"studio"})}); }catch(e){} }
 
 const MAX=3; let files=[]; let conf=null;
 
@@ -114,6 +117,9 @@ $("go").onclick=async()=>{
     const r=await fetch("/studio/create",{method:"POST",body:fd});
     const j=await r.json();
     if(!j.share_url) throw new Error(j.detail||"failed");
+    // a referred visitor who built their own ballot = an activation (K-factor numerator)
+    if(REF){ try{ fetch("/referral",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({referrer_hint:REF,visitor_hint:sid(),source:"studio",activated:true})}); }catch(e){} }
     const full=location.origin+j.share_url;
     $("form").classList.add("hide"); $("result").classList.remove("hide");
     $("shareurl").textContent=full;
