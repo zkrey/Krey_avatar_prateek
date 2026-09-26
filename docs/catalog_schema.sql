@@ -27,6 +27,7 @@ create index if not exists garments_subsegment_idx on garments (subsegment);
 
 -- Read-only public access for the anon key (browse the catalog). Writes are service-role only.
 alter table garments enable row level security;
+drop policy if exists "public read garments" on garments;
 create policy "public read garments" on garments for select using (true);
 
 -- If you already created `garments` before these columns existed, add them in place:
@@ -60,6 +61,7 @@ alter table garment_events add column if not exists referrer_hint text;
 -- Anon may INSERT events (the app logs shares/tries) but NOT read them back —
 -- keeps the funnel counts private to you (service key in the dashboard).
 alter table garment_events enable row level security;
+drop policy if exists "anon insert events" on garment_events;
 create policy "anon insert events" on garment_events for insert with check (true);
 
 -- Handy rollups to run in the SQL Editor later:
@@ -141,6 +143,13 @@ alter table looks      enable row level security;
 alter table rank_sets  enable row level security;
 alter table rank_votes enable row level security;
 alter table referrals  enable row level security;
+drop policy if exists "public read looks"     on looks;
+drop policy if exists "public read rank_sets" on rank_sets;
+drop policy if exists "anon insert looks"     on looks;
+drop policy if exists "anon insert rank_sets" on rank_sets;
+drop policy if exists "anon insert votes"     on rank_votes;
+drop policy if exists "anon insert referrals" on referrals;
+drop policy if exists "public read votes"     on rank_votes;
 create policy "public read looks"     on looks     for select using (true);
 create policy "public read rank_sets" on rank_sets for select using (true);
 create policy "anon insert looks"     on looks     for insert with check (true);
@@ -154,6 +163,8 @@ create policy "public read votes"     on rank_votes for select using (true);
 -- ---------------------------------------------------------------------------
 -- STORAGE for self-serve uploads (/studio): a PUBLIC bucket named `looks` that anon may write to.
 -- Create the bucket first (Supabase → Storage → New bucket → name `looks`, Public ON), then:
+drop policy if exists "anon upload looks" on storage.objects;
+drop policy if exists "public read looks bucket" on storage.objects;
 create policy "anon upload looks" on storage.objects
     for insert to anon with check (bucket_id = 'looks');
 create policy "public read looks bucket" on storage.objects
