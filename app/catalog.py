@@ -365,29 +365,46 @@ def admin_snapshot() -> dict:
 
 
 def get_results(set_id: str) -> dict | None:
-    """Tally a ballot's pairwise votes into a per-look win count (owner's results view).
+    """Rank a ballot's looks with Glicko-2 (owner's results view).
 
-    Needs a select policy on rank_votes (docs/catalog_schema.sql). Returns
-    {set_id, name, looks:[{look_id,name,image_url,wins,comparisons,win_rate}], votes}.
+    Glicko-2 weighs *who* you beat, so with several voters it converges to a true order and only
+    ties when the evidence really is a tie (e.g. a 3-way Condorcet cycle from a single voter).
+    Returns {set_id, name, votes, decisive, looks:[{...,rating,rd,wins,games,win_rate,score}]}.
+    Needs a select policy on rank_votes (docs/catalog_schema.sql).
     """
+    from app import rating
+
     rs = get_rank_set(set_id)
     if not rs:
         return None
     votes = _get(f"rank_votes?set_id=eq.{urllib.parse.quote(str(set_id))}"
                  f"&select=winner_look_id,loser_look_id&limit=5000") or []
-    wins, comps = {}, {}
-    for v in votes:
-        w, l = v.get("winner_look_id"), v.get("loser_look_id")
-        if w:
-            wins[w] = wins.get(w, 0) + 1
-            comps[w] = comps.get(w, 0) + 1
-        if l:
-            comps[l] = comps.get(l, 0) + 1
+    pairs = [(v.get("winner_look_id"), v.get("loser_look_id")) for v in votes
+             if v.get("winner_look_id") and v.get("loser_look_id")]
+    ids = [lk.get("look_id") for lk in rs.get("looks", [])]
+    ratings = rating.rate(ids, pairs) if ids else {}
+
     looks = []
     for lk in rs.get("looks", []):
         lid = lk.get("look_id")
-        c = comps.get(lid, 0)
-        looks.append({**lk, "wins": wins.get(lid, 0), "comparisons": c,
-                      "win_rate": (wins.get(lid, 0) / c) if c else 0.0})
-    looks.sort(key=lambda x: (x["win_rate"], x["wins"]), reverse=True)
-    return {"set_id": set_id, "name": rs.get("name"), "looks": looks, "votes": len(votes)}
+        rr = ratings.get(lid, {"rating": 1500.0, "rd": 350.0, "wins": 0, "games": 0})
+        g = rr["games"]
+        looks.append({**lk, "rating": rr["rating"], "rd": rr["rd"],
+                      "wins": rr["wins"], "games": g,
+                      "win_rate": (rr["wins"] / g) if g else 0.0})
+    # sort by Glicko-2 rating (tiebreak: wins)
+    looks.sort(key=lambda x: (x["rating"], x["wins"]), reverse=True)
+
+    # normalise to a 0..100 "score" for the bars (relative within this ballot)
+    rs_vals = [l["rating"] for l in looks] or [1500.0]
+    lo, hi = min(rs_vals), max(rs_vals)
+    for l in looks:
+        l["score"] = 100 if hi == lo else round(15 + 85 * (l["rating"] - lo) / (hi - lo))
+
+    # "decisive" = a clear leader: enough votes AND a rating gap beyond noise
+    decisive = False
+    if len(looks) >= 2 and len(pairs) >= 3:
+        gap = looks[0]["rating"] - looks[1]["rating"]
+        decisive = gap >= 30.0
+    return {"set_id": set_id, "name": rs.get("name"), "looks": looks,
+            "votes": len(pairs), "decisive": decisive}

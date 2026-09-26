@@ -50,20 +50,30 @@ async function load(){
   let d={looks:[],votes:0};
   try{ const r=await fetch("/results/"+encodeURIComponent(DATA.set_id)+"/data"); d=await r.json(); }catch(e){}
   const looks=d.looks||[];
-  $("sub").textContent = d.votes ? `${d.votes} vote${d.votes>1?"s":""} so far — your friends picked:` : "No votes yet — send the link to friends to see the ranking.";
+  const decisive = !!d.decisive;
+  if(!d.votes){
+    $("sub").textContent = "No votes yet — send the link to friends to see the ranking.";
+  } else if(decisive){
+    $("sub").textContent = `${d.votes} vote${d.votes>1?"s":""} · a clear favourite emerged 👑`;
+  } else {
+    $("sub").innerHTML = `${d.votes} vote${d.votes>1?"s":""} · <b>too close to call</b> — pairwise ranking sharpens with more voters, so share it wider.`;
+  }
   $("list").innerHTML = looks.map((l,i)=>{
-    const pct=Math.round((l.win_rate||0)*100);
-    return `<div class="row ${i===0&&d.votes?'win':''}">
+    const score=Math.round(l.score||0);
+    const lead = decisive && i===0;
+    return `<div class="row ${lead?'win':''}">
       ${l.image_url?`<img src="${l.image_url}">`:`<div class="ph">no image</div>`}
       <div style="flex:1">
-        <div>${i===0&&d.votes?'<span class="crown">👑</span> ':''}${l.name||'Fit '+(i+1)} <span class="pct" style="float:right">${pct}%</span></div>
-        <div class="bar"><i style="width:${pct}%"></i></div>
-        <div class="muted" style="text-align:left;margin-top:.3rem">${l.wins||0} win${(l.wins||0)!==1?'s':''} · ${l.comparisons||0} matchup${(l.comparisons||0)!==1?'s':''}</div>
+        <div>${lead?'<span class="crown">👑</span> ':''}${l.name||'Fit '+(i+1)} <span class="pct" style="float:right">${d.votes?Math.round(l.rating):'—'}</span></div>
+        <div class="bar"><i style="width:${d.votes?score:0}%"></i></div>
+        <div class="muted" style="text-align:left;margin-top:.3rem">${l.wins||0} win${(l.wins||0)!==1?'s':''} · ${l.games||0} matchup${(l.games||0)!==1?'s':''} · rating ${Math.round(l.rating)}±${Math.round(l.rd)}</div>
       </div></div>`;
   }).join("") || `<div class="muted">This ballot has no looks.</div>`;
   if(d.votes && looks.length){
-    $("tip").textContent = "Confident about the winner? Wear it. That's the whole point 💛";
-    buildConf(looks[0]);   // winner
+    $("tip").textContent = decisive
+      ? "Confident about the winner? Wear it. That's the whole point 💛"
+      : "It's close — a few more votes will break the tie.";
+    buildConf(looks[0]);   // current leader
   }
 }
 
