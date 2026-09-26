@@ -25,23 +25,55 @@ N_PER_TYPE = 60                                            # ~60 each of upper/l
 ROOT = "/kaggle/input/fashion-product-images-small/myntradataset"   # dataset root (has styles.csv + images/)
 
 # %% [markdown]
-# ## 2. Load the dataset metadata + map articleType → cloth_type
+# ## 2. Load the dataset metadata + map articleType → cloth_type + segment
+#
+# TWO dimensions come out of this:
+#  - cloth_type (upper/lower/overall) — the RENDER needs it (CatVTON).
+#  - segment (intimate/wedding/ethnic/formal/party/athleisure/casual) — the ANALYTICS bucket
+#    for the "what gets shared most?" thesis. Derived from subCategory + usage + articleType.
 
 # %%
 import os, io, json, time, urllib.request, urllib.error
 import pandas as pd
 
 styles = pd.read_csv(os.path.join(ROOT, "styles.csv"), on_bad_lines="skip")
-UPPER = {"Tshirts","Shirts","Tops","Kurtas","Sweatshirts","Sweaters","Jackets","Blazers","Tunics","Waistcoat"}
-LOWER = {"Jeans","Trousers","Track Pants","Shorts","Skirts","Leggings","Capris"}
-OVERALL = {"Dresses","Jumpsuit"}
+
+# --- cloth_type (render dimension) — broadened to cover intimate + ethnic types too ---
+UPPER = {"Tshirts","Shirts","Tops","Kurtas","Kurtis","Sweatshirts","Sweaters","Jackets","Blazers",
+         "Tunics","Waistcoat","Blouse","Nehru Jackets","Bra","Camisoles","Innerwear Vests"}
+LOWER = {"Jeans","Trousers","Track Pants","Shorts","Skirts","Leggings","Capris","Churidar",
+         "Salwar","Briefs","Boxers","Trunk","Shapewear","Petticoat"}
+OVERALL = {"Dresses","Jumpsuit","Sarees","Lehenga Choli","Clothing Set","Nightdress","Sherwani",
+           "Salwar and Dupatta","Kurta Sets"}
 def cloth_type(a):
     return "upper" if a in UPPER else "lower" if a in LOWER else "overall" if a in OVERALL else None
+
+# --- segment (analytics dimension) — priority order matters ---
+INTIMATE_TYPES = {"Bra","Briefs","Boxers","Trunk","Camisoles","Innerwear Vests","Shapewear",
+                  "Nightdress","Baby Dolls","Robe","Lounge Pants","Lounge Shorts"}
+WEDDING_TYPES  = {"Sarees","Lehenga Choli","Sherwani","Salwar and Dupatta","Kurta Sets"}   # bridal/heavy
+ETHNIC_TYPES   = {"Kurtas","Kurtis","Churidar","Salwar","Dupatta","Nehru Jackets","Tunics"}  # daily ethnic
+def segment(row):
+    a = row["articleType"]; sub = str(row.get("subCategory","")); use = str(row.get("usage",""))
+    if sub == "Innerwear" or a in INTIMATE_TYPES:      return "intimate"
+    if a in WEDDING_TYPES:                             return "wedding"
+    if use == "Ethnic" or a in ETHNIC_TYPES:           return "ethnic"
+    if use == "Formal":                                return "formal"
+    if use == "Party":                                 return "party"
+    if use == "Sports":                                return "athleisure"
+    return "casual"
+
 styles["cloth_type"] = styles["articleType"].map(cloth_type)
+styles["segment"]    = styles.apply(segment, axis=1)
 g = styles.dropna(subset=["cloth_type"])
-# spread across types, cap per type
-picks = pd.concat([g[g.cloth_type==t].head(N_PER_TYPE) for t in ("upper","lower","overall")])
-print("selected:", len(picks), "\n", picks.cloth_type.value_counts().to_dict())
+
+# balance the pull across SEGMENTS (the thesis buckets), not just cloth_type — so intimate /
+# wedding / ethnic aren't drowned out by the huge casual pile. N per segment, in-stock only.
+SEGMENTS = ("intimate","wedding","ethnic","formal","party","athleisure","casual")
+picks = pd.concat([g[g.segment==s].head(N_PER_TYPE) for s in SEGMENTS]).drop_duplicates("id")
+print("selected:", len(picks))
+print("  by segment   :", picks.segment.value_counts().to_dict())
+print("  by cloth_type:", picks.cloth_type.value_counts().to_dict())
 
 # %% [markdown]
 # ## 3. Upload each image to Storage + insert its catalog row
@@ -77,6 +109,7 @@ for _, row in picks.iterrows():
     name = f"{row.get('baseColour','')} {row['articleType']}".strip()
     payload = json.dumps([{
         "garment_id": gid, "name": name, "cloth_type": row["cloth_type"],
+        "segment": row["segment"],
         "category": str(row["articleType"]), "color": str(row.get("baseColour","")),
         "image_url": image_url, "source": "fashion-product-images-small",
         "licence": "research/non-commercial (validation test)",

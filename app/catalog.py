@@ -17,6 +17,10 @@ import os
 import urllib.request
 
 CLOTH_TYPES = ("upper", "lower", "overall")
+# ANALYTICS dimension (distinct from cloth_type, which the render needs). Thesis: which of
+# these gets shared most? Populated by bench/ingest_garments.py from the dataset metadata.
+SEGMENTS = ("intimate", "wedding", "ethnic", "formal", "party", "athleisure", "casual")
+EVENT_TYPES = ("view", "try", "share")
 
 # Built-in sample so the browse UI works before any dataset/Supabase is wired. No image files
 # (image_url=None) — the UI draws a colour tile — so nothing bloats the repo.
@@ -41,26 +45,63 @@ def catalog_configured() -> bool:
     return bool(os.environ.get("KREY_SUPABASE_URL") and os.environ.get("KREY_SUPABASE_KEY"))
 
 
-def list_garments(cloth_type: str | None = None, limit: int = 200) -> list[dict]:
-    """Garments for the closet, optionally filtered by cloth_type. Falls back to the sample set
-    (or on any Supabase error) so the page never hard-fails."""
+def list_garments(cloth_type: str | None = None, segment: str | None = None,
+                   limit: int = 200) -> list[dict]:
+    """Garments for the closet, optionally filtered by cloth_type and/or segment. Falls back to
+    the sample set (or on any Supabase error) so the page never hard-fails."""
     if catalog_configured():
         try:
-            return _from_supabase(cloth_type, limit)
+            return _from_supabase(cloth_type, segment, limit)
         except Exception:
             pass  # fall through to sample rather than 500 the closet
-    rows = [g for g in _SAMPLE if not cloth_type or g["cloth_type"] == cloth_type]
+    rows = [g for g in _SAMPLE
+            if (not cloth_type or g["cloth_type"] == cloth_type)
+            and (not segment or g.get("segment") == segment)]
     return rows[:limit]
 
 
-def _from_supabase(cloth_type: str | None, limit: int) -> list[dict]:
+def _from_supabase(cloth_type: str | None, segment: str | None, limit: int) -> list[dict]:
     base = os.environ["KREY_SUPABASE_URL"].rstrip("/")
     key = os.environ["KREY_SUPABASE_KEY"]
-    url = f"{base}/rest/v1/garments?select=garment_id,name,cloth_type,category,color,image_url,source&limit={int(limit)}"
+    url = (f"{base}/rest/v1/garments"
+           f"?select=garment_id,name,cloth_type,segment,category,color,image_url,source"
+           f"&limit={int(limit)}")
     if cloth_type in CLOTH_TYPES:
         url += f"&cloth_type=eq.{cloth_type}"
+    if segment in SEGMENTS:
+        url += f"&segment=eq.{segment}"
     req = urllib.request.Request(url)
     req.add_header("apikey", key)
     req.add_header("Authorization", f"Bearer {key}")
     with urllib.request.urlopen(req, timeout=15) as r:
         return json.loads(r.read().decode())
+
+
+def log_event(garment_id: str, event_type: str, segment: str | None = None,
+              cloth_type: str | None = None, session_hint: str | None = None) -> bool:
+    """Record a view/try/share against a garment (the 'what gets shared most' thesis).
+
+    Writes to the durable Supabase `garment_events` table via the anon key (insert-only RLS).
+    Best-effort: returns False and never raises, so a logging hiccup never breaks the UI.
+    """
+    if event_type not in EVENT_TYPES or not garment_id or not catalog_configured():
+        return False
+    base = os.environ["KREY_SUPABASE_URL"].rstrip("/")
+    key = os.environ["KREY_SUPABASE_KEY"]
+    payload = json.dumps([{
+        "garment_id": str(garment_id)[:128],
+        "event_type": event_type,
+        "segment": segment if segment in SEGMENTS else None,
+        "cloth_type": cloth_type if cloth_type in CLOTH_TYPES else None,
+        "session_hint": (str(session_hint)[:64] if session_hint else None),
+    }]).encode()
+    req = urllib.request.Request(f"{base}/rest/v1/garment_events", data=payload, method="POST")
+    req.add_header("apikey", key)
+    req.add_header("Authorization", f"Bearer {key}")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Prefer", "return=minimal")
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            return r.status in (200, 201, 204)
+    except Exception:
+        return False

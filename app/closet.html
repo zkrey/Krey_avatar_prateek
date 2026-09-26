@@ -12,19 +12,23 @@
   h1{font-size:1.3rem;margin:.2rem 0 .1rem}
   .sub{color:var(--muted);font-size:.9rem;margin-bottom:.9rem}
   .src{font-size:.72rem;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:.1rem .5rem;display:inline-block}
-  .filters{display:flex;gap:.4rem;flex-wrap:wrap;margin:.6rem 0 1rem}
+  .filters{display:flex;gap:.4rem;flex-wrap:wrap;margin:.6rem 0}
+  .flabel{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin:.5rem 0 .1rem}
   .chip{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:999px;
-        padding:.35rem .8rem;font-size:.85rem;cursor:pointer}
+        padding:.35rem .8rem;font-size:.85rem;cursor:pointer;text-transform:capitalize}
   .chip.on{background:var(--gold);color:#1a1400;border-color:var(--gold);font-weight:600}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.7rem}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.7rem;margin-top:.8rem}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
   .ph{aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;color:#0009;font-size:.8rem}
   .card img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:var(--surface-2)}
   .meta{padding:.5rem .6rem}
   .nm{font-size:.9rem;font-weight:600;line-height:1.2}
   .ty{font-size:.72rem;color:var(--muted);text-transform:capitalize;margin-top:.1rem}
-  .try{margin:.1rem .6rem .6rem;border:1px solid var(--gold-dim);background:transparent;color:var(--gold);
-       border-radius:8px;padding:.4rem;font-size:.82rem;cursor:pointer;width:calc(100% - 1.2rem)}
+  .seg{font-size:.66rem;color:var(--gold);text-transform:capitalize;margin-top:.05rem}
+  .actions{display:flex;gap:.4rem;margin:.1rem .6rem .6rem}
+  .btn{border:1px solid var(--gold-dim);background:transparent;color:var(--gold);
+       border-radius:8px;padding:.4rem;font-size:.82rem;cursor:pointer;flex:1}
+  .btn.share{color:var(--muted);border-color:var(--line)}
   .empty{color:var(--muted);padding:2rem 0;text-align:center}
   .note{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:.6rem .8rem;
         font-size:.82rem;color:var(--muted);margin-top:1rem}
@@ -32,13 +36,22 @@
 </head>
 <body>
   <h1>Your closet ✨</h1>
-  <div class="sub">Pick something to try on. <span id="src" class="src">…</span></div>
-  <div class="filters">
+  <div class="sub">Pick something to try on — or share a look with a friend. <span id="src" class="src">…</span></div>
+
+  <div class="flabel">Type</div>
+  <div class="filters" id="typefilters">
     <button class="chip on" data-t="">All</button>
     <button class="chip" data-t="upper">Tops</button>
     <button class="chip" data-t="lower">Bottoms</button>
     <button class="chip" data-t="overall">Dresses</button>
   </div>
+
+  <div class="flabel">Occasion</div>
+  <div class="filters" id="segfilters">
+    <button class="chip on" data-s="">All</button>
+    <!-- segment chips injected from /closet/garments -->
+  </div>
+
   <div id="grid" class="grid"></div>
   <div id="empty" class="empty" hidden>No garments yet.</div>
   <div class="note" id="rendernote"></div>
@@ -46,40 +59,91 @@
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-let CURRENT="";
+let T="", S="", RENDER_LIVE=false, SEEN=new Set();
 
-async function load(t){
-  CURRENT=t;
-  document.querySelectorAll(".chip").forEach(c=>c.classList.toggle("on",(c.dataset.t||"")===t));
+// opaque per-browser id for analytics (no PII) — lets us compute share-rate per person.
+function sid(){
+  try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s; }
+  catch(e){ return "anon"; }
+}
+function logEvent(g, event_type){
+  try{
+    fetch("/closet/event",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({garment_id:g.garment_id,event_type,segment:g.segment,cloth_type:g.cloth_type,session_hint:sid()})});
+  }catch(e){}
+}
+
+// fire a 'view' once per garment as it scrolls into sight (denominator for share-rate).
+const io = ("IntersectionObserver" in window) ? new IntersectionObserver((ents)=>{
+  ents.forEach(e=>{ if(e.isIntersecting){ const c=e.target; const id=c.dataset.id;
+    if(id && !SEEN.has(id)){ SEEN.add(id); logEvent(JSON.parse(c.dataset.g),"view"); io.unobserve(c); } }});
+},{threshold:.4}) : null;
+
+function buildSegChips(segs){
+  const box=$("segfilters");
+  box.querySelectorAll(".chip:not([data-s=''])").forEach(c=>c.remove());
+  (segs||[]).forEach(s=>{
+    const b=document.createElement("button"); b.className="chip"; b.dataset.s=s; b.textContent=s;
+    b.onclick=()=>{ S=s; load(); }; box.appendChild(b);
+  });
+  box.querySelectorAll(".chip").forEach(c=>c.classList.toggle("on",(c.dataset.s||"")===S));
+}
+
+async function load(){
+  document.querySelectorAll("#typefilters .chip").forEach(c=>c.classList.toggle("on",(c.dataset.t||"")===T));
+  document.querySelectorAll("#segfilters .chip").forEach(c=>c.classList.toggle("on",(c.dataset.s||"")===S));
   const grid=$("grid"); grid.innerHTML="loading…";
-  let data={garments:[],source:"?"};
-  try{ const r=await fetch("/closet/garments"+(t?("?cloth_type="+t):"")); data=await r.json(); }
+  let data={garments:[],source:"?",segments:[]};
+  const q=[]; if(T)q.push("cloth_type="+T); if(S)q.push("segment="+encodeURIComponent(S));
+  try{ const r=await fetch("/closet/garments"+(q.length?("?"+q.join("&")):"")); data=await r.json(); }
   catch(e){ grid.innerHTML=""; $("empty").hidden=false; return; }
+  RENDER_LIVE=!!data.render_live;
   $("src").textContent = data.source==="supabase" ? "live catalog" : "sample set";
+  if($("segfilters").querySelectorAll(".chip").length<=1) buildSegChips(data.segments);
   $("rendernote").innerHTML = data.render_live
-    ? "Tap <b>Try on</b> to see it on you."
-    : "Try-on render isn’t switched on yet — you can browse the catalog now; “see it on you” lights up once the render service is live.";
-  const gs=data.garments||[];
+    ? "Tap <b>Try on</b> to see it on you, then <b>Share</b> the look."
+    : "Try-on render isn’t switched on yet — browse and <b>Share</b> looks now; “see it on you” lights up once the render service is live.";
+  const gs=data.garments||[]; SEEN=new Set();
   $("empty").hidden = gs.length>0;
   grid.innerHTML = gs.map(g=>`
-    <div class="card">
+    <div class="card" data-id="${esc(g.garment_id)}" data-g='${esc(JSON.stringify(g))}'>
       ${g.image_url
         ? `<img src="${esc(g.image_url)}" alt="${esc(g.name)}" loading="lazy">`
         : `<div class="ph" style="background:${esc(g.color||'#333')}">${esc(g.category||g.cloth_type||'garment')}</div>`}
       <div class="meta"><div class="nm">${esc(g.name||'Garment')}</div>
-        <div class="ty">${esc(g.cloth_type||'')}</div></div>
-      <button class="try" data-id="${esc(g.garment_id)}" data-type="${esc(g.cloth_type)}">Try on</button>
+        <div class="ty">${esc(g.cloth_type||'')}</div>
+        ${g.segment?`<div class="seg">${esc(g.segment)}</div>`:``}</div>
+      <div class="actions">
+        <button class="btn try" data-id="${esc(g.garment_id)}">Try on</button>
+        <button class="btn share" data-id="${esc(g.garment_id)}">Share</button>
+      </div>
     </div>`).join("");
-  grid.querySelectorAll(".try").forEach(b=>b.onclick=()=>onTry(b.dataset.id,b.dataset.type));
+  grid.querySelectorAll(".card").forEach(c=>{ if(io) io.observe(c); });
+  grid.querySelectorAll(".try").forEach(b=>b.onclick=()=>onAct(b,"try"));
+  grid.querySelectorAll(".share").forEach(b=>b.onclick=()=>onAct(b,"share"));
 }
 
-function onTry(id,type){
-  // Render (Service B) is wired separately; until it's live this points users to add their photo.
-  alert("Nice pick! Once the try-on render is live, this puts it on your photo.\n\nFor now, add your photo at /alpha to build your twin.");
+function cardData(b){ return JSON.parse(b.closest(".card").dataset.g); }
+
+async function onAct(b,kind){
+  const g=cardData(b);
+  logEvent(g,kind);                         // record the thesis signal
+  if(kind==="share"){
+    const url=location.origin+"/closet";
+    const text=`Check out this ${g.name} on Krey`;
+    try{
+      if(navigator.share){ await navigator.share({title:"Krey",text,url}); }
+      else { await navigator.clipboard.writeText(text+" "+url); alert("Link copied — send it to a friend to vote on the look."); }
+    }catch(e){/* user cancelled share sheet */}
+  } else {
+    if(RENDER_LIVE) alert("Rendering "+g.name+" on your photo…");   // Service B hook lands here
+    else alert("Nice pick! Once the try-on render is live, this puts "+g.name+" on your photo.\n\nFor now, add your photo at /alpha to build your twin.");
+  }
 }
 
-document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>load(c.dataset.t||""));
-load("");
+document.querySelectorAll("#typefilters .chip").forEach(c=>c.onclick=()=>{ T=c.dataset.t||""; load(); });
+$("segfilters").querySelector('[data-s=""]').onclick=()=>{ S=""; load(); };
+load();
 </script>
 </body>
 </html>

@@ -110,16 +110,36 @@ def closet():
 
 
 @app.get("/closet/garments")
-def closet_garments(cloth_type: Optional[str] = None):
-    """Catalog JSON for the closet UI. `render_live` tells the page whether 'see it on you' works
-    yet (true only once the Modal render backend is configured)."""
+def closet_garments(cloth_type: Optional[str] = None, segment: Optional[str] = None):
+    """Catalog JSON for the closet UI. Filterable by cloth_type (render dimension) and segment
+    (analytics dimension: intimate/wedding/ethnic/...). `render_live` tells the page whether
+    'see it on you' works yet (true only once the Modal render backend is configured)."""
     from app import catalog as catalog_mod
     from render import client as render_client
     return {
-        "garments": catalog_mod.list_garments(cloth_type),
+        "garments": catalog_mod.list_garments(cloth_type, segment),
         "source": "supabase" if catalog_mod.catalog_configured() else "sample",
+        "segments": list(catalog_mod.SEGMENTS),
         "render_live": render_client.render_configured(),
     }
+
+
+@app.post("/closet/event")
+def closet_event(payload: dict = Body(...)):
+    """Log a view/try/share against a garment — the 'what gets shared most' thesis.
+
+    Durable (Supabase garment_events); best-effort so the browse UI never blocks on it.
+    Body: {garment_id, event_type in view|try|share, segment?, cloth_type?, session_hint?}.
+    """
+    from app import catalog as catalog_mod
+    ok = catalog_mod.log_event(
+        garment_id=str(payload.get("garment_id") or ""),
+        event_type=str(payload.get("event_type") or ""),
+        segment=payload.get("segment"),
+        cloth_type=payload.get("cloth_type"),
+        session_hint=payload.get("session_hint"),
+    )
+    return {"logged": bool(ok)}
 
 # Default sink logs JSON lines; swap for the warehouse / Events service in production.
 analytics = Analytics()
