@@ -168,6 +168,35 @@ def closet_event(payload: dict = Body(...)):
 
 # --- the share -> rank -> confidence -> referral loop (social-testing experiment) ---
 
+@app.post("/closet/tryon")
+async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
+                       person: UploadFile = File(...)):
+    """Render a catalog garment onto the user's photo (Modal GPU) and store the result as a
+    shareable look — so try-on feeds straight into the share/rank loop. Lightweight (no account
+    gate); the heavy canRender path lives on /render for the production flow."""
+    from app import catalog as catalog_mod
+    from render import client as render_client
+    from starlette.concurrency import run_in_threadpool
+    if not render_client.render_configured():
+        raise HTTPException(503, "render backend not live yet")
+    g = catalog_mod.get_garment(garment_id)
+    if not g:
+        raise HTTPException(404, "garment not found")
+    person_bytes = await person.read()
+    garment_bytes = catalog_mod.fetch_bytes(g.get("image_url"))
+    if not person_bytes or not garment_bytes:
+        raise HTTPException(400, "missing person or garment image")
+    cloth_type = g.get("cloth_type") if g.get("cloth_type") in ("upper", "lower", "overall") else "upper"
+    try:  # the render blocks ~30-60s on the GPU — run off the event loop
+        png = await run_in_threadpool(render_client.render_tryon, person_bytes, garment_bytes, cloth_type)
+    except Exception as e:
+        raise HTTPException(502, f"render failed: {e}")
+    url = catalog_mod.upload_image(png, content_type="image/png", ext="png")
+    look_id = catalog_mod.create_look(owner_hint=owner_hint, name=g.get("name"), image_url=url,
+                                      segment=g.get("segment"), subsegment=g.get("subsegment"))
+    return {"look_id": look_id, "image_url": url, "look_url": f"/look/{look_id}" if look_id else None}
+
+
 @app.get("/look/{look_id}", response_class=HTMLResponse)
 def look_page(look_id: str):
     """Public share page for one rendered look. OG tags (server-filled) make the link unfurl

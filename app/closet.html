@@ -157,8 +157,58 @@ async function onAct(b,kind){
     }catch(e){/* user cancelled share sheet */}
   } else {
     logEvent(g,"try");
-    if(RENDER_LIVE) alert("Rendering "+g.name+" on your photo…");   // Service B hook lands here
-    else alert("Nice pick! Once the try-on render is live, this puts "+g.name+" on your photo.\n\nFor now, add your photo at /alpha to build your twin.");
+    if(!RENDER_LIVE){
+      alert("Nice pick! Once the try-on render is live, this puts "+g.name+" on your photo.\n\nFor now, add your photo at /alpha to build your twin.");
+      return;
+    }
+    // render live → ask for a photo, render the garment onto it, show the look
+    const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*";
+    inp.onchange=async()=>{
+      if(!inp.files[0]) return;
+      showRender("loading", g);
+      const fd=new FormData();
+      fd.append("garment_id",g.garment_id); fd.append("owner_hint",sid()); fd.append("person",inp.files[0]);
+      try{
+        const r=await fetch("/closet/tryon",{method:"POST",body:fd});
+        const j=await r.json();
+        if(j.image_url) showRender("done",g,j);
+        else showRender("error",g,j);
+      }catch(e){ showRender("error",g,{}); }
+    };
+    inp.click();
+  }
+}
+
+// full-screen render overlay
+function showRender(state,g,j){
+  let ov=$("renderov");
+  if(!ov){ ov=document.createElement("div"); ov.id="renderov";
+    ov.style.cssText="position:fixed;inset:0;background:#000d;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px";
+    document.body.appendChild(ov);
+  }
+  if(state==="loading"){
+    ov.innerHTML=`<div style="text-align:center;color:var(--text)">
+      <div style="font-size:1.1rem;margin-bottom:.6rem">Putting <b>${esc(g.name)}</b> on you… ✨</div>
+      <div class="muted" style="color:var(--muted)">~30–60s on the GPU, hang tight</div></div>`;
+  } else if(state==="done"){
+    const url=location.origin+(j.look_url||"/closet");
+    ov.innerHTML=`<div style="text-align:center;max-width:420px;width:100%">
+      <img src="${esc(j.image_url)}" style="max-width:100%;max-height:70vh;border-radius:14px;border:1px solid var(--line)">
+      <div style="display:flex;gap:.5rem;margin-top:.8rem">
+        <button class="btn" id="rov_share" style="flex:1;background:var(--gold);color:#1a1400;border:none;border-radius:10px;padding:.7rem;font-weight:700">Share this look</button>
+        <button class="btn" id="rov_close" style="flex:1;background:transparent;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:.7rem">Done</button>
+      </div></div>`;
+    $("rov_share").onclick=async()=>{
+      const text=`Check out this ${g.name} on me — Krey ✨`;
+      try{ if(navigator.share){ await navigator.share({title:"Krey",text,url}); }
+           else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); } }catch(e){}
+    };
+    $("rov_close").onclick=()=>ov.remove();
+  } else {
+    ov.innerHTML=`<div style="text-align:center;color:var(--text)">
+      <div>Render didn’t go through — ${esc((j&&j.detail)||"try another photo")}.</div>
+      <button class="btn" id="rov_close" style="margin-top:.8rem;background:transparent;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:.6rem 1rem">Close</button></div>`;
+    $("rov_close").onclick=()=>ov.remove();
   }
 }
 

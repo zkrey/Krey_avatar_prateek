@@ -144,6 +144,23 @@ def log_event(garment_id: str, event_type: str, segment: str | None = None,
 
 # --- the share -> rank -> confidence -> referral loop (social-testing experiment) ---
 
+def get_garment(garment_id: str) -> dict | None:
+    """One garment row (for the try-on: image_url + cloth_type + segment)."""
+    rows = _get(f"garments?garment_id=eq.{urllib.parse.quote(str(garment_id))}&limit=1")
+    return rows[0] if rows else None
+
+
+def fetch_bytes(url: str, timeout: int = 30) -> bytes | None:
+    """Fetch an image's bytes from a public URL (e.g. a garment's Storage URL). None on failure."""
+    if not url:
+        return None
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as r:
+            return r.read()
+    except Exception:
+        return None
+
+
 def get_look(look_id: str) -> dict | None:
     """One rendered look for the /look/<id> share page."""
     rows = _get(f"looks?look_id=eq.{urllib.parse.quote(str(look_id))}&limit=1")
