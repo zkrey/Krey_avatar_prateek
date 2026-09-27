@@ -37,14 +37,24 @@ def analyze_coverage(image_bgr) -> dict:
                 "hint": "Couldn't spot you — try a clear, well-lit photo, ideally head-to-knees."}
 
     vis = frame.visibility or {}
+    lm = frame.landmarks_px or {}
+    h = (frame.image_shape or (1, 1))[0] or 1
 
     def seen(*names):
         return any(vis.get(n, 0.0) >= VIS for n in names)
 
-    upper_ok = seen("left_shoulder", "right_shoulder")
+    shoulders_ok = seen("left_shoulder", "right_shoulder")
     hips_ok = seen("left_hip", "right_hip")
     knees_ok = seen("left_knee", "right_knee")
     ankles_ok = seen("left_ankle", "right_ankle")
+
+    # TORSO ROOM: a garment needs chest/torso canvas, not just a shoulder pixel. Require some
+    # of the frame to sit BELOW the shoulders (else it's a headshot -> skewed render).
+    ys = [lm[n][1] for n in ("left_shoulder", "right_shoulder")
+          if n in lm and vis.get(n, 0.0) >= VIS]
+    room_below = (1.0 - (sum(ys) / len(ys)) / h) if ys else 0.0
+    torso_room = room_below >= 0.22      # >=22% of the frame below the shoulders
+    upper_ok = shoulders_ok and (torso_room or hips_ok)   # hips visible => plenty of torso
 
     coverage = {
         "upper": upper_ok,
@@ -54,10 +64,13 @@ def analyze_coverage(image_bgr) -> dict:
     allowed = [t for t in CLOTH_TYPES if coverage[t]]
 
     if not allowed:
-        hint = "Couldn't read your body — try a clearer photo."
+        if shoulders_ok and not torso_room:
+            hint = "Too close-up — step back so your chest & shoulders are in frame (not just your face)."
+        else:
+            hint = "Couldn't read your body — try a clear, upper-body photo."
     elif allowed == ["upper"]:
         hint = "Great for tops. Add a full-body photo (head to knees) to unlock bottoms & dresses."
-    elif "overall" not in coverage or not coverage["overall"]:
+    elif not coverage["overall"]:
         hint = "Add a full-body photo to unlock dresses."
     else:
         hint = "Full body detected — everything's unlocked."
