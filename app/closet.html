@@ -91,8 +91,8 @@
       <div class="flabel">Render style</div>
       <div class="filters" id="modefilters">
         <button class="chip on" data-m="catvton">Realistic fit</button>
-        <button class="chip" data-m="banana" hidden>Studio ✨</button>
-        <button class="chip" data-m="vibe" hidden>80s Vibe</button>
+        <button class="chip" data-m="banana" hidden>Studio ✨ · beta</button>
+        <button class="chip" data-m="vibe" hidden>80s Vibe · beta</button>
       </div>
       <div class="muted" id="modehint" style="margin:-.2rem 0 .3rem;font-size:.8rem"></div>
     </div>
@@ -119,9 +119,9 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 let T="", S="", RENDER_LIVE=false, VIBE_LIVE=false, BANANA_LIVE=false, MODE="catvton", ALL=[], ALLOWED=[], PHOTO=null, LOOKS=[];
 const MODE_HINT={
-  catvton:"Faithful 2D try-on — the real garment on your photo.",
-  vibe:"AI 80s portrait — stylised you (gets the vibe, not the exact garment).",
-  banana:"AI studio — your face + the real garment, composed together (best quality). ~15–30s."
+  catvton:"Faithful try-on — the real garment on your real photo. Recommended.",
+  vibe:"Beta · AI 80s portrait — stylised you (gets the vibe, not the exact garment).",
+  banana:"Beta · AI studio — your face + the real garment composed together. Needs billing on; ~15–30s."
 };
 const TYPELABEL={upper:"Tops",lower:"Bottoms",overall:"Dresses"};
 
