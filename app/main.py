@@ -212,17 +212,22 @@ def _vibe_prompt(g: dict) -> tuple[str, str]:
     catalog metadata. The garment is described in words (InstantID generates the outfit/scene from
     text while keeping the person's identity) — aspirational, not exact-garment. Tuned to the retro
     studio-portrait trend: warm film look, recognisably the same person."""
-    bits = [g.get("color"), g.get("subsegment"), g.get("name"), g.get("category")]
-    garment = ", ".join(str(b) for b in bits if b) or "a stylish outfit"
+    bits = [g.get("color"), g.get("subsegment") or g.get("category"), g.get("name")]
+    garment = " ".join(str(b) for b in bits if b) or "a stylish outfit"
+    # Identity + garment FIRST, 80s only as a light flavour. The earlier "glamorous fashion
+    # editorial / feathered styling" hijacked the image into a stock fashion model, drowning out
+    # both the person's face (InstantID) and the garment. Keep the subject = this exact person.
     prompt = (
-        f"1980s retro studio portrait photograph of a person wearing {garment}, "
-        "glamorous vintage fashion editorial, warm tungsten studio lighting, soft glow, "
-        "analog film grain, teal and magenta backdrop, feathered 80s styling, "
-        "flattering pose, sharp focus on the face, highly detailed, photorealistic"
+        f"a realistic portrait photo of the same person, clearly recognisable, "
+        f"wearing {garment}, "
+        "1980s retro vibe, warm film lighting, subtle vintage color grade, "
+        "natural skin texture, sharp focus on the face, looking at camera, photorealistic, high detail"
     )
     negative = (
-        "deformed, distorted, disfigured, elongated neck, extra limbs, extra fingers, "
-        "bad anatomy, blurry, low quality, watermark, text, cartoon, 3d render, plastic skin"
+        "watermark, text, logo, signature, istock, getty, shutterstock, stock photo caption, username, "
+        "different person, face swap, deformed face, distorted, disfigured, elongated neck, "
+        "extra limbs, extra fingers, bad anatomy, blurry, low quality, cartoon, 3d render, plastic skin, "
+        "feather boa, costume, over-styled"
     )
     return prompt, negative
 
