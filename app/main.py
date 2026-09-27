@@ -168,6 +168,42 @@ def closet_event(payload: dict = Body(...)):
 
 # --- the share -> rank -> confidence -> referral loop (social-testing experiment) ---
 
+@app.post("/closet/analyze")
+async def closet_analyze(person: UploadFile = File(...)):
+    """'Detect, don't demand': from the user's photo, return which cloth_types are renderable
+    (upper/lower/overall) + an unlock hint. CPU pose only — no GPU, runs before any render."""
+    from app import coverage as coverage_mod
+    import numpy as np, cv2
+    data = await person.read()
+    if not data:
+        raise HTTPException(400, "no image")
+    arr = np.frombuffer(data, np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        raise HTTPException(400, "could not read image")
+    return coverage_mod.analyze_coverage(img)
+
+
+@app.get("/closet/render-check")
+def closet_render_check():
+    """Probe whether Service A can actually reach the Modal render endpoint (diagnostic).
+    Hits Modal's /healthz and reports reachability + latency, without spending a GPU render."""
+    import time
+    import urllib.request
+    url = os.environ.get("KREY_MODAL_RENDER_URL")
+    if not url:
+        return {"configured": False, "reachable": False, "detail": "KREY_MODAL_RENDER_URL not set"}
+    t0 = time.monotonic()
+    try:
+        with urllib.request.urlopen(url.rstrip("/") + "/healthz", timeout=180) as r:
+            body = r.read(200).decode("utf-8", "replace")
+            return {"configured": True, "reachable": True, "status": r.status,
+                    "ms": int((time.monotonic() - t0) * 1000), "body": body}
+    except Exception as e:
+        return {"configured": True, "reachable": False,
+                "ms": int((time.monotonic() - t0) * 1000), "error": f"{type(e).__name__}: {e}"}
+
+
 @app.post("/closet/tryon")
 async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
                        person: UploadFile = File(...)):
@@ -187,8 +223,9 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
     if not person_bytes or not garment_bytes:
         raise HTTPException(400, "missing person or garment image")
     cloth_type = g.get("cloth_type") if g.get("cloth_type") in ("upper", "lower", "overall") else "upper"
-    try:  # the render blocks ~30-60s on the GPU — run off the event loop
-        png = await run_in_threadpool(render_client.render_tryon, person_bytes, garment_bytes, cloth_type)
+    try:  # the render blocks on the GPU (first one cold-starts ~2-3min) — run off the event loop
+        png = await run_in_threadpool(render_client.render_tryon, person_bytes, garment_bytes,
+                                      cloth_type, 600)
     except Exception as e:
         raise HTTPException(502, f"render failed: {e}")
     url = catalog_mod.upload_image(png, content_type="image/png", ext="png")
