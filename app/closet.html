@@ -91,7 +91,8 @@
       <div class="flabel">Render style</div>
       <div class="filters" id="modefilters">
         <button class="chip on" data-m="catvton">Realistic fit</button>
-        <button class="chip" data-m="vibe">80s Vibe ✨</button>
+        <button class="chip" data-m="banana" hidden>Studio ✨</button>
+        <button class="chip" data-m="vibe" hidden>80s Vibe</button>
       </div>
       <div class="muted" id="modehint" style="margin:-.2rem 0 .3rem;font-size:.8rem"></div>
     </div>
@@ -116,8 +117,12 @@
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-let T="", S="", RENDER_LIVE=false, VIBE_LIVE=false, MODE="catvton", ALL=[], ALLOWED=[], PHOTO=null, LOOKS=[];
-const MODE_HINT={catvton:"Faithful 2D try-on — the real garment on your photo.",vibe:"AI-generated retro portrait — recognisably you, styled in the trend (gets the vibe, not the exact garment)."};
+let T="", S="", RENDER_LIVE=false, VIBE_LIVE=false, BANANA_LIVE=false, MODE="catvton", ALL=[], ALLOWED=[], PHOTO=null, LOOKS=[];
+const MODE_HINT={
+  catvton:"Faithful 2D try-on — the real garment on your photo.",
+  vibe:"AI 80s portrait — stylised you (gets the vibe, not the exact garment).",
+  banana:"AI studio — your face + the real garment, composed together (best quality). ~15–30s."
+};
 const TYPELABEL={upper:"Tops",lower:"Bottoms",overall:"Dresses"};
 
 function sid(){ try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s;}catch(e){return "anon";} }
@@ -162,7 +167,7 @@ async function load(){
   const q=[]; if(S)q.push("segment="+encodeURIComponent(S));
   let data={garments:[],segments:[],render_live:false,source:"?"};
   try{ const r=await fetch("/closet/garments"+(q.length?("?"+q.join("&")):"")); data=await r.json(); }catch(e){}
-  RENDER_LIVE=!!data.render_live; VIBE_LIVE=!!data.vibe_live;
+  RENDER_LIVE=!!data.render_live; VIBE_LIVE=!!data.vibe_live; BANANA_LIVE=!!data.banana_live;
   setupModeToggle();
   $("src").textContent = data.source==="supabase" ? "live catalog" : "sample set";
   if($("segfilters").querySelectorAll(".chip").length<=1) buildSegChips(data.segments);
@@ -171,14 +176,18 @@ async function load(){
 }
 function setupModeToggle(){
   const box=$("modebox"); if(!box) return;
-  // only offer the choice when the vibe backend is live; otherwise stay on the realistic path
-  if(!VIBE_LIVE){ box.hidden=true; MODE="catvton"; return; }
+  const live={catvton:true, banana:BANANA_LIVE, vibe:VIBE_LIVE};
+  // only offer the choice when at least one alt engine is live; else stay on the realistic path
+  if(!BANANA_LIVE && !VIBE_LIVE){ box.hidden=true; MODE="catvton"; return; }
   box.hidden=false;
-  $("modehint").textContent=MODE_HINT[MODE]||"";
+  if(!live[MODE]) MODE="catvton";
   box.querySelectorAll(".chip").forEach(c=>{
-    c.classList.toggle("on",(c.dataset.m||"catvton")===MODE);
-    c.onclick=()=>{ MODE=c.dataset.m||"catvton"; setupModeToggle(); };
+    const m=c.dataset.m||"catvton";
+    c.hidden=!live[m];
+    c.classList.toggle("on",m===MODE);
+    c.onclick=()=>{ MODE=m; setupModeToggle(); };
   });
+  $("modehint").textContent=MODE_HINT[MODE]||"";
 }
 function buildSegChips(segs){
   const box=$("segfilters");
@@ -205,7 +214,7 @@ async function onShare(g){
 }
 async function onTry(g){
   logEvent(g,"try");
-  const live = MODE==="vibe" ? VIBE_LIVE : RENDER_LIVE;
+  const live = MODE==="vibe" ? VIBE_LIVE : (MODE==="banana" ? BANANA_LIVE : RENDER_LIVE);
   if(!live){ alert("This render style isn't switched on yet."); return; }
   if(!PHOTO){ alert("Add your photo first."); return; }
   showRender("loading",g);
@@ -214,6 +223,7 @@ async function onTry(g){
   try{
     const r=await fetch("/closet/tryon",{method:"POST",body:fd});
     const j=await r.json();
+    if(j.image_url){ showRender("done",g,j); return; }   // synchronous (Nano Banana) — already done
     job=j.job_id;
     if(!job){ showRender("error",g,{detail:(j.detail||"couldn't start the render")}); return; }
   }
@@ -236,7 +246,9 @@ function showRender(state,g,j){
   let ov=$("renderov");
   if(!ov){ ov=document.createElement("div"); ov.id="renderov"; ov.style.cssText="position:fixed;inset:0;background:#000d;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px"; document.body.appendChild(ov); }
   if(state==="loading"){
-    const line = MODE==="vibe"
+    const line = MODE==="banana"
+      ? "composing your face + the real garment ✨ — about 15–30 seconds."
+      : MODE==="vibe"
       ? "styling your 80s look ✨ — the first one warms the GPU (up to ~3–4 min); after that it's quick. Keep this open."
       : "first render can take ~2–3 min (GPU warming); after that it's quick";
     ov.innerHTML=`<div style="text-align:center;max-width:360px"><div style="font-size:1.1rem;margin-bottom:.6rem">Putting <b>${esc(g.name)}</b> on you… ✨</div><div class="src" style="line-height:1.5">${line}</div><div class="src" id="rtick" style="margin-top:.5rem;opacity:.7"></div></div>`;

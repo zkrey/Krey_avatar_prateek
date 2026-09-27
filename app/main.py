@@ -133,19 +133,25 @@ def closet_garments(cloth_type: Optional[str] = None, segment: Optional[str] = N
     (analytics dimension: intimate/wedding/ethnic/...). `render_live` tells the page whether
     'see it on you' works yet (true only once the Modal render backend is configured)."""
     from app import catalog as catalog_mod
-    render_live = vibe_live = False
+    render_live = vibe_live = banana_live = False
     try:
         from render import client as render_client
         render_live = render_client.render_configured()
         vibe_live = render_client.vibe_configured()
     except Exception:
         pass   # render/ package not on the image yet — never 500 the closet
+    try:
+        from render import banana as banana_mod
+        banana_live = banana_mod.banana_configured()
+    except Exception:
+        pass
     return {
         "garments": catalog_mod.list_garments(cloth_type, segment),
         "source": "supabase" if catalog_mod.catalog_configured() else "sample",
         "segments": list(catalog_mod.SEGMENTS),
         "render_live": render_live,
         "vibe_live": vibe_live,
+        "banana_live": banana_live,
     }
 
 
@@ -233,6 +239,21 @@ def _vibe_prompt(g: dict) -> tuple[str, str]:
     return prompt, negative
 
 
+def _banana_prompt(g: dict) -> str:
+    """Instruction for Nano Banana (Gemini). It receives the person image (1st) and the garment
+    image (2nd), so we ask it to dress the SAME person in the ACTUAL garment shown — real garment,
+    real identity, light 80s flavour."""
+    name = g.get("name") or "the outfit"
+    return (
+        "Using the first image as the person and the second image as the garment, generate a "
+        f"photorealistic image of the SAME person — keep their face and identity exactly — now "
+        f"wearing the garment from the second image ({name}). Fit the garment naturally to their "
+        "body and pose. Give it a subtle 1980s retro-portrait vibe: warm film lighting, gentle "
+        "vintage color grade, clean flattering background. Keep it realistic and tasteful, "
+        "no text or watermarks."
+    )
+
+
 @app.post("/closet/tryon")
 async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
                        person: UploadFile = File(...), mode: str = Form("catvton")):
@@ -248,6 +269,23 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
     person_bytes = await person.read()
     if not person_bytes:
         raise HTTPException(400, "missing person image")
+
+    if mode == "banana":
+        # Nano Banana / Gemini: person + garment images -> one composed image, synchronously
+        # (fast enough to finish inside the request). Returns the finished look directly.
+        from render import banana as banana_mod
+        if not banana_mod.banana_configured():
+            raise HTTPException(503, "nano-banana backend not configured (set GEMINI_API_KEY)")
+        garment_bytes = catalog_mod.fetch_bytes(g.get("image_url"))
+        try:
+            png = await run_in_threadpool(banana_mod.generate, person_bytes, garment_bytes, _banana_prompt(g))
+        except Exception as e:
+            raise HTTPException(502, f"render failed: {e}")
+        url = catalog_mod.upload_image(png, content_type="image/png", ext="png")
+        look_id = catalog_mod.create_look(owner_hint=owner_hint, name=g.get("name"), image_url=url,
+                                          segment=g.get("segment"), subsegment=g.get("subsegment"))
+        return {"look_id": look_id, "image_url": url,
+                "look_url": f"/look/{look_id}" if look_id else None, "mode": "banana", "done": True}
 
     if mode == "vibe":
         if not render_client.vibe_configured():
