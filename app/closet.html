@@ -15,6 +15,12 @@
   .gate{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:1.6rem 1.2rem;text-align:center;margin-top:1rem}
   .gate h2{font-size:1.05rem;margin:.2rem 0 .4rem}
   .gate .muted{color:var(--muted);font-size:.88rem;margin-bottom:1rem;display:block}
+  .tmpl{display:flex;gap:1rem;align-items:center;justify-content:center;flex-wrap:wrap;margin:.4rem 0 1rem}
+  .tmplframe{width:150px;height:200px;flex:0 0 auto}
+  .tmplnote{text-align:left;max-width:320px;font-size:.82rem;line-height:1.5}
+  .tmplnote .ok{color:var(--text)}
+  .tmplnote .no{color:var(--muted);margin-top:.3rem}
+  #gatemsg{font-size:.9rem}
   .btn{border:1px solid var(--gold-dim);background:transparent;color:var(--gold);border-radius:10px;padding:.6rem .9rem;font-size:.9rem;cursor:pointer}
   .btn.primary{background:var(--gold);color:#1a1400;border-color:var(--gold);font-weight:700}
   .me{display:flex;align-items:center;gap:.6rem;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:.5rem .7rem;margin-bottom:.7rem}
@@ -48,7 +54,21 @@
   <!-- photo gate: shown until a photo is added -->
   <div class="gate" id="gate">
     <h2>See it on you 👀</h2>
-    <span class="muted">Add one photo — we'll figure out which fits work on it. A head-to-knees shot unlocks the most.</span>
+    <span class="muted">Match this framing for the best result — head &amp; chest in view, arms down.</span>
+    <div class="tmpl">
+      <div class="tmplframe">
+        <svg viewBox="0 0 300 400" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+          <rect x="6" y="6" width="288" height="388" rx="18" fill="none" stroke="var(--gold-dim)" stroke-width="2" stroke-dasharray="8 7"/>
+          <circle cx="150" cy="96" r="46" fill="none" stroke="var(--gold)" stroke-width="2.5"/>
+          <path d="M64 400 C70 250 104 214 150 214 C196 214 230 250 236 400" fill="none" stroke="var(--gold)" stroke-width="2.5"/>
+          <text x="150" y="392" text-anchor="middle" fill="var(--muted)" font-size="15">fit yourself in the frame</text>
+        </svg>
+      </div>
+      <div class="tmplnote">
+        <div class="ok">✅ Waist-up / chest-up · face-on · arms relaxed · good light</div>
+        <div class="no">🚫 Face close-ups · far-away tiny body · heavy scarves/coats hiding the chest</div>
+      </div>
+    </div>
     <button class="btn primary" id="addphoto">Add your photo</button>
     <div class="muted" id="gatemsg" style="margin-top:.7rem"></div>
   </div>
