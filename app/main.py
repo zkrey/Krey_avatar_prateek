@@ -218,7 +218,8 @@ def _vibe_prompt(g: dict) -> tuple[str, str]:
     # editorial / feathered styling" hijacked the image into a stock fashion model, drowning out
     # both the person's face (InstantID) and the garment. Keep the subject = this exact person.
     prompt = (
-        f"a realistic portrait photo of the same person, clearly recognisable, "
+        f"a realistic upper-body portrait photo of the same person, head and shoulders, "
+        f"face large and centered in frame, clearly recognisable, "
         f"wearing {garment}, "
         "1980s retro vibe, warm film lighting, subtle vintage color grade, "
         "natural skin texture, sharp focus on the face, looking at camera, photorealistic, high detail"

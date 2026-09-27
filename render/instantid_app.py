@@ -124,8 +124,10 @@ class Vibe:                                                          # renders s
 
     @modal.method()
     def generate(self, person_bytes: bytes, prompt: str, negative: str = "",
-                 steps: int = 25, guidance: float = 5.0,   # 25 steps ≈ same look, ~15% faster
-                 id_scale: float = 0.8, adapter_scale: float = 0.8) -> bytes:
+                 steps: int = 25, guidance: float = 5.0,
+                 id_scale: float = 0.8, adapter_scale: float = 1.0) -> bytes:
+        # id_scale = IdentityNet (face keypoints/pose), adapter_scale = face-embedding strength.
+        # adapter_scale 0.8 -> 1.0 holds the face harder (the earlier render lost identity).
         import traceback
         try:
             return self._render(person_bytes, prompt, negative, steps, guidance, id_scale, adapter_scale)
