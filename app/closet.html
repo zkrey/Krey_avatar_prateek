@@ -45,6 +45,14 @@
   .abtn{border:1px solid var(--gold-dim);background:transparent;color:var(--gold);border-radius:8px;padding:.4rem;font-size:.82rem;cursor:pointer;flex:1}
   .abtn.share{color:var(--muted);border-color:var(--line)}
   .empty{color:var(--muted);padding:2rem 0;text-align:center}
+  .tray{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);
+        padding:.7rem 1rem;max-width:760px;margin:0 auto;box-shadow:0 -6px 20px #0007}
+  .traytop{font-size:.85rem;margin-bottom:.4rem}
+  .traythumbs{display:flex;gap:.4rem;overflow-x:auto;margin-bottom:.5rem}
+  .traythumbs .lk{position:relative;flex:0 0 auto}
+  .traythumbs img{width:44px;height:58px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
+  .traythumbs .rm{position:absolute;top:-6px;right:-6px;background:#000b;color:#fff;border-radius:50%;width:18px;height:18px;font-size:.7rem;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  body{padding-bottom:140px}
 </style>
 </head>
 <body>
@@ -88,10 +96,18 @@
     <div id="empty" class="empty" hidden>No garments for this photo yet.</div>
   </div>
 
+  <!-- looks tray: rendered try-ons collect here; rank 2+ of them -->
+  <div id="tray" class="tray" hidden>
+    <div class="traytop"><b>Your looks</b> <span class="muted" id="traycount"></span></div>
+    <div class="traythumbs" id="traythumbs"></div>
+    <button class="btn primary" id="rankbtn" disabled>Ask friends to rank these on me</button>
+    <div class="muted" id="traymsg" style="margin-top:.4rem"></div>
+  </div>
+
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-let T="", S="", RENDER_LIVE=false, ALL=[], ALLOWED=[], PHOTO=null;
+let T="", S="", RENDER_LIVE=false, ALL=[], ALLOWED=[], PHOTO=null, LOOKS=[];
 const TYPELABEL={upper:"Tops",lower:"Bottoms",overall:"Dresses"};
 
 function sid(){ try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s;}catch(e){return "anon";} }
@@ -199,19 +215,56 @@ function showRender(state,g,j){
   if(state==="loading"){
     ov.innerHTML=`<div style="text-align:center"><div style="font-size:1.1rem;margin-bottom:.6rem">Putting <b>${esc(g.name)}</b> on you… ✨</div><div class="src">first render can take ~2–3 min (GPU warming); after that it's quick</div></div>`;
   } else if(state==="done"){
-    const url=location.origin+(j.look_url||"/closet");
+    if(j.look_id) addLook({look_id:j.look_id, image_url:j.image_url, name:g.name});
+    const canRank = LOOKS.length>=2;
     ov.innerHTML=`<div style="text-align:center;max-width:420px;width:100%">
-      <img src="${esc(j.image_url)}" style="max-width:100%;max-height:70vh;border-radius:14px;border:1px solid var(--line)">
-      <div style="display:flex;gap:.5rem;margin-top:.8rem">
-        <button class="btn primary" id="rov_share" style="flex:1">Share this look</button>
-        <button class="btn" id="rov_close" style="flex:1">Done</button></div></div>`;
+      <img src="${esc(j.image_url)}" style="max-width:100%;max-height:64vh;border-radius:14px;border:1px solid var(--line)">
+      <div style="margin:.6rem 0 .2rem;font-weight:600">Added to your looks (${LOOKS.length}) ✓</div>
+      <div class="muted" style="margin-bottom:.6rem">${canRank?"Rank them, or try more first.":"Try one more, then ask friends to rank which suits you best."}</div>
+      <div style="display:flex;gap:.5rem">
+        <button class="btn" id="rov_close" style="flex:1">Try another</button>
+        <button class="btn primary" id="rov_rank" style="flex:1" ${canRank?"":"disabled"}>Rank these on me</button></div>
+      <div class="muted" style="margin-top:.5rem;cursor:pointer;text-decoration:underline" id="rov_share">or share just this one</div></div>`;
+    const url=location.origin+(j.look_url||"/closet");
     $("rov_share").onclick=async()=>{ const text=`Check out this ${g.name} on me — Krey ✨`; try{ if(navigator.share){ await navigator.share({title:"Krey",text,url}); } else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); } }catch(e){} };
+    if($("rov_rank")) $("rov_rank").onclick=()=>{ ov.remove(); makeBallot(); };
     $("rov_close").onclick=()=>ov.remove();
   } else {
     ov.innerHTML=`<div style="text-align:center"><div>Render didn't go through — ${esc((j&&j.detail)||"try again in a moment")}.</div><button class="btn" id="rov_close" style="margin-top:.8rem">Close</button></div>`;
     $("rov_close").onclick=()=>ov.remove();
   }
 }
+
+// --- looks tray -> rank ballot (generative try-ons feed the ranking engine) ---
+function addLook(lk){
+  if(LOOKS.some(x=>x.look_id===lk.look_id)) return;
+  LOOKS.push(lk); renderTray();
+}
+function renderTray(){
+  const tray=$("tray");
+  if(!LOOKS.length){ tray.hidden=true; return; }
+  tray.hidden=false;
+  $("traycount").textContent="· "+LOOKS.length+(LOOKS.length===1?" look":" looks");
+  $("traythumbs").innerHTML=LOOKS.map((l,i)=>`<div class="lk"><img src="${esc(l.image_url)}" alt=""><div class="rm" data-i="${i}">✕</div></div>`).join("");
+  $("traythumbs").querySelectorAll(".rm").forEach(b=>b.onclick=()=>{ LOOKS.splice(+b.dataset.i,1); renderTray(); });
+  const rb=$("rankbtn"); rb.disabled=LOOKS.length<2;
+  $("traymsg").textContent = LOOKS.length<2 ? "Try on one more to rank them." : "";
+}
+async function makeBallot(){
+  if(LOOKS.length<2) return;
+  $("rankbtn").disabled=true; $("traymsg").textContent="Creating your ballot…";
+  try{
+    const r=await fetch("/closet/ballot",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({owner_hint:sid(), look_ids:LOOKS.map(l=>l.look_id)})});
+    const j=await r.json();
+    if(!j.rank_url){ $("traymsg").textContent=(j.detail||"couldn't create the ballot"); $("rankbtn").disabled=false; return; }
+    const url=location.origin+j.rank_url;
+    $("traymsg").innerHTML='Ballot ready — <a href="'+esc(url)+'" style="color:var(--gold)">open</a>';
+    const text="Which of these looks best on me? Tap to pick 👇";
+    try{ if(navigator.share){ await navigator.share({title:"Krey",text,url}); } else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); } }catch(e){}
+  }catch(e){ $("traymsg").textContent="Couldn't create the ballot — try again."; $("rankbtn").disabled=false; }
+}
+$("rankbtn").onclick=makeBallot;
 
 $("addphoto").onclick=()=>pickPhoto(analyze);
 $("changephoto").onclick=()=>pickPhoto(analyze);

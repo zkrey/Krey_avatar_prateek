@@ -250,6 +250,22 @@ async def closet_tryon_result(job_id: str, garment_id: str, owner_hint: str = "a
     return {"look_id": look_id, "image_url": url, "look_url": f"/look/{look_id}" if look_id else None}
 
 
+@app.post("/closet/ballot")
+def closet_ballot(payload: dict = Body(...)):
+    """Bundle 2+ rendered try-on looks into a ballot so friends can rank which garment suits you
+    best. Reuses the rank engine — the generative try-ons become the ballot's looks."""
+    from app import catalog as catalog_mod
+    look_ids = [str(x) for x in (payload.get("look_ids") or []) if x][:5]
+    if len(look_ids) < 2:
+        raise HTTPException(400, "need at least 2 looks to rank")
+    owner = str(payload.get("owner_hint") or "anon")
+    set_id = catalog_mod.create_rank_set(owner_hint=owner, look_ids=look_ids,
+                                         name=payload.get("name"), ref=owner)
+    if not set_id:
+        raise HTTPException(502, "could not create the ballot")
+    return {"set_id": set_id, "rank_url": f"/rank/{set_id}"}
+
+
 @app.get("/look/{look_id}", response_class=HTMLResponse)
 def look_page(look_id: str):
     """Public share page for one rendered look. OG tags (server-filled) make the link unfurl
