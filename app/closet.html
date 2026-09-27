@@ -152,7 +152,12 @@ async function onTry(g){
   showRender("loading",g);
   const fd=new FormData(); fd.append("garment_id",g.garment_id); fd.append("owner_hint",sid()); fd.append("person",PHOTO);
   let job;
-  try{ const r=await fetch("/closet/tryon",{method:"POST",body:fd}); const j=await r.json(); job=j.job_id; if(!job) throw 0; }
+  try{
+    const r=await fetch("/closet/tryon",{method:"POST",body:fd});
+    const j=await r.json();
+    job=j.job_id;
+    if(!job){ showRender("error",g,{detail:(j.detail||"couldn't start the render")}); return; }
+  }
   catch(e){ showRender("error",g,{detail:"couldn't start the render"}); return; }
   // fire-and-poll: short requests until the GPU finishes (~2-3 min first time)
   const q="job_id="+encodeURIComponent(job)+"&garment_id="+encodeURIComponent(g.garment_id)+"&owner_hint="+encodeURIComponent(sid());

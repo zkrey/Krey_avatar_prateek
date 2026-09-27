@@ -33,8 +33,16 @@ def render_spawn(person_bytes: bytes, garment_bytes: bytes, cloth_type: str = "u
     req = urllib.request.Request(base + "/render", data=body, method="POST")
     req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
     req.add_header("X-Krey-Secret", os.environ["KREY_RENDER_SECRET"])
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read().decode())["call_id"]
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            raw = r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:500]
+        raise RuntimeError(f"modal /render {e.code}: {detail}")
+    try:
+        return json.loads(raw)["call_id"]
+    except Exception:
+        raise RuntimeError(f"modal /render bad response: {raw[:500]}")
 
 
 def render_poll(call_id: str, timeout: int = 30) -> bytes | None:
