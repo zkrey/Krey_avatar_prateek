@@ -39,14 +39,35 @@ BASE_MODEL = os.environ.get("KREY_VIBE_BASE", "wangqixun/YamerMIX_v8")  # the In
 INSTANTID_REPO = "InstantX/InstantID"
 
 
+def _prepare_antelopev2():
+    """Download antelopev2 and flatten insightface's double-nested extraction.
+    insightface unzips antelopev2.zip to <root>/models/antelopev2/antelopev2/*.onnx, but then
+    looks for the .onnx files one level up in <root>/models/antelopev2/ — so the first load raises
+    `assert 'detection' in self.models`. We trigger the download, move the files up, then verify."""
+    import glob
+    import shutil
+    from insightface.app import FaceAnalysis
+    try:
+        FaceAnalysis(name="antelopev2", root=INSIGHTFACE_ROOT,
+                     providers=["CPUExecutionProvider"])   # downloads + extracts, then asserts
+    except AssertionError:
+        pass
+    base = os.path.join(INSIGHTFACE_ROOT, "models", "antelopev2")
+    nested = os.path.join(base, "antelopev2")
+    if os.path.isdir(nested):
+        for f in glob.glob(os.path.join(nested, "*")):
+            shutil.move(f, base)
+        shutil.rmtree(nested, ignore_errors=True)
+    FaceAnalysis(name="antelopev2", root=INSIGHTFACE_ROOT,
+                 providers=["CPUExecutionProvider"]).prepare(ctx_id=-1, det_size=(640, 640))
+
+
 def _bake():
     """Download all weights at image BUILD time so runtime containers start without fetching."""
     from huggingface_hub import snapshot_download
     snapshot_download(repo_id=INSTANTID_REPO, allow_patterns=["ControlNetModel/*", "ip-adapter.bin"])
     snapshot_download(repo_id=BASE_MODEL)
-    from insightface.app import FaceAnalysis   # antelopev2 = InstantID's face embedder
-    FaceAnalysis(name="antelopev2", root=INSIGHTFACE_ROOT,
-                 providers=["CPUExecutionProvider"]).prepare(ctx_id=-1, det_size=(640, 640))
+    _prepare_antelopev2()   # antelopev2 = InstantID's face embedder (with the flatten fix)
 
 
 image = (
