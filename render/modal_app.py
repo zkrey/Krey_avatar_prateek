@@ -28,10 +28,10 @@ NOTES
 - Licence: the CatVTON checkpoint is research/non-commercial — fine to validate; swap for (or
   licence) a commercial VTON model before launch.
 """
-from __future__ import annotations
 import io
 import os
 import sys
+from typing import Optional
 
 import modal
 
@@ -209,7 +209,7 @@ def web():
         person: UploadFile = File(...),
         garment: UploadFile = File(...),
         cloth_type: str = Form("upper"),
-        x_krey_secret: str | None = Header(default=None),
+        x_krey_secret: Optional[str] = Header(default=None),
     ):
         _auth(x_krey_secret)
         if cloth_type not in {"upper", "lower", "overall"}:
@@ -218,7 +218,7 @@ def web():
         return {"call_id": fc.object_id}
 
     @api.get("/result")
-    def result_ep(call_id: str, x_krey_secret: str | None = Header(default=None)):
+    def result_ep(call_id: str, x_krey_secret: Optional[str] = Header(default=None)):
         _auth(x_krey_secret)
         fc = _modal.FunctionCall.from_id(call_id)
         try:
