@@ -93,6 +93,8 @@ app = modal.App("krey-vibe")
 class Vibe:                                                          # renders skip the ~90s model load
     @modal.enter()
     def load(self):
+        # reduce CUDA fragmentation (the OOM traceback recommended this)
+        os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
         sys.path.insert(0, REPO_DIR)
         import cv2
         import numpy as np
@@ -113,13 +115,26 @@ class Vibe:                                                          # renders s
         base = snapshot_download(BASE_MODEL)
         self.pipe = StableDiffusionXLInstantIDPipeline.from_pretrained(
             base, controlnet=controlnet, torch_dtype=torch.float16)
-        self.pipe.cuda()
         self.pipe.load_ip_adapter_instantid(os.path.join(id_dir, "ip-adapter.bin"))
+        # VRAM: SDXL + ControlNet + IP-Adapter all-resident OOMs an L4 (24GB) at 1024².
+        # model_cpu_offload streams each submodule to GPU only while it runs (peak ~8-10GB),
+        # and VAE tiling caps the decode. Do NOT also call .cuda() — offload owns placement.
+        self.pipe.enable_model_cpu_offload()
+        self.pipe.enable_vae_tiling()
 
     @modal.method()
     def generate(self, person_bytes: bytes, prompt: str, negative: str = "",
                  steps: int = 25, guidance: float = 5.0,   # 25 steps ≈ same look, ~15% faster
                  id_scale: float = 0.8, adapter_scale: float = 0.8) -> bytes:
+        import traceback
+        try:
+            return self._render(person_bytes, prompt, negative, steps, guidance, id_scale, adapter_scale)
+        except Exception as e:
+            # Re-raise as a plain string so the light (torch-less) web container can deserialize it
+            # and show the REAL error, instead of "could not deserialize remote exception".
+            raise RuntimeError(f"{type(e).__name__}: {e}\n{traceback.format_exc()[-1200:]}") from None
+
+    def _render(self, person_bytes, prompt, negative, steps, guidance, id_scale, adapter_scale) -> bytes:
         from PIL import Image
         img = Image.open(io.BytesIO(person_bytes)).convert("RGB")
         bgr = self.cv2.cvtColor(self.np.array(img), self.cv2.COLOR_RGB2BGR)
@@ -134,6 +149,7 @@ class Vibe:                                                          # renders s
             image_embeds=face_emb, image=face_kps,
             controlnet_conditioning_scale=float(id_scale), ip_adapter_scale=float(adapter_scale),
             num_inference_steps=int(steps), guidance_scale=float(guidance),
+            width=768, height=1024,   # portrait 3:4 — less activation memory than 1024² + fits the person
         ).images[0]
         buf = io.BytesIO()
         out.save(buf, format="PNG")
