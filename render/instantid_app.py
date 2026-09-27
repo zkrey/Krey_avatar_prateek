@@ -89,8 +89,8 @@ web_image = modal.Image.debian_slim(python_version="3.11").pip_install("fastapi[
 app = modal.App("krey-vibe")
 
 
-@app.cls(gpu=GPU, image=image, timeout=600, scaledown_window=120)
-class Vibe:
+@app.cls(gpu=GPU, image=image, timeout=600, scaledown_window=300)  # stay warm 5 min → back-to-back
+class Vibe:                                                          # renders skip the ~90s model load
     @modal.enter()
     def load(self):
         sys.path.insert(0, REPO_DIR)
@@ -118,7 +118,7 @@ class Vibe:
 
     @modal.method()
     def generate(self, person_bytes: bytes, prompt: str, negative: str = "",
-                 steps: int = 30, guidance: float = 5.0,
+                 steps: int = 25, guidance: float = 5.0,   # 25 steps ≈ same look, ~15% faster
                  id_scale: float = 0.8, adapter_scale: float = 0.8) -> bytes:
         from PIL import Image
         img = Image.open(io.BytesIO(person_bytes)).convert("RGB")

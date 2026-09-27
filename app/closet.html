@@ -220,7 +220,7 @@ async function onTry(g){
   catch(e){ showRender("error",g,{detail:"couldn't start the render"}); return; }
   // fire-and-poll: short requests until the GPU finishes (~2-3 min first time)
   const q="job_id="+encodeURIComponent(job)+"&garment_id="+encodeURIComponent(g.garment_id)+"&owner_hint="+encodeURIComponent(sid())+"&mode="+encodeURIComponent(MODE);
-  for(let i=0;i<75;i++){          // ~5 min max (75 x 4s)
+  for(let i=0;i<120;i++){          // ~8 min max (120 x 4s) — vibe cold-start can be slow
     await new Promise(r=>setTimeout(r,4000));
     try{
       const r=await fetch("/closet/tryon/result?"+q);
@@ -236,8 +236,14 @@ function showRender(state,g,j){
   let ov=$("renderov");
   if(!ov){ ov=document.createElement("div"); ov.id="renderov"; ov.style.cssText="position:fixed;inset:0;background:#000d;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px"; document.body.appendChild(ov); }
   if(state==="loading"){
-    ov.innerHTML=`<div style="text-align:center"><div style="font-size:1.1rem;margin-bottom:.6rem">Putting <b>${esc(g.name)}</b> on you… ✨</div><div class="src">first render can take ~2–3 min (GPU warming); after that it's quick</div></div>`;
+    const line = MODE==="vibe"
+      ? "styling your 80s look ✨ — the first one warms the GPU (up to ~3–4 min); after that it's quick. Keep this open."
+      : "first render can take ~2–3 min (GPU warming); after that it's quick";
+    ov.innerHTML=`<div style="text-align:center;max-width:360px"><div style="font-size:1.1rem;margin-bottom:.6rem">Putting <b>${esc(g.name)}</b> on you… ✨</div><div class="src" style="line-height:1.5">${line}</div><div class="src" id="rtick" style="margin-top:.5rem;opacity:.7"></div></div>`;
+    let t0=Date.now(); clearInterval(window.__rtick);
+    window.__rtick=setInterval(()=>{const el=$("rtick"); if(el) el.textContent=Math.round((Date.now()-t0)/1000)+"s…";},1000);
   } else if(state==="done"){
+    clearInterval(window.__rtick);
     if(j.look_id) addLook({look_id:j.look_id, image_url:j.image_url, name:g.name});
     const canRank = LOOKS.length>=2;
     ov.innerHTML=`<div style="text-align:center;max-width:420px;width:100%">
@@ -253,6 +259,7 @@ function showRender(state,g,j){
     if($("rov_rank")) $("rov_rank").onclick=()=>{ ov.remove(); makeBallot(); };
     $("rov_close").onclick=()=>ov.remove();
   } else {
+    clearInterval(window.__rtick);
     ov.innerHTML=`<div style="text-align:center"><div>Render didn't go through — ${esc((j&&j.detail)||"try again in a moment")}.</div><button class="btn" id="rov_close" style="margin-top:.8rem">Close</button></div>`;
     $("rov_close").onclick=()=>ov.remove();
   }

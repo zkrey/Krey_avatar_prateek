@@ -8,6 +8,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -90,6 +91,10 @@ def vibe_poll(call_id: str, timeout: int = 30) -> bytes | None:
 
 
 def _poll(base_url: str, call_id: str, timeout: int) -> bytes | None:
+    """One poll. Returns PNG when ready, None while still rendering. A transient network blip
+    (read timeout, dropped connection, cold web container) is treated as 'still pending' — NOT a
+    failure — so a single slow poll never kills a render that's genuinely still running. Only a
+    real server-side render error (HTTP 5xx with a body) raises."""
     base = base_url.rstrip("/")
     url = base + "/result?call_id=" + urllib.parse.quote(str(call_id))
     req = urllib.request.Request(url)
@@ -101,8 +106,16 @@ def _poll(base_url: str, call_id: str, timeout: int) -> bytes | None:
             return r.read()
     except urllib.error.HTTPError as e:
         if e.code == 202:
-            return None
+            return None            # still rendering
+        if e.code == 502:
+            # the Modal web endpoint surfaces a genuine render/GPU error as 502 + detail
+            detail = e.read().decode("utf-8", "replace")[:300]
+            raise RuntimeError(f"render failed: {detail}")
+        if e.code in (500, 503, 504):
+            return None            # gateway/infra blip during cold start — keep polling
         raise
+    except (TimeoutError, socket.timeout, urllib.error.URLError, ConnectionError):
+        return None                # transient — keep polling, don't fail the render
 
 
 def render_tryon(person_bytes: bytes, garment_bytes: bytes, cloth_type: str = "upper",
