@@ -239,6 +239,31 @@ def _vibe_prompt(g: dict) -> tuple[str, str]:
     return prompt, negative
 
 
+def _skin_tone_clause(person_bytes: bytes) -> str:
+    """Measure the person's skin tone (Monk scale + RGB) from their photo and return a prompt
+    clause so the generative render synthesizes any NEWLY-EXPOSED skin (sleeveless/short garments)
+    to match — instead of guessing. Reuses the existing skin_tone + monk pipeline. Degrades to ""
+    on any failure (no face, deps missing) so it never blocks a render."""
+    try:
+        import cv2
+        import numpy as np
+        from app import monk, skin_tone
+        bgr = cv2.imdecode(np.frombuffer(person_bytes, np.uint8), cv2.IMREAD_COLOR)
+        if bgr is None:
+            return ""
+        res = skin_tone.extract_skin_samples(bgr)
+        if not res.get("ok"):
+            return ""
+        rec = monk.classify(res["samples"])
+        r, g, b = rec["rgb"]
+        monkv = rec.get("monk_continuous") or rec.get("value")
+        return (f" Keep the person's natural skin tone consistent on ALL skin, including any newly "
+                f"exposed areas (arms, legs, midriff): approximately Monk scale {monkv}, "
+                f"average RGB ({r},{g},{b}). Do not lighten, darken, or change their complexion.")
+    except Exception:
+        return ""
+
+
 def _banana_prompt(g: dict) -> str:
     """Instruction for Nano Banana (Gemini). It receives the person image (1st) and the garment
     image (2nd), so we ask it to dress the SAME person in the ACTUAL garment shown — real garment,
@@ -277,8 +302,9 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
         if not banana_mod.banana_configured():
             raise HTTPException(503, "nano-banana backend not configured (set GEMINI_API_KEY)")
         garment_bytes = catalog_mod.fetch_bytes(g.get("image_url"))
+        prompt = _banana_prompt(g) + await run_in_threadpool(_skin_tone_clause, person_bytes)
         try:
-            png = await run_in_threadpool(banana_mod.generate, person_bytes, garment_bytes, _banana_prompt(g))
+            png = await run_in_threadpool(banana_mod.generate, person_bytes, garment_bytes, prompt)
         except Exception as e:
             raise HTTPException(502, f"render failed: {e}")
         url = catalog_mod.upload_image(png, content_type="image/png", ext="png")
@@ -291,6 +317,7 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
         if not render_client.vibe_configured():
             raise HTTPException(503, "vibe render backend not live yet")
         prompt, negative = _vibe_prompt(g)
+        prompt += await run_in_threadpool(_skin_tone_clause, person_bytes)
         try:
             call_id = await run_in_threadpool(render_client.vibe_spawn, person_bytes, prompt, negative)
         except Exception as e:
