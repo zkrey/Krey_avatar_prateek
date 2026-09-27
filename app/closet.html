@@ -87,6 +87,15 @@
       <button class="btn" id="changephoto">Change</button></div>
     <div class="unlock" id="unlock" hidden><div class="u" id="unlockmsg"></div><button class="btn" id="unlockbtn">Add full-body</button></div>
 
+    <div id="modebox" hidden>
+      <div class="flabel">Render style</div>
+      <div class="filters" id="modefilters">
+        <button class="chip on" data-m="catvton">Realistic fit</button>
+        <button class="chip" data-m="vibe">80s Vibe ✨</button>
+      </div>
+      <div class="muted" id="modehint" style="margin:-.2rem 0 .3rem;font-size:.8rem"></div>
+    </div>
+
     <div class="flabel">Type</div>
     <div class="filters" id="typefilters"></div>
     <div class="flabel">Occasion</div>
@@ -107,7 +116,8 @@
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-let T="", S="", RENDER_LIVE=false, ALL=[], ALLOWED=[], PHOTO=null, LOOKS=[];
+let T="", S="", RENDER_LIVE=false, VIBE_LIVE=false, MODE="catvton", ALL=[], ALLOWED=[], PHOTO=null, LOOKS=[];
+const MODE_HINT={catvton:"Faithful 2D try-on — the real garment on your photo.",vibe:"AI-generated retro portrait — recognisably you, styled in the trend (gets the vibe, not the exact garment)."};
 const TYPELABEL={upper:"Tops",lower:"Bottoms",overall:"Dresses"};
 
 function sid(){ try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s;}catch(e){return "anon";} }
@@ -152,11 +162,23 @@ async function load(){
   const q=[]; if(S)q.push("segment="+encodeURIComponent(S));
   let data={garments:[],segments:[],render_live:false,source:"?"};
   try{ const r=await fetch("/closet/garments"+(q.length?("?"+q.join("&")):"")); data=await r.json(); }catch(e){}
-  RENDER_LIVE=!!data.render_live;
+  RENDER_LIVE=!!data.render_live; VIBE_LIVE=!!data.vibe_live;
+  setupModeToggle();
   $("src").textContent = data.source==="supabase" ? "live catalog" : "sample set";
   if($("segfilters").querySelectorAll(".chip").length<=1) buildSegChips(data.segments);
   ALL = (data.garments||[]).filter(g=>ALLOWED.includes(g.cloth_type));
   render();
+}
+function setupModeToggle(){
+  const box=$("modebox"); if(!box) return;
+  // only offer the choice when the vibe backend is live; otherwise stay on the realistic path
+  if(!VIBE_LIVE){ box.hidden=true; MODE="catvton"; return; }
+  box.hidden=false;
+  $("modehint").textContent=MODE_HINT[MODE]||"";
+  box.querySelectorAll(".chip").forEach(c=>{
+    c.classList.toggle("on",(c.dataset.m||"catvton")===MODE);
+    c.onclick=()=>{ MODE=c.dataset.m||"catvton"; setupModeToggle(); };
+  });
 }
 function buildSegChips(segs){
   const box=$("segfilters");
@@ -183,10 +205,11 @@ async function onShare(g){
 }
 async function onTry(g){
   logEvent(g,"try");
-  if(!RENDER_LIVE){ alert("Try-on render isn't switched on yet."); return; }
+  const live = MODE==="vibe" ? VIBE_LIVE : RENDER_LIVE;
+  if(!live){ alert("This render style isn't switched on yet."); return; }
   if(!PHOTO){ alert("Add your photo first."); return; }
   showRender("loading",g);
-  const fd=new FormData(); fd.append("garment_id",g.garment_id); fd.append("owner_hint",sid()); fd.append("person",PHOTO);
+  const fd=new FormData(); fd.append("garment_id",g.garment_id); fd.append("owner_hint",sid()); fd.append("person",PHOTO); fd.append("mode",MODE);
   let job;
   try{
     const r=await fetch("/closet/tryon",{method:"POST",body:fd});
@@ -196,7 +219,7 @@ async function onTry(g){
   }
   catch(e){ showRender("error",g,{detail:"couldn't start the render"}); return; }
   // fire-and-poll: short requests until the GPU finishes (~2-3 min first time)
-  const q="job_id="+encodeURIComponent(job)+"&garment_id="+encodeURIComponent(g.garment_id)+"&owner_hint="+encodeURIComponent(sid());
+  const q="job_id="+encodeURIComponent(job)+"&garment_id="+encodeURIComponent(g.garment_id)+"&owner_hint="+encodeURIComponent(sid())+"&mode="+encodeURIComponent(MODE);
   for(let i=0;i<75;i++){          // ~5 min max (75 x 4s)
     await new Promise(r=>setTimeout(r,4000));
     try{

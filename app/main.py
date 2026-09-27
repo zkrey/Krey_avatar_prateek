@@ -133,16 +133,19 @@ def closet_garments(cloth_type: Optional[str] = None, segment: Optional[str] = N
     (analytics dimension: intimate/wedding/ethnic/...). `render_live` tells the page whether
     'see it on you' works yet (true only once the Modal render backend is configured)."""
     from app import catalog as catalog_mod
+    render_live = vibe_live = False
     try:
         from render import client as render_client
         render_live = render_client.render_configured()
+        vibe_live = render_client.vibe_configured()
     except Exception:
-        render_live = False   # render/ package not on the image yet — never 500 the closet
+        pass   # render/ package not on the image yet — never 500 the closet
     return {
         "garments": catalog_mod.list_garments(cloth_type, segment),
         "source": "supabase" if catalog_mod.catalog_configured() else "sample",
         "segments": list(catalog_mod.SEGMENTS),
         "render_live": render_live,
+        "vibe_live": vibe_live,
     }
 
 
@@ -204,41 +207,76 @@ def closet_render_check():
                 "ms": int((time.monotonic() - t0) * 1000), "error": f"{type(e).__name__}: {e}"}
 
 
+def _vibe_prompt(g: dict) -> tuple[str, str]:
+    """Build an (prompt, negative) pair for the SDXL+InstantID "80s vibe" render from a garment's
+    catalog metadata. The garment is described in words (InstantID generates the outfit/scene from
+    text while keeping the person's identity) — aspirational, not exact-garment. Tuned to the retro
+    studio-portrait trend: warm film look, recognisably the same person."""
+    bits = [g.get("color"), g.get("subsegment"), g.get("name"), g.get("category")]
+    garment = ", ".join(str(b) for b in bits if b) or "a stylish outfit"
+    prompt = (
+        f"1980s retro studio portrait photograph of a person wearing {garment}, "
+        "glamorous vintage fashion editorial, warm tungsten studio lighting, soft glow, "
+        "analog film grain, teal and magenta backdrop, feathered 80s styling, "
+        "flattering pose, sharp focus on the face, highly detailed, photorealistic"
+    )
+    negative = (
+        "deformed, distorted, disfigured, elongated neck, extra limbs, extra fingers, "
+        "bad anatomy, blurry, low quality, watermark, text, cartoon, 3d render, plastic skin"
+    )
+    return prompt, negative
+
+
 @app.post("/closet/tryon")
 async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
-                       person: UploadFile = File(...)):
+                       person: UploadFile = File(...), mode: str = Form("catvton")):
     """Fire-and-poll try-on: SPAWN the render on Modal and return a job_id immediately (the request
-    stays short — no Railway 5-min timeout). The client then polls /closet/tryon/result. The heavy
-    canRender path lives on /render for the production flow."""
+    stays short — no Railway 5-min timeout). The client then polls /closet/tryon/result.
+    mode: 'catvton' (faithful-garment 2D try-on) or 'vibe' (SDXL+InstantID aspirational 80s render)."""
     from app import catalog as catalog_mod
     from render import client as render_client
     from starlette.concurrency import run_in_threadpool
-    if not render_client.render_configured():
-        raise HTTPException(503, "render backend not live yet")
     g = catalog_mod.get_garment(garment_id)
     if not g:
         raise HTTPException(404, "garment not found")
     person_bytes = await person.read()
+    if not person_bytes:
+        raise HTTPException(400, "missing person image")
+
+    if mode == "vibe":
+        if not render_client.vibe_configured():
+            raise HTTPException(503, "vibe render backend not live yet")
+        prompt, negative = _vibe_prompt(g)
+        try:
+            call_id = await run_in_threadpool(render_client.vibe_spawn, person_bytes, prompt, negative)
+        except Exception as e:
+            raise HTTPException(502, f"could not start render: {e}")
+        return {"job_id": call_id, "mode": "vibe"}
+
+    if not render_client.render_configured():
+        raise HTTPException(503, "render backend not live yet")
     garment_bytes = catalog_mod.fetch_bytes(g.get("image_url"))
-    if not person_bytes or not garment_bytes:
-        raise HTTPException(400, "missing person or garment image")
+    if not garment_bytes:
+        raise HTTPException(400, "missing garment image")
     cloth_type = g.get("cloth_type") if g.get("cloth_type") in ("upper", "lower", "overall") else "upper"
     try:
         call_id = await run_in_threadpool(render_client.render_spawn, person_bytes, garment_bytes, cloth_type)
     except Exception as e:
         raise HTTPException(502, f"could not start render: {e}")
-    return {"job_id": call_id}
+    return {"job_id": call_id, "mode": "catvton"}
 
 
 @app.get("/closet/tryon/result")
-async def closet_tryon_result(job_id: str, garment_id: str, owner_hint: str = "anon"):
+async def closet_tryon_result(job_id: str, garment_id: str, owner_hint: str = "anon",
+                              mode: str = "catvton"):
     """Poll a spawned render. 202 {status:pending} while the GPU works; when ready, store the PNG
     as a shareable look and return its url. Each call is short → survives Railway/Modal timeouts."""
     from app import catalog as catalog_mod
     from render import client as render_client
     from starlette.concurrency import run_in_threadpool
+    poll = render_client.vibe_poll if mode == "vibe" else render_client.render_poll
     try:
-        png = await run_in_threadpool(render_client.render_poll, job_id)
+        png = await run_in_threadpool(poll, job_id)
     except Exception as e:
         raise HTTPException(502, f"render failed: {e}")
     if png is None:

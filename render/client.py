@@ -47,7 +47,50 @@ def render_spawn(person_bytes: bytes, garment_bytes: bytes, cloth_type: str = "u
 
 def render_poll(call_id: str, timeout: int = 30) -> bytes | None:
     """Poll a spawned render. Returns PNG bytes when ready, or None if still pending (HTTP 202)."""
-    base = os.environ["KREY_MODAL_RENDER_URL"].rstrip("/")
+    return _poll(os.environ["KREY_MODAL_RENDER_URL"], call_id, timeout)
+
+
+# ---------------------------------------------------------------------------
+# "Vibe" render (SDXL + InstantID, render/instantid_app.py). Same fire-and-poll contract, but the
+# GPU job takes a person photo + a text PROMPT (identity is kept, outfit/scene are generated) — the
+# aspirational / trend-style path we A/B against CatVTON. Selected per-request via mode="vibe".
+# ---------------------------------------------------------------------------
+def vibe_configured() -> bool:
+    """True only when the Vibe (InstantID) URL and the shared secret are set."""
+    return bool(os.environ.get("KREY_VIBE_RENDER_URL") and os.environ.get("KREY_RENDER_SECRET"))
+
+
+def vibe_spawn(person_bytes: bytes, prompt: str, negative: str = "", timeout: int = 60) -> str:
+    """SPAWN an InstantID render. Returns a call_id immediately (fire-and-poll)."""
+    base = os.environ["KREY_VIBE_RENDER_URL"].rstrip("/")
+    boundary = uuid.uuid4().hex
+    body = _multipart(
+        boundary,
+        fields={"prompt": prompt, "negative": negative},
+        files={"person": ("person.jpg", person_bytes)},
+    )
+    req = urllib.request.Request(base + "/render", data=body, method="POST")
+    req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+    req.add_header("X-Krey-Secret", os.environ["KREY_RENDER_SECRET"])
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            raw = r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:500]
+        raise RuntimeError(f"modal vibe /render {e.code}: {detail}")
+    try:
+        return json.loads(raw)["call_id"]
+    except Exception:
+        raise RuntimeError(f"modal vibe /render bad response: {raw[:500]}")
+
+
+def vibe_poll(call_id: str, timeout: int = 30) -> bytes | None:
+    """Poll a spawned Vibe render. PNG bytes when ready, or None if still pending (HTTP 202)."""
+    return _poll(os.environ["KREY_VIBE_RENDER_URL"], call_id, timeout)
+
+
+def _poll(base_url: str, call_id: str, timeout: int) -> bytes | None:
+    base = base_url.rstrip("/")
     url = base + "/result?call_id=" + urllib.parse.quote(str(call_id))
     req = urllib.request.Request(url)
     req.add_header("X-Krey-Secret", os.environ["KREY_RENDER_SECRET"])
