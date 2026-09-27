@@ -153,7 +153,11 @@ class Renderer:
         garment-mask pixels back into the full original, so face/hands/background stay real."""
         from PIL import Image
         orig = Image.open(io.BytesIO(person_bytes)).convert("RGB")
-        box = self._smart_crop_box(orig) if auto_crop else None
+        # Cloth-type-aware crop: a top only needs the torso (tight crop = better face/detail),
+        # but a full set or bottoms need the LEGS in frame or the lower garment has nowhere to go
+        # (mangled salwar/skirt). Smaller face_frac => taller crop that reaches the legs.
+        face_frac = 0.20 if cloth_type == "upper" else 0.11
+        box = self._smart_crop_box(orig, face_frac=face_frac) if auto_crop else None
         src = orig.crop((box[0], box[1], box[0] + box[2], box[1] + box[3])) if box else orig
         person = self._crop(src, (self.W, self.H))
         cloth = self._pad(Image.open(io.BytesIO(garment_bytes)).convert("RGB"), (self.W, self.H))
