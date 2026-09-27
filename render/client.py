@@ -6,7 +6,10 @@ until the Modal endpoint is deployed and the vars are set.
 """
 from __future__ import annotations
 import io
+import json
 import os
+import urllib.error
+import urllib.parse
 import urllib.request
 import uuid
 
@@ -16,10 +19,10 @@ def render_configured() -> bool:
     return bool(os.environ.get("KREY_MODAL_RENDER_URL") and os.environ.get("KREY_RENDER_SECRET"))
 
 
-def render_tryon(person_bytes: bytes, garment_bytes: bytes, cloth_type: str = "upper",
-                 timeout: int = 300) -> bytes:
-    """POST person+garment to the Modal render endpoint; return the PNG bytes.
-    Raises urllib.error.HTTPError/URLError on failure (caller decides how to surface it)."""
+def render_spawn(person_bytes: bytes, garment_bytes: bytes, cloth_type: str = "upper",
+                 timeout: int = 60) -> str:
+    """SPAWN a render on Modal (fire-and-poll). Returns a call_id immediately — the GPU job runs
+    async, so no long-held HTTP connection (dodges Railway's 5-min no-data timeout)."""
     base = os.environ["KREY_MODAL_RENDER_URL"].rstrip("/")
     boundary = uuid.uuid4().hex
     body = _multipart(
@@ -31,7 +34,39 @@ def render_tryon(person_bytes: bytes, garment_bytes: bytes, cloth_type: str = "u
     req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
     req.add_header("X-Krey-Secret", os.environ["KREY_RENDER_SECRET"])
     with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read()
+        return json.loads(r.read().decode())["call_id"]
+
+
+def render_poll(call_id: str, timeout: int = 30) -> bytes | None:
+    """Poll a spawned render. Returns PNG bytes when ready, or None if still pending (HTTP 202)."""
+    base = os.environ["KREY_MODAL_RENDER_URL"].rstrip("/")
+    url = base + "/result?call_id=" + urllib.parse.quote(str(call_id))
+    req = urllib.request.Request(url)
+    req.add_header("X-Krey-Secret", os.environ["KREY_RENDER_SECRET"])
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            if r.status == 202:
+                return None
+            return r.read()
+    except urllib.error.HTTPError as e:
+        if e.code == 202:
+            return None
+        raise
+
+
+def render_tryon(person_bytes: bytes, garment_bytes: bytes, cloth_type: str = "upper",
+                 timeout: int = 300) -> bytes:
+    """Synchronous convenience: spawn then block-poll until ready. Kept for callers that want a
+    single blocking call; the /closet flow uses spawn+poll directly so requests stay short."""
+    import time
+    call_id = render_spawn(person_bytes, garment_bytes, cloth_type)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        png = render_poll(call_id)
+        if png is not None:
+            return png
+        time.sleep(3)
+    raise TimeoutError("render did not complete in time")
 
 
 def _multipart(boundary: str, fields: dict, files: dict) -> bytes:

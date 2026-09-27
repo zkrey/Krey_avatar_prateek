@@ -207,9 +207,9 @@ def closet_render_check():
 @app.post("/closet/tryon")
 async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
                        person: UploadFile = File(...)):
-    """Render a catalog garment onto the user's photo (Modal GPU) and store the result as a
-    shareable look — so try-on feeds straight into the share/rank loop. Lightweight (no account
-    gate); the heavy canRender path lives on /render for the production flow."""
+    """Fire-and-poll try-on: SPAWN the render on Modal and return a job_id immediately (the request
+    stays short — no Railway 5-min timeout). The client then polls /closet/tryon/result. The heavy
+    canRender path lives on /render for the production flow."""
     from app import catalog as catalog_mod
     from render import client as render_client
     from starlette.concurrency import run_in_threadpool
@@ -223,11 +223,27 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
     if not person_bytes or not garment_bytes:
         raise HTTPException(400, "missing person or garment image")
     cloth_type = g.get("cloth_type") if g.get("cloth_type") in ("upper", "lower", "overall") else "upper"
-    try:  # the render blocks on the GPU (first one cold-starts ~2-3min) — run off the event loop
-        png = await run_in_threadpool(render_client.render_tryon, person_bytes, garment_bytes,
-                                      cloth_type, 600)
+    try:
+        call_id = await run_in_threadpool(render_client.render_spawn, person_bytes, garment_bytes, cloth_type)
+    except Exception as e:
+        raise HTTPException(502, f"could not start render: {e}")
+    return {"job_id": call_id}
+
+
+@app.get("/closet/tryon/result")
+async def closet_tryon_result(job_id: str, garment_id: str, owner_hint: str = "anon"):
+    """Poll a spawned render. 202 {status:pending} while the GPU works; when ready, store the PNG
+    as a shareable look and return its url. Each call is short → survives Railway/Modal timeouts."""
+    from app import catalog as catalog_mod
+    from render import client as render_client
+    from starlette.concurrency import run_in_threadpool
+    try:
+        png = await run_in_threadpool(render_client.render_poll, job_id)
     except Exception as e:
         raise HTTPException(502, f"render failed: {e}")
+    if png is None:
+        return Response(status_code=202, content='{"status":"pending"}', media_type="application/json")
+    g = catalog_mod.get_garment(garment_id) or {}
     url = catalog_mod.upload_image(png, content_type="image/png", ext="png")
     look_id = catalog_mod.create_look(owner_hint=owner_hint, name=g.get("name"), image_url=url,
                                       segment=g.get("segment"), subsegment=g.get("subsegment"))

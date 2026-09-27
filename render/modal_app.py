@@ -72,6 +72,10 @@ image = (
     .run_function(_bake_weights)
 )
 
+# The web front door doesn't need torch/CatVTON — keep it a LIGHT image so it cold-starts in
+# seconds (the heavy `image` is only for the GPU Renderer). This is what makes /healthz fast.
+web_image = modal.Image.debian_slim(python_version="3.11").pip_install("fastapi[standard]")
+
 app = modal.App("krey-render")
 
 
@@ -178,17 +182,23 @@ class Renderer:
         return buf.getvalue()
 
 
-@app.function(image=image, secrets=[modal.Secret.from_name("krey-render")])
+@app.function(image=web_image, secrets=[modal.Secret.from_name("krey-render")])
 @modal.asgi_app()
 def web():
-    """Authed HTTP front door: Service A POSTs person+garment, gets a PNG back.
-    The canRender eligibility + token hold live on Service A (see render/README.md); this
-    endpoint only checks a shared secret so nothing but Service A can spend GPU here."""
+    """Authed HTTP front door (light image → fast cold start). FIRE-AND-POLL: POST /render SPAWNS
+    the GPU job and returns a call_id immediately (no long-held connection, so Railway's 5-min
+    no-data timeout never trips); GET /result?call_id=… returns the PNG once ready, else 202.
+    Shared-secret auth so only Service A can spend GPU here."""
+    import modal as _modal
     from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
-    from fastapi.responses import Response
+    from fastapi.responses import JSONResponse, Response
 
     api = FastAPI()
     secret = os.environ["KREY_RENDER_SECRET"]
+
+    def _auth(x):
+        if not x or x != secret:
+            raise HTTPException(status_code=401, detail="bad or missing render secret")
 
     @api.get("/healthz")
     def healthz():
@@ -201,11 +211,22 @@ def web():
         cloth_type: str = Form("upper"),
         x_krey_secret: str | None = Header(default=None),
     ):
-        if not x_krey_secret or x_krey_secret != secret:
-            raise HTTPException(status_code=401, detail="bad or missing render secret")
+        _auth(x_krey_secret)
         if cloth_type not in {"upper", "lower", "overall"}:
             raise HTTPException(status_code=400, detail="cloth_type must be upper|lower|overall")
-        png = Renderer().tryon.remote(await person.read(), await garment.read(), cloth_type)
+        fc = Renderer().tryon.spawn(await person.read(), await garment.read(), cloth_type)
+        return {"call_id": fc.object_id}
+
+    @api.get("/result")
+    def result_ep(call_id: str, x_krey_secret: str | None = Header(default=None)):
+        _auth(x_krey_secret)
+        fc = _modal.FunctionCall.from_id(call_id)
+        try:
+            png = fc.get(timeout=0)              # non-blocking peek
+        except TimeoutError:
+            return JSONResponse({"status": "pending"}, status_code=202)
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"render failed: {e}")
         return Response(content=png, media_type="image/png")
 
     return api
