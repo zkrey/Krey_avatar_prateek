@@ -301,7 +301,11 @@ async function makeBallot(){
     const j=await r.json();
     if(!j.rank_url){ $("traymsg").textContent=(j.detail||"couldn't create the ballot"); $("rankbtn").disabled=false; return; }
     const url=location.origin+j.rank_url;
-    $("traymsg").innerHTML='Ballot ready — <a href="'+esc(url)+'" style="color:var(--gold)">open</a>';
+    const results=location.origin+"/results/"+encodeURIComponent(j.set_id||"");
+    // owner gets BOTH: the link to SHARE (friends vote) and the link to SEE results come in
+    $("traymsg").innerHTML='Ballot ready — <a href="'+esc(url)+'" style="color:var(--gold)">share to get votes</a>'
+      + ' · <a href="'+esc(results)+'" style="color:var(--gold)">see results</a>';
+    try{ localStorage.setItem("krey_last_results", results); }catch(e){}
     const text="Which of these looks best on me? Tap to pick 👇";
     try{ if(navigator.share){ await navigator.share({title:"Krey",text,url}); } else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); } }catch(e){}
   }catch(e){ $("traymsg").textContent="Couldn't create the ballot — try again."; $("rankbtn").disabled=false; }
