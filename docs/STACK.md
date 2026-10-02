@@ -83,5 +83,5 @@ MediaPipe + Monk skin-tone profiling and a stdlib ranking engine.
   composed image on the real person+garment+text path). Live behind the "Studio ✨" chip.
 - **Ranking**: if votes read 0, ensure the `rank_votes` public-read RLS policy is
   applied in Supabase.
-- **Security**: rotate the Gemini key + delete the Modal CLI token that were
-  shared during setup.
+- **Security**: ✅ resolved (2026-10) — Gemini key rotated (old key verified dead/401,
+  new `krey-labs-gemini` live/200) and the setup Modal CLI token revoked.
