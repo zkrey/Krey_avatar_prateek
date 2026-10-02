@@ -177,13 +177,29 @@ def closet_event(payload: dict = Body(...)):
 
 # --- the share -> rank -> confidence -> referral loop (social-testing experiment) ---
 
+def _normalize_upload(raw: bytes) -> bytes:
+    """Apply EXIF orientation so phone photos are UPRIGHT before any CV/render step. Phones store
+    rotation in EXIF metadata; cv2 and the diffusers pipelines decode raw pixels and ignore it, so
+    a portrait selfie arrives sideways → the body parser can't find the torso → garbled render.
+    Re-encode an upright JPEG. No-op on any failure."""
+    try:
+        import io as _io
+        from PIL import Image, ImageOps
+        im = ImageOps.exif_transpose(Image.open(_io.BytesIO(raw))).convert("RGB")
+        buf = _io.BytesIO()
+        im.save(buf, format="JPEG", quality=92)
+        return buf.getvalue()
+    except Exception:
+        return raw
+
+
 @app.post("/closet/analyze")
 async def closet_analyze(person: UploadFile = File(...)):
     """'Detect, don't demand': from the user's photo, return which cloth_types are renderable
     (upper/lower/overall) + an unlock hint. CPU pose only — no GPU, runs before any render."""
     from app import coverage as coverage_mod
     import numpy as np, cv2
-    data = await person.read()
+    data = _normalize_upload(await person.read())
     if not data:
         raise HTTPException(400, "no image")
     arr = np.frombuffer(data, np.uint8)
@@ -291,7 +307,7 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
     g = catalog_mod.get_garment(garment_id)
     if not g:
         raise HTTPException(404, "garment not found")
-    person_bytes = await person.read()
+    person_bytes = _normalize_upload(await person.read())
     if not person_bytes:
         raise HTTPException(400, "missing person image")
 
