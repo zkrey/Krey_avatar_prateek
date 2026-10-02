@@ -68,9 +68,10 @@ composes them in **one pass**.
 - **Closed + paid + per-image** (C11) and **user body photos leave our infra** — a
   real privacy concern for a body/identity product. Surface it to users; it's the
   strategic reason to own a model eventually.
-- **Blocked for us on billing** — the free tier is 0 image quota; needs the Google
-  **Cloud** project on paid billing (Google One ≠ API billing). Code + key are wired;
-  flip billing and it works with no redeploy.
+- **~~Blocked for us on billing~~ — resolved 2026-10.** Billing is enabled; verified
+  end-to-end (the real person+garment+text request returns the composed image). Live
+  behind the "Studio ✨" chip, no redeploy needed. (Free tier was 0 image quota; this
+  needed the Google **Cloud** project on paid billing — Google One ≠ API billing.)
 - Vendor pricing/availability risk; instruction-following try-on isn't a dedicated
   VTON endpoint (it's a general image model prompted for try-on), so garment fidelity
   is very good but not *guaranteed* pixel-exact the way a trained VTON can be.
