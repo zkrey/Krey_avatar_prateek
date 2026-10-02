@@ -310,6 +310,91 @@ def _banana_prompt(g: dict, style: str = "studio") -> str:
     return base + look + "Keep it realistic and tasteful, no text or watermarks."
 
 
+# --- Style trends: iconic-look presets applied to the user's OWN photo via Nano, no garment and
+# no manual catalog adds. Each is an openly-known fashion aesthetic/era (NOT a real person) — the
+# render always keeps the USER's face/identity, so we never generate a celebrity's likeness. Add
+# new trends here; the UI reads them from /closet/trends. ----------------------------------------
+_STYLE_TRENDS: dict[str, dict] = {
+    "oldhollywood": {"label": "Old Hollywood", "emoji": "🎞️", "clause":
+        "a glamorous floor-length satin gown with soft finger-wave hair, pearls and red lip; "
+        "warm cinematic studio lighting with a soft vignette, old-Hollywood elegance."},
+    "ninetiesminimal": {"label": "90s Minimal", "emoji": "🖤", "clause":
+        "a sleek 1990s minimalist slip dress with delicate jewelry and a straight sleek hairstyle; "
+        "matte true-to-life colour, clean uncluttered backdrop, understated red-carpet poise."},
+    "y2kpop": {"label": "Y2K Pop", "emoji": "💿", "clause":
+        "an early-2000s Y2K pop outfit — metallic or denim with a cropped top, tinted sunglasses and "
+        "butterfly clips; flash-lit party energy with playful saturated colour."},
+    "mobwife": {"label": "Mob Wife", "emoji": "🧥", "clause":
+        "a dramatic 'mob wife' look — an oversized faux-fur coat, bold gold jewelry, sleek dark "
+        "sunglasses and a sleek blowout; moody high-contrast glamour."},
+    "bohofestival": {"label": "Boho Festival", "emoji": "🌾", "clause":
+        "a bohemian festival look — a flowy printed maxi with fringe and layered necklaces, loose "
+        "waves; warm golden-hour light with a soft open-air backdrop."},
+    "cleangirl": {"label": "Clean Girl", "emoji": "🤍", "clause":
+        "a minimalist 'clean girl' look — a slicked-back low bun, gold hoops and a neutral tailored "
+        "set; soft natural daylight, fresh and polished."},
+    "streetwear": {"label": "Streetwear", "emoji": "🧢", "clause":
+        "a modern streetwear look — an oversized hoodie or bomber with cargo trousers and fresh "
+        "sneakers; crisp urban backdrop, confident casual stance."},
+    "ethnicroyal": {"label": "Ethnic Royal", "emoji": "👑", "clause":
+        "an opulent Indian ethnic look — a richly embroidered lehenga or anarkali with statement "
+        "jewelry and a dupatta; warm regal lighting, festive elegance."},
+}
+
+
+def _trend_prompt(trend_key: str) -> str:
+    """Instruction for a style-trend render: Nano receives ONLY the person image and restyles the
+    SAME person into the chosen iconic aesthetic. No garment image, no impersonation — the user's
+    own face/identity is preserved; only the styling changes."""
+    t = _STYLE_TRENDS.get(trend_key) or {}
+    clause = t.get("clause") or "a polished, flattering editorial outfit"
+    return (
+        "Using the image as the person, generate a photorealistic portrait of the SAME person — "
+        "keep their face, identity and body exactly — now styled as " + clause + " "
+        "Dress them head-and-shoulders to mid-body, flattering and realistic. Do not change their "
+        "face or make them look like someone else. No text or watermarks."
+    )
+
+
+@app.get("/closet/trends")
+def closet_trends():
+    """The style-trend gallery (iconic-look presets). Only meaningful when Nano is live, since the
+    trends render through it. Returns [{key,label,emoji}] in display order."""
+    from render import banana as banana_mod
+    live = banana_mod.banana_configured()
+    return {"live": live,
+            "trends": [{"key": k, "label": v["label"], "emoji": v.get("emoji", "✨")}
+                       for k, v in _STYLE_TRENDS.items()]}
+
+
+@app.post("/closet/trend")
+async def closet_trend(trend: str = Form(...), owner_hint: str = Form(...),
+                       person: UploadFile = File(...)):
+    """Render the user's own photo into an iconic style trend via Nano (no garment). Synchronous —
+    returns the finished look directly, which the client can add to the ranking tray like any look."""
+    from app import catalog as catalog_mod
+    from render import banana as banana_mod
+    from starlette.concurrency import run_in_threadpool
+    if trend not in _STYLE_TRENDS:
+        raise HTTPException(400, "unknown trend")
+    if not banana_mod.banana_configured():
+        raise HTTPException(503, "trend backend not configured (set GEMINI_API_KEY)")
+    person_bytes = _normalize_upload(await person.read())
+    if not person_bytes:
+        raise HTTPException(400, "missing person image")
+    prompt = _trend_prompt(trend) + await run_in_threadpool(_skin_tone_clause, person_bytes)
+    try:
+        png = await run_in_threadpool(banana_mod.generate, person_bytes, None, prompt)
+    except Exception as e:
+        raise HTTPException(502, f"render failed: {e}")
+    url = catalog_mod.upload_image(png, content_type="image/png", ext="png")
+    label = _STYLE_TRENDS[trend]["label"]
+    look_id = catalog_mod.create_look(owner_hint=owner_hint, name=f"{label} trend", image_url=url)
+    return {"look_id": look_id, "image_url": url,
+            "look_url": f"/look/{look_id}" if look_id else None, "mode": "trend",
+            "trend": trend, "done": True}
+
+
 @app.post("/closet/tryon")
 async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
                        person: UploadFile = File(...), mode: str = Form("catvton")):
@@ -406,6 +491,19 @@ def closet_ballot(payload: dict = Body(...)):
     if not set_id:
         raise HTTPException(502, "could not create the ballot")
     return {"set_id": set_id, "rank_url": f"/rank/{set_id}"}
+
+
+@app.post("/closet/confidence")
+def closet_confidence(payload: dict = Body(...)):
+    """One-tap 'how confident do you feel in this?' (1–10) on the render-done overlay — the PRE
+    (pre-crowd) self-confidence the closet flow was missing. Writes confidence_marks(phase='pre')
+    so the /admin confidence-lift (Δ post-pre) and self↔crowd Kendall-τ have a baseline for
+    closet-made looks. Best-effort."""
+    from app import catalog as catalog_mod
+    ok = catalog_mod.record_confidence(
+        set_id=payload.get("set_id"), look_id=payload.get("look_id"),
+        owner_hint=payload.get("owner_hint"), phase="pre", value=payload.get("value"))
+    return {"ok": bool(ok)}
 
 
 @app.get("/look/{look_id}", response_class=HTMLResponse)
@@ -723,6 +821,55 @@ def health():
     return {"status": "ok", "service": "twin-extraction",
             "slices": ["skin-tone-v0", "measure-v0", "face-v0"],
             "flows": ["capture-session", "body-measure", "fit-recommend", "style-profile"]}
+
+
+@app.get("/health/cycle")
+def health_cycle(token: Optional[str] = None):
+    """One-URL probe of the whole share→rank→referral loop, so the cycle can be verified without
+    opening Supabase. Admin-gated (?token=KREY_ADMIN_TOKEN). Does a real rank_votes round-trip
+    (insert then read-back under a throwaway set_id) to DEFINITIVELY detect the 'public read votes'
+    RLS policy — the one gap that makes voting record fine but results read 0."""
+    from app import catalog as catalog_mod
+    from render import client as render_client
+    from render import banana as banana_mod
+    if not _admin_authed(token):
+        raise HTTPException(401, "add ?token=YOUR_ADMIN_TOKEN")
+
+    out: dict = {"supabase_configured": catalog_mod.catalog_configured(),
+                 "render": {"catvton": render_client.render_configured(),
+                            "banana": banana_mod.banana_configured(),
+                            "vibe": render_client.vibe_configured()}}
+
+    def read_probe(path: str) -> dict:
+        r = catalog_mod._get(path)
+        return {"reachable": r is not None, "rows_visible": (len(r) if isinstance(r, list) else None)}
+
+    out["reads"] = {
+        "garments": read_probe("garments?select=garment_id&limit=1"),
+        "looks": read_probe("looks?select=look_id&limit=1"),
+        "rank_sets": read_probe("rank_sets?select=set_id&limit=1"),
+        "referrals": read_probe("referrals?select=referrer_hint&limit=1"),
+        "confidence_marks": read_probe("confidence_marks?select=phase&limit=1"),
+    }
+
+    # rank_votes round-trip: insert a throwaway vote, then read it back. If insert works but the
+    # read returns nothing, the SELECT ('public read votes') policy is missing.
+    hc = "__healthcheck__"
+    ins = catalog_mod.record_vote(set_id=hc, winner_look_id="__hc_w__",
+                                  loser_look_id="__hc_l__", voter_hint="healthprobe")
+    back = catalog_mod._get(f"rank_votes?set_id=eq.{hc}&select=winner_look_id&limit=1")
+    select_ok = bool(back)
+    out["rank_votes"] = {
+        "insert_ok": bool(ins), "select_ok": select_ok,
+        "policy_ok": bool(ins) and select_ok,
+        "fix": None if (bool(ins) and select_ok) else
+               "In Supabase SQL: create policy \"public read votes\" on rank_votes for select using (true);",
+    }
+
+    reads_ok = all(v["reachable"] for v in out["reads"].values())
+    out["loop_ok"] = bool(out["supabase_configured"] and reads_ok and out["rank_votes"]["policy_ok"]
+                          and out["render"]["banana"])
+    return out
 
 
 @app.post("/twin/extract-skin")

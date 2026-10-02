@@ -98,6 +98,11 @@
       <div class="muted" id="modehint" style="margin:-.2rem 0 .3rem;font-size:.8rem"></div>
     </div>
 
+    <div id="trendbox" hidden>
+      <div class="flabel">Trends ✨ <span class="muted" style="font-weight:400;font-size:.8rem">— tap to style you instantly, no garment needed</span></div>
+      <div class="filters" id="trendchips"></div>
+    </div>
+
     <div class="flabel">Type</div>
     <div class="filters" id="typefilters"></div>
     <div class="flabel">Occasion</div>
@@ -197,10 +202,39 @@ async function load(){
   // Studio (Nano Banana) is the primary engine when live; CatVTON is the fallback.
   if(!MODE_PICKED && BANANA_LIVE) MODE="banana";
   setupModeToggle();
+  setupTrends();
   $("src").textContent = data.source==="supabase" ? "live catalog" : "sample set";
   if($("segfilters").querySelectorAll(".chip").length<=1) buildSegChips(data.segments);
   ALL = (data.garments||[]).filter(g=>ALLOWED.includes(g.cloth_type));
   render();
+}
+let TRENDS_LOADED=false;
+async function setupTrends(){
+  const box=$("trendbox"); if(!box) return;
+  if(!BANANA_LIVE){ box.hidden=true; return; }   // trends render through Nano
+  if(TRENDS_LOADED){ box.hidden=false; return; }
+  try{
+    const r=await fetch("/closet/trends"); const d=await r.json();
+    if(!d.live || !(d.trends||[]).length){ box.hidden=true; return; }
+    $("trendchips").innerHTML = d.trends.map(t=>
+      `<button class="chip" data-k="${esc(t.key)}" data-l="${esc(t.label)}">${esc(t.emoji||"✨")} ${esc(t.label)}</button>`).join("");
+    $("trendchips").querySelectorAll(".chip").forEach(c=>c.onclick=()=>onTrend(c.dataset.k,c.dataset.l));
+    TRENDS_LOADED=true; box.hidden=false;
+  }catch(e){ box.hidden=true; }
+}
+async function onTrend(key,label){
+  if(!BANANA_LIVE){ alert("Trends aren't switched on yet."); return; }
+  if(!PHOTO){ alert("Add your photo first."); return; }
+  const g={garment_id:"trend:"+key, name:label};
+  logEvent(g,"try","trend");
+  showRender("loading",g);
+  const fd=new FormData(); fd.append("trend",key); fd.append("owner_hint",sid()); fd.append("person",PHOTO);
+  try{
+    const r=await fetch("/closet/trend",{method:"POST",body:fd});
+    const j=await r.json();
+    if(j.image_url){ showRender("done",g,j); return; }
+    showRender("error",g,{detail:(j.detail||"couldn't style that trend")});
+  }catch(e){ showRender("error",g,{detail:"couldn't style that trend"}); }
 }
 function setupModeToggle(){
   const box=$("modebox"); if(!box) return;
@@ -275,7 +309,10 @@ function showRender(state,g,j){
   let ov=$("renderov");
   if(!ov){ ov=document.createElement("div"); ov.id="renderov"; ov.style.cssText="position:fixed;inset:0;background:#000d;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px"; document.body.appendChild(ov); }
   if(state==="loading"){
-    const line = MODE==="banana80s"
+    const isTrend = g && g.garment_id && String(g.garment_id).indexOf("trend:")===0;
+    const line = isTrend
+      ? "styling you as "+esc(g.name)+" ✨ — about 15–30 seconds."
+      : MODE==="banana80s"
       ? "styling your 80s look ✨ — your face + the real garment, retro-graded. About 15–30 seconds."
       : MODE==="banana"
       ? "composing your face + the real garment ✨ — about 15–30 seconds."
@@ -290,13 +327,24 @@ function showRender(state,g,j){
     if(j.look_id) addLook({look_id:j.look_id, image_url:j.image_url, name:g.name});
     const canRank = LOOKS.length>=2;
     ov.innerHTML=`<div style="text-align:center;max-width:420px;width:100%">
-      <img src="${esc(j.image_url)}" style="max-width:100%;max-height:64vh;border-radius:14px;border:1px solid var(--line)">
+      <img src="${esc(j.image_url)}" style="max-width:100%;max-height:60vh;border-radius:14px;border:1px solid var(--line)">
       <div style="margin:.6rem 0 .2rem;font-weight:600">Added to your looks (${LOOKS.length}) ✓</div>
+      <div class="muted" id="rov_conflab" style="margin:.1rem 0 .3rem">How confident do you feel in this?</div>
+      <div id="rov_conf" style="display:flex;gap:.25rem;justify-content:center;flex-wrap:wrap;margin-bottom:.6rem">
+        ${[1,2,3,4,5,6,7,8,9,10].map(n=>`<button class="btn cfb" data-v="${n}" style="padding:.35rem .55rem;min-width:2.1rem">${n}</button>`).join("")}</div>
       <div class="muted" style="margin-bottom:.6rem">${canRank?"Rank them, or try more first.":"Try one more, then ask friends to rank which suits you best."}</div>
       <div style="display:flex;gap:.5rem">
         <button class="btn" id="rov_close" style="flex:1">Try another</button>
         <button class="btn primary" id="rov_rank" style="flex:1" ${canRank?"":"disabled"}>Rank these on me</button></div>
       <div class="muted" style="margin-top:.5rem;cursor:pointer;text-decoration:underline" id="rov_share">or share just this one</div></div>`;
+    // pre (pre-crowd) self-confidence -> /closet/confidence, tied to this look. One tap, best-effort.
+    if(j.look_id){ ov.querySelectorAll(".cfb").forEach(b=>b.onclick=()=>{
+      ov.querySelectorAll(".cfb").forEach(x=>x.classList.remove("primary"));
+      b.classList.add("primary");
+      const lab=$("rov_conflab"); if(lab) lab.textContent="Got it — "+b.dataset.v+"/10 ✓";
+      try{ fetch("/closet/confidence",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({look_id:j.look_id, owner_hint:sid(), value:+b.dataset.v})}); }catch(e){}
+    }); }
     const url=location.origin+(j.look_url||"/closet");
     $("rov_share").onclick=async()=>{ const text=`Check out this ${g.name} on me — Krey ✨`; try{ if(navigator.share){ await navigator.share({title:"Krey",text,url}); } else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); } }catch(e){} };
     if($("rov_rank")) $("rov_rank").onclick=()=>{ ov.remove(); makeBallot(); };
