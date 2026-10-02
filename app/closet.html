@@ -91,8 +91,8 @@
     <div id="modebox" hidden>
       <div class="flabel">Render style</div>
       <div class="filters" id="modefilters">
-        <button class="chip on" data-m="catvton">Realistic fit</button>
-        <button class="chip" data-m="banana" hidden>Studio ✨ · beta</button>
+        <button class="chip on" data-m="banana" hidden>Studio ✨</button>
+        <button class="chip" data-m="catvton">Realistic fit</button>
         <button class="chip" data-m="vibe" hidden>80s Vibe · beta</button>
       </div>
       <div class="muted" id="modehint" style="margin:-.2rem 0 .3rem;font-size:.8rem"></div>
@@ -118,11 +118,11 @@
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-let T="", S="", RENDER_LIVE=false, VIBE_LIVE=false, BANANA_LIVE=false, MODE="catvton", ALL=[], ALLOWED=[], PHOTO=null, LOOKS=[];
+let T="", S="", RENDER_LIVE=false, VIBE_LIVE=false, BANANA_LIVE=false, MODE="catvton", MODE_PICKED=false, ALL=[], ALLOWED=[], PHOTO=null, LOOKS=[];
 const MODE_HINT={
-  catvton:"Faithful try-on — the real garment on your real photo. Recommended.",
-  vibe:"Beta · AI 80s portrait — stylised you (gets the vibe, not the exact garment).",
-  banana:"Beta · AI studio — your face + the real garment composed together. Needs billing on; ~15–30s."
+  banana:"AI studio — your face + the real garment composed together. ~15–30s. Recommended.",
+  catvton:"Faithful fallback — the real garment on your real photo. Best with a clean full-body shot.",
+  vibe:"Beta · AI 80s portrait — stylised you (gets the vibe, not the exact garment)."
 };
 const TYPELABEL={upper:"Tops",lower:"Bottoms",overall:"Dresses"};
 
@@ -194,6 +194,8 @@ async function load(){
   let data={garments:[],segments:[],render_live:false,source:"?"};
   try{ const r=await fetch("/closet/garments"+(q.length?("?"+q.join("&")):"")); data=await r.json(); }catch(e){}
   RENDER_LIVE=!!data.render_live; VIBE_LIVE=!!data.vibe_live; BANANA_LIVE=!!data.banana_live;
+  // Studio (Nano Banana) is the primary engine when live; CatVTON is the fallback.
+  if(!MODE_PICKED && BANANA_LIVE) MODE="banana";
   setupModeToggle();
   $("src").textContent = data.source==="supabase" ? "live catalog" : "sample set";
   if($("segfilters").querySelectorAll(".chip").length<=1) buildSegChips(data.segments);
@@ -206,12 +208,13 @@ function setupModeToggle(){
   // only offer the choice when at least one alt engine is live; else stay on the realistic path
   if(!BANANA_LIVE && !VIBE_LIVE){ box.hidden=true; MODE="catvton"; return; }
   box.hidden=false;
-  if(!live[MODE]) MODE="catvton";
+  // fall back in priority order: Studio (banana) first, then the realistic path
+  if(!live[MODE]) MODE = BANANA_LIVE ? "banana" : "catvton";
   box.querySelectorAll(".chip").forEach(c=>{
     const m=c.dataset.m||"catvton";
     c.hidden=!live[m];
     c.classList.toggle("on",m===MODE);
-    c.onclick=()=>{ MODE=m; setupModeToggle(); };
+    c.onclick=()=>{ MODE=m; MODE_PICKED=true; setupModeToggle(); };
   });
   $("modehint").textContent=MODE_HINT[MODE]||"";
 }
