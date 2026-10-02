@@ -9,7 +9,10 @@ confidence to wear it.
 > **Render limits & the owned-model plan:** the three render engines below are the
 > interim commodity layer. The capability ceilings they can't cross — and the spec
 > for a from-scratch frontier model to replace them — are logged in
-> [`MODEL_CHALLENGES.md`](./MODEL_CHALLENGES.md).
+> [`MODEL_CHALLENGES.md`](./MODEL_CHALLENGES.md). A current (2026-10) deep dive on
+> CatVTON + Nano Banana and a survey of the other frontier engines (FASHN, Kolors,
+> FLUX, IDM-VTON, OOTDiffusion, research models) is in
+> [`RENDER_ENGINE_EVAL.md`](./RENDER_ENGINE_EVAL.md).
 
 ## One-line view
 HTML/JS → FastAPI on Railway → Supabase (DB + storage) → three render backends
