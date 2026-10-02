@@ -6,6 +6,11 @@ A generative virtual try-on + peer-ranking product: render "this garment on me",
 collect friends' pairwise votes, and measure whether peer ranking builds the
 confidence to wear it.
 
+> **Render limits & the owned-model plan:** the three render engines below are the
+> interim commodity layer. The capability ceilings they can't cross — and the spec
+> for a from-scratch frontier model to replace them — are logged in
+> [`MODEL_CHALLENGES.md`](./MODEL_CHALLENGES.md).
+
 ## One-line view
 HTML/JS → FastAPI on Railway → Supabase (DB + storage) → three render backends
 (CatVTON & SDXL+InstantID on Modal GPUs, Gemini/Nano-Banana via API), with
