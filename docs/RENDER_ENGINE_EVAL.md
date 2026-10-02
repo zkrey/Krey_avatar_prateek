@@ -135,6 +135,68 @@ ownership/privacy; FASHN wins pure garment fidelity.
 
 ---
 
+## 4b. Why this ordering (Nano Banana ≫ FASHN ≈ Kolors > CatVTON > InstantID)
+
+The ranking is two axes stacked: a **quality/architecture axis** (reasoning model >
+trained VTON > inpaint-warp > text-conditioned stylizer) and a **fitness-for-our-job
+axis** (must show the *real garment* on the *real person*, faithfully, consistently,
+on casual IG input). Here's each step.
+
+### Nano Banana ≫ everything (a step-change, not a nudge)
+- **Only one that reasons over person + garment + instruction in one pass.** The others
+  *warp* a garment onto a parsed body region; Nano Banana *regenerates* the scene
+  understanding what it sees — so "this person, in this kurta, 80s vibe" is a single
+  coherent intent, not mask-and-paste.
+- **Identity consistency is its headline benchmark win** (#1 LMArena image-edit at
+  launch). That's our C3 (true twin) *and* C10 (same person across looks so voters
+  judge the garment, not render noise) — the two things that make peer ranking fair.
+- **Multi-image fusion** holds person *and* garment together — the exact failure of our
+  InstantID path (garment was text-only).
+- **Survives OOD/IG input** (arm-up, cropped, group) — not dependent on a DensePose/SCHP
+  parser that falls over off-axis (our C1, the #1 product constraint).
+- **External validation:** Google shipped Doppl and now Search/Shopping try-on on *this
+  exact model*. The frontier try-on product and our beta path are the same engine.
+- **The one caveat:** it's a general image model prompted for try-on, not a trained VTON
+  head — garment fidelity is excellent but not *guaranteed* pixel-exact on a logo/print
+  the way a dedicated VTON can be. Plus closed, paid, body photo leaves our infra.
+
+### FASHN ≈ Kolors (the `≈` is deliberate — they trade blows)
+Both are production VTON specialists (via fal), both take a garment image, both ~$0.07/
+gen, both seconds-fast. A tier *below* Nano Banana (they warp, don't reason), a tier
+*above* CatVTON (modern architecture, far more training data). Between the two:
+- **FASHN wins on garment fidelity** — best-in-category fabric texture, print, logo
+  (864×1296). Weakness: mixed lower-body fidelity. → pick when the *garment* is the hero.
+- **Kolors wins on the body** — holds pose, skin tone, body shape most reliably.
+  Weakness: sometimes flattens garment detail. → pick when the *body/pose* is the risk.
+- Opposite failure modes, neither dominates → `≈`. (FLUX Try-On Pro sits here too, with
+  styling-prompt control — tucked/sleeves — but less VTON-specialized.) Both still trail
+  Nano Banana on identity and true casual-input robustness.
+
+### CatVTON (fourth — and honestly so)
+Below the hosted specialists because it's a **2024-class architecture** (SD-1.5 inpaint +
+~49.6M-param self-attention fine-tune): flattens fabric (C2), 2D warp not 3D drape (C4),
+parser-fragile on OOD (C1), slow cold 172–344s (C8). **But above InstantID, and we keep
+it,** for two non-negotiables: (1) it inpaints onto the *real photo* → identity perfect
+by construction, output honest (no invented person/background); (2) it's the **only one
+of the five that survives non-standard poses** (sitting/lying/arm-up) because it works on
+the real image, not a regenerated portrait. Also **free and private** (self-hosted, body
+photo never leaves our infra — the thing every hosted option sacrifices). → free/private
+fallback + honesty baseline.
+
+### SDXL + InstantID (last — structurally wrong for try-on)
+Not just lower-quality, architecturally mismatched:
+- **Takes the garment as text only** → literally cannot reproduce a specific garment
+  (invented a feather dress for a cream kurta). Fails C2 at the root — and C2 is half the
+  product.
+- **Identity collapses as the face shrinks in frame** — one-shot face adapters are weak
+  at body framing, so at "head-and-shoulders wearing X" scale the base model's face prior
+  takes over → generic person (fails C3).
+- Its real strength (stylised "80s vibe") is a *look*, not a *try-on* — it answers "make
+  a cool stylised portrait," not "show me this garment on me," which is the question the
+  ranking loop depends on.
+
+---
+
 ## 5. Recommendation (what to actually do)
 
 1. **Stop out-engineering the render.** It's a commodity and the field proves it —
