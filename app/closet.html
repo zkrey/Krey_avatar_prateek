@@ -135,6 +135,31 @@ function logEvent(g,event_type,channel){ try{ fetch("/closet/event",{method:"POS
 
 function pickPhoto(cb, selfie){ const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; if(selfie) inp.capture="user"; inp.onchange=()=>{ if(inp.files[0]) cb(inp.files[0]); }; inp.click(); }
 
+// Reliable FRONT-camera selfie: capture="user" is only a hint (most Android browsers ignore it and
+// open the back cam), so use getUserMedia with facingMode:"user" + a live preview. Falls back to the
+// file picker if the camera API/permission isn't available.
+async function selfieCapture(cb){
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ pickPhoto(cb, true); return; }
+  let stream;
+  try{ stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"user"}, audio:false}); }
+  catch(e){ pickPhoto(cb, true); return; }   // denied / no front cam -> fall back
+  const ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;background:#000;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem;padding:16px";
+  const vid=document.createElement("video"); vid.autoplay=true; vid.playsInline=true; vid.muted=true; vid.srcObject=stream;
+  vid.style.cssText="max-width:100%;max-height:70vh;transform:scaleX(-1);border-radius:14px";  // mirror preview only
+  const row=document.createElement("div"); row.style.cssText="display:flex;gap:.6rem";
+  const snap=document.createElement("button"); snap.textContent="📸 Capture"; snap.className="btn primary";
+  const cancel=document.createElement("button"); cancel.textContent="Cancel"; cancel.className="btn";
+  row.append(snap,cancel); ov.append(vid,row); document.body.appendChild(ov);
+  const close=()=>{ try{ stream.getTracks().forEach(t=>t.stop()); }catch(e){} ov.remove(); };
+  cancel.onclick=close;
+  snap.onclick=()=>{
+    const c=document.createElement("canvas"); c.width=vid.videoWidth||720; c.height=vid.videoHeight||960;
+    c.getContext("2d").drawImage(vid,0,0,c.width,c.height);   // save the TRUE (unmirrored) frame
+    c.toBlob(b=>{ close(); if(b) cb(new File([b],"selfie.jpg",{type:"image/jpeg"})); }, "image/jpeg", 0.92);
+  };
+}
+
 async function analyze(file){
   $("gatemsg").textContent="Reading your photo… ✨"; $("addphoto").disabled=true;
   const fd=new FormData(); fd.append("person",file);
@@ -314,7 +339,7 @@ async function makeBallot(){
 $("rankbtn").onclick=makeBallot;
 
 $("addphoto").onclick=()=>pickPhoto(analyze);
-$("selfie").onclick=()=>pickPhoto(analyze, true);
+$("selfie").onclick=()=>selfieCapture(analyze);
 $("changephoto").onclick=()=>pickPhoto(analyze);
 $("unlockbtn").onclick=()=>pickPhoto(analyze);
 $("segfilters").querySelector('[data-s=""]').onclick=()=>{ S=""; syncChips(); load(); };
