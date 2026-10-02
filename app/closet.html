@@ -59,6 +59,9 @@
   <h1>Your closet ✨</h1>
   <div class="sub" id="sub">Add a photo and we'll show what you can try on. <span id="src" class="src">…</span></div>
 
+  <!-- returning owner: your created ballots + their results (persists across visits) -->
+  <div id="myballots" hidden style="margin:.6rem 0"></div>
+
   <!-- photo gate: shown until a photo is added -->
   <div class="gate" id="gate">
     <h2>See it on you 👀</h2>
@@ -100,6 +103,11 @@
 
     <div id="trendbox" hidden>
       <div class="flabel">Trends ✨ <span class="muted" style="font-weight:400;font-size:.8rem">— tap to style you instantly, no garment needed</span></div>
+      <div class="filters" id="genderchips" style="margin-bottom:.3rem">
+        <button class="chip on" data-g="auto">Auto</button>
+        <button class="chip" data-g="woman">Womenswear</button>
+        <button class="chip" data-g="man">Menswear</button>
+      </div>
       <div class="filters" id="trendchips"></div>
     </div>
 
@@ -216,11 +224,25 @@ async function setupTrends(){
   try{
     const r=await fetch("/closet/trends"); const d=await r.json();
     if(!d.live || !(d.trends||[]).length){ box.hidden=true; return; }
-    $("trendchips").innerHTML = d.trends.map(t=>
-      `<button class="chip" data-k="${esc(t.key)}" data-l="${esc(t.label)}">${esc(t.emoji||"✨")} ${esc(t.label)}</button>`).join("");
+    // group trends by their signal group, preserving order
+    const groups=[]; const byg={};
+    d.trends.forEach(t=>{ const g=t.group||"Trends"; if(!byg[g]){ byg[g]=[]; groups.push(g); } byg[g].push(t); });
+    $("trendchips").innerHTML = groups.map(g=>
+      `<div class="tgroup"><div class="muted" style="font-size:.72rem;margin:.25rem 0 .15rem">${esc(g)}</div>`
+      + `<div class="filters">` + byg[g].map(t=>
+          `<button class="chip" data-k="${esc(t.key)}" data-l="${esc(t.label)}">${esc(t.emoji||"✨")} ${esc(t.label)}</button>`).join("")
+      + `</div></div>`).join("");
     $("trendchips").querySelectorAll(".chip").forEach(c=>c.onclick=()=>onTrend(c.dataset.k,c.dataset.l));
     TRENDS_LOADED=true; box.hidden=false;
   }catch(e){ box.hidden=true; }
+}
+let GENDER="auto";
+function setupGenderChips(){
+  const box=$("genderchips"); if(!box) return;
+  box.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{
+    GENDER=c.dataset.g||"auto";
+    box.querySelectorAll(".chip").forEach(x=>x.classList.toggle("on",x===c));
+  });
 }
 async function onTrend(key,label){
   if(!BANANA_LIVE){ alert("Trends aren't switched on yet."); return; }
@@ -228,7 +250,7 @@ async function onTrend(key,label){
   const g={garment_id:"trend:"+key, name:label};
   logEvent(g,"try","trend");
   showRender("loading",g);
-  const fd=new FormData(); fd.append("trend",key); fd.append("owner_hint",sid()); fd.append("person",PHOTO);
+  const fd=new FormData(); fd.append("trend",key); fd.append("owner_hint",sid()); fd.append("person",PHOTO); fd.append("gender",GENDER);
   try{
     const r=await fetch("/closet/trend",{method:"POST",body:fd});
     const j=await r.json();
@@ -346,7 +368,16 @@ function showRender(state,g,j){
         body:JSON.stringify({look_id:j.look_id, owner_hint:sid(), value:+b.dataset.v})}); }catch(e){}
     }); }
     const url=location.origin+(j.look_url||"/closet");
-    $("rov_share").onclick=async()=>{ const text=`Check out this ${g.name} on me — Krey ✨`; try{ if(navigator.share){ await navigator.share({title:"Krey",text,url}); } else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); } }catch(e){} };
+    $("rov_share").onclick=async()=>{
+      const text=`Check out this ${g.name} on me — Krey ✨`;
+      let file=null; try{ file=await thumbFromUrls([j.image_url]); }catch(e){}
+      try{
+        if(navigator.share && file && navigator.canShare && navigator.canShare({files:[file]})){
+          await navigator.share({title:"Krey", text, url, files:[file]});   // attach the look so a thumbnail shows
+        } else if(navigator.share){ await navigator.share({title:"Krey",text,url}); }
+        else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); }
+      }catch(e){}
+    };
     if($("rov_rank")) $("rov_rank").onclick=()=>{ ov.remove(); makeBallot(); };
     $("rov_close").onclick=()=>ov.remove();
   } else {
@@ -381,34 +412,77 @@ async function makeBallot(){
     if(!j.rank_url){ $("traymsg").textContent=(j.detail||"couldn't create the ballot"); $("rankbtn").disabled=false; return; }
     const url=location.origin+j.rank_url;
     const results=location.origin+"/results/"+encodeURIComponent(j.set_id||"");
-    // owner gets BOTH: the link to SHARE (friends vote) and the link to SEE results come in
-    $("traymsg").innerHTML='Ballot ready — <a href="'+esc(url)+'" style="color:var(--gold)">share to get votes</a>'
-      + ' · <a href="'+esc(results)+'" style="color:var(--gold)">see results</a>';
+    // persist so the owner can always come back to share again + see results (issue: link opened once)
+    saveBallot({set_id:j.set_id, rank_url:url, results_url:results, count:LOOKS.length,
+                thumbs:LOOKS.map(l=>l.image_url).filter(Boolean).slice(0,3)});
     try{ localStorage.setItem("krey_last_results", results); }catch(e){}
-    const text="Which of these looks best on me? Tap to pick 👇";
-    // Make the share VISUAL: attach a side-by-side thumbnail of the looks so the chat message
-    // itself shows the fits (not just a link). Falls back to a plain text+link share.
-    const file=await ballotThumb(LOOKS);
-    try{
-      if(navigator.share && file && navigator.canShare && navigator.canShare({files:[file]})){
-        await navigator.share({title:"Krey", text, url, files:[file]});
-      } else if(navigator.share){
-        await navigator.share({title:"Krey", text, url});
-      } else {
-        window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank");
-      }
-    }catch(e){}
+    // big, tappable actions (not tiny text links)
+    $("traymsg").innerHTML=
+      '<div style="display:flex;flex-direction:column;gap:.5rem;margin-top:.6rem">'
+      +'<button class="btn primary" id="tm_share" style="width:100%;padding:.9rem;font-size:1rem">📲 Share to friends to vote</button>'
+      +'<button class="btn" id="tm_results" style="width:100%;padding:.8rem;font-size:.95rem">📊 See my results</button>'
+      +'<div class="muted" style="font-size:.78rem">You can re-share anytime — your ballots stay saved up top.</div>'
+      +'</div>';
+    $("tm_share").onclick=()=>shareBallot(url, LOOKS.map(l=>l.image_url).filter(Boolean).slice(0,3));
+    $("tm_results").onclick=()=>{ location.href=results; };
+    renderMyBallots();
+    shareBallot(url, LOOKS.map(l=>l.image_url).filter(Boolean).slice(0,3));  // open the share sheet once now
   }catch(e){ $("traymsg").textContent="Couldn't create the ballot — try again."; $("rankbtn").disabled=false; }
 }
-// Build a single JPEG collage of up to 3 looks (cover-fit, side by side) to attach to the share
-// sheet. Uses fetch->blob->ImageBitmap so the canvas is never CORS-tainted. Returns a File or null.
-async function ballotThumb(looks){
+// Reusable share — re-opens the native share sheet every time (issue: it only fired once before).
+// Rebuilds the visual thumbnail from the given image URLs (works even after a page reload).
+async function shareBallot(url, thumbUrls){
+  const text="Which of these looks best on me? Tap to pick 👇";
+  let file=null;
+  try{ file=await thumbFromUrls(thumbUrls); }catch(e){}
   try{
-    const pics=(looks||[]).filter(l=>l.image_url).slice(0,3);
+    if(navigator.share && file && navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({title:"Krey", text, url, files:[file]});
+    } else if(navigator.share){
+      await navigator.share({title:"Krey", text, url});
+    } else {
+      window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank");
+    }
+  }catch(e){}
+}
+// --- persistent ballot store so the owner never loses their rankings ---
+function getBallots(){ try{ return JSON.parse(localStorage.getItem("krey_ballots")||"[]"); }catch(e){ return []; } }
+function saveBallot(b){
+  try{
+    const arr=getBallots().filter(x=>x.set_id!==b.set_id);
+    arr.unshift(Object.assign({ts:Date.now()}, b));
+    localStorage.setItem("krey_ballots", JSON.stringify(arr.slice(0,20)));
+  }catch(e){}
+}
+function renderMyBallots(){
+  const box=$("myballots"); if(!box) return;
+  const arr=getBallots();
+  if(!arr.length){ box.hidden=true; return; }
+  box.hidden=false;
+  box.innerHTML='<div class="flabel">Your ballots — check results anytime</div>'
+    + arr.map((b,i)=>{
+        const when=new Date(b.ts||Date.now()).toLocaleDateString();
+        const th=(b.thumbs||[]).map(u=>'<img src="'+esc(u)+'" style="width:30px;height:40px;object-fit:cover;border-radius:5px;border:1px solid var(--line)">').join("");
+        return '<div style="display:flex;gap:.5rem;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:12px;padding:.5rem .6rem;margin-bottom:.45rem">'
+          +'<div style="display:flex;gap:.3rem;align-items:center;min-width:0"><div style="display:flex;gap:.2rem">'+th+'</div>'
+          +'<div class="muted" style="font-size:.78rem;white-space:nowrap">'+(b.count||0)+' · '+esc(when)+'</div></div>'
+          +'<div style="display:flex;gap:.35rem;flex:0 0 auto">'
+          +'<button class="btn mb_share" data-i="'+i+'" style="padding:.45rem .7rem">Share</button>'
+          +'<button class="btn primary mb_res" data-r="'+esc(b.results_url)+'" style="padding:.45rem .7rem">Results</button>'
+          +'</div></div>';
+      }).join("");
+  box.querySelectorAll(".mb_share").forEach(btn=>btn.onclick=()=>{ const b=getBallots()[+btn.dataset.i]; if(b) shareBallot(b.rank_url, b.thumbs||[]); });
+  box.querySelectorAll(".mb_res").forEach(btn=>btn.onclick=()=>{ location.href=btn.dataset.r; });
+}
+// Build a single JPEG collage (cover-fit, side by side) from up to 3 image URLs, to attach to the
+// share sheet. Uses fetch->blob->ImageBitmap so the canvas is never CORS-tainted. File or null.
+async function thumbFromUrls(urls){
+  try{
+    const pics=(urls||[]).filter(Boolean).slice(0,3);
     if(!pics.length) return null;
     const bmps=[];
-    for(const l of pics){
-      const r=await fetch(l.image_url,{mode:"cors"});
+    for(const u of pics){
+      const r=await fetch(u,{mode:"cors"});
       if(!r.ok) return null;
       bmps.push(await createImageBitmap(await r.blob()));
     }
@@ -433,6 +507,7 @@ $("selfie").onclick=()=>selfieCapture(analyze);
 $("changephoto").onclick=()=>pickPhoto(analyze);
 $("unlockbtn").onclick=()=>pickPhoto(analyze);
 $("segfilters").querySelector('[data-s=""]').onclick=()=>{ S=""; syncChips(); load(); };
+renderMyBallots();   // returning owner: surface saved ballots + results on landing, before any photo
 </script>
 </body>
 </html>

@@ -293,7 +293,7 @@ def _banana_prompt(g: dict, style: str = "studio") -> str:
         "Using the first image as the person and the second image as the garment, generate a "
         f"photorealistic image of the SAME person — keep their face and identity exactly — now "
         f"wearing the garment from the second image ({name}). Fit the garment naturally to their "
-        "body and pose. "
+        "body and pose. " + _GENDER_GUARD
     )
     if style == "eighties":
         look = (
@@ -310,49 +310,171 @@ def _banana_prompt(g: dict, style: str = "studio") -> str:
     return base + look + "Keep it realistic and tasteful, no text or watermarks."
 
 
+# Gender guardrail — Nano otherwise defaulted to WOMENSWEAR on the no-garment trend path (a man
+# got a gown / lehenga). This line is added to EVERY render prompt so the person's apparent gender
+# presentation is preserved unless the user explicitly picks otherwise.
+_GENDER_GUARD = (
+    "Preserve the person's apparent gender presentation exactly as in the photo — do NOT feminize "
+    "or masculinize them, and choose garments appropriate to that presentation. "
+)
+
 # --- Style trends: iconic-look presets applied to the user's OWN photo via Nano, no garment and
 # no manual catalog adds. Each is an openly-known fashion aesthetic/era (NOT a real person) — the
-# render always keeps the USER's face/identity, so we never generate a celebrity's likeness. Add
-# new trends here; the UI reads them from /closet/trends. ----------------------------------------
+# render always keeps the USER's face/identity, so we never generate a celebrity's likeness. Each
+# trend carries a feminine (fem) and masculine (masc) garment variant so a man isn't dressed in a
+# gown; the variant is chosen by the gender hint, else by the person's presentation in the photo.
+# Add new trends here; the UI reads them from /closet/trends. -------------------------------------
 _STYLE_TRENDS: dict[str, dict] = {
-    "oldhollywood": {"label": "Old Hollywood", "emoji": "🎞️", "clause":
-        "a glamorous floor-length satin gown with soft finger-wave hair, pearls and red lip; "
-        "warm cinematic studio lighting with a soft vignette, old-Hollywood elegance."},
-    "ninetiesminimal": {"label": "90s Minimal", "emoji": "🖤", "clause":
-        "a sleek 1990s minimalist slip dress with delicate jewelry and a straight sleek hairstyle; "
-        "matte true-to-life colour, clean uncluttered backdrop, understated red-carpet poise."},
-    "y2kpop": {"label": "Y2K Pop", "emoji": "💿", "clause":
-        "an early-2000s Y2K pop outfit — metallic or denim with a cropped top, tinted sunglasses and "
-        "butterfly clips; flash-lit party energy with playful saturated colour."},
-    "mobwife": {"label": "Mob Wife", "emoji": "🧥", "clause":
-        "a dramatic 'mob wife' look — an oversized faux-fur coat, bold gold jewelry, sleek dark "
-        "sunglasses and a sleek blowout; moody high-contrast glamour."},
-    "bohofestival": {"label": "Boho Festival", "emoji": "🌾", "clause":
-        "a bohemian festival look — a flowy printed maxi with fringe and layered necklaces, loose "
-        "waves; warm golden-hour light with a soft open-air backdrop."},
-    "cleangirl": {"label": "Clean Girl", "emoji": "🤍", "clause":
-        "a minimalist 'clean girl' look — a slicked-back low bun, gold hoops and a neutral tailored "
-        "set; soft natural daylight, fresh and polished."},
-    "streetwear": {"label": "Streetwear", "emoji": "🧢", "clause":
-        "a modern streetwear look — an oversized hoodie or bomber with cargo trousers and fresh "
-        "sneakers; crisp urban backdrop, confident casual stance."},
-    "ethnicroyal": {"label": "Ethnic Royal", "emoji": "👑", "clause":
-        "an opulent Indian ethnic look — a richly embroidered lehenga or anarkali with statement "
-        "jewelry and a dupatta; warm regal lighting, festive elegance."},
+    # --- Luxe / status ---
+    "oldhollywood": {"label": "Old Hollywood", "emoji": "🎞️", "group": "Luxe",
+        "fem": "a glamorous bias-cut satin gown with soft finger-wave hair, pearls and a red lip",
+        "masc": "a sharply tailored black tuxedo with a bow tie and slicked-back hair",
+        "look": "warm cinematic studio lighting with a soft vignette, old-Hollywood elegance"},
+    "oldmoney": {"label": "Old Money", "emoji": "🥂", "group": "Luxe",
+        "fem": "an understated old-money look — a cashmere knit, tailored trousers and pearls, no logos",
+        "masc": "an old-money look — a navy blazer, oxford shirt, chinos and loafers, no logos",
+        "look": "heritage-wealth ease, muted neutral palette"},
+    "quietluxury": {"label": "Quiet Luxury", "emoji": "🤎", "group": "Luxe",
+        "fem": "quiet-luxury tailoring — an impeccably cut neutral coat over a fine knit, no branding",
+        "masc": "quiet-luxury tailoring — a beautifully cut overcoat over a cashmere crewneck, no branding",
+        "look": "understated, exquisite fabric, zero logos"},
+    "mobwife": {"label": "Mob Wife", "emoji": "🧥", "group": "Luxe",
+        "fem": "an oversized faux-fur coat, bold gold jewelry, dark sunglasses and a sleek blowout",
+        "masc": "a sharp dark overcoat over a shirt with bold gold accents and slicked-back hair",
+        "look": "moody high-contrast glamour"},
+    # --- Clean & soft ---
+    "cleangirl": {"label": "Clean Look", "emoji": "🤍", "group": "Clean & Soft",
+        "fem": "a minimalist 'clean girl' look — a slicked-back low bun, gold hoops and a neutral tailored set",
+        "masc": "a clean minimalist look — a fitted neutral tee or fine knit with tailored trousers, groomed",
+        "look": "soft natural daylight, fresh and polished"},
+    "coastalgrandma": {"label": "Coastal", "emoji": "🧺", "group": "Clean & Soft",
+        "fem": "a coastal look — breezy linen trousers, an oversized knit and a flowy blouse",
+        "masc": "a coastal look — relaxed linen trousers, an open linen shirt and a light knit",
+        "look": "breezy seaside ease, soft daylight"},
+    "balletcore": {"label": "Balletcore", "emoji": "🩰", "group": "Clean & Soft",
+        "fem": "a balletcore look — a wrap cardigan with ribbon details and a tulle or satin skirt, soft bun",
+        "masc": "a soft minimalist look — a fine knit with tailored trousers and clean lines",
+        "look": "pale, delicate, off-duty softness"},
+    "cottagecore": {"label": "Cottagecore", "emoji": "🌸", "group": "Clean & Soft",
+        "fem": "a cottagecore look — a floral prairie dress with a pinafore and loose waves",
+        "masc": "a cottagecore look — a linen shirt with suspenders and rolled trousers",
+        "look": "pastoral warmth, soft natural light"},
+    # --- Street ---
+    "streetwear": {"label": "Streetwear", "emoji": "🧢", "group": "Street",
+        "fem": "an oversized hoodie or bomber with cargo trousers and fresh sneakers",
+        "masc": "an oversized hoodie or bomber with cargo trousers and fresh sneakers",
+        "look": "crisp urban backdrop, confident casual stance"},
+    "gorpcore": {"label": "Gorpcore", "emoji": "🥾", "group": "Street",
+        "fem": "a gorpcore outdoor look — a technical shell or fleece with cargo trousers and trail sneakers",
+        "masc": "a gorpcore outdoor look — a technical shell or fleece with cargo trousers and trail sneakers",
+        "look": "crisp outdoorsy utility"},
+    "techwear": {"label": "Techwear", "emoji": "🖤", "group": "Street",
+        "fem": "a techwear look — an all-black waterproof shell with tactical straps and cargo pockets",
+        "masc": "a techwear look — an all-black waterproof shell with tactical straps and cargo pockets",
+        "look": "moody futuristic urban"},
+    "y2kpop": {"label": "Y2K Pop", "emoji": "💿", "group": "Street",
+        "fem": "an early-2000s Y2K outfit — a metallic or denim mini with a cropped top, tinted sunglasses and butterfly clips",
+        "masc": "an early-2000s Y2K streetwear look — a baggy denim or tracksuit with a chain, tinted sunglasses and a bucket hat",
+        "look": "flash-lit party energy with playful saturated colour"},
+    # --- Edge / era ---
+    "grunge": {"label": "Grunge", "emoji": "🎸", "group": "Edge & Era",
+        "fem": "a 90s grunge look — a plaid flannel over a band tee with ripped jeans and boots",
+        "masc": "a 90s grunge look — a plaid flannel over a band tee with ripped jeans and boots",
+        "look": "moody, overcast, lived-in"},
+    "darkacademia": {"label": "Dark Academia", "emoji": "📚", "group": "Edge & Era",
+        "fem": "a dark-academia look — a tweed blazer, turtleneck and pleated skirt with a leather satchel",
+        "masc": "a dark-academia look — a tweed blazer, turtleneck and trousers with a leather satchel",
+        "look": "moody library warmth, autumnal"},
+    "ninetiesminimal": {"label": "90s Minimal", "emoji": "⬛", "group": "Edge & Era",
+        "fem": "a sleek 1990s minimalist slip dress with delicate jewelry and straight sleek hair",
+        "masc": "a 1990s minimalist look — a crisp monochrome shirt or fine knit with straight-leg trousers",
+        "look": "matte true-to-life colour, clean uncluttered backdrop"},
+    "regencycore": {"label": "Regency", "emoji": "🎻", "group": "Edge & Era",
+        "fem": "a Regency-inspired look — an empire-waist gown with pearls and romantic florals",
+        "masc": "a Regency-inspired look — a tailored tailcoat with a cravat and waistcoat",
+        "look": "romantic period elegance"},
+    "cowboycore": {"label": "Western", "emoji": "🤠", "group": "Edge & Era",
+        "fem": "a cowgirl look — denim with a fringe jacket, a cowboy hat and boots",
+        "masc": "a western look — denim with a fringe or suede jacket, a cowboy hat and boots",
+        "look": "sun-drenched country warmth"},
+    # --- Glam & pro ---
+    "corporatesiren": {"label": "Corporate", "emoji": "💼", "group": "Glam & Pro",
+        "fem": "a corporate-siren look — a sharp blazer, pencil skirt and heels with sleek hair",
+        "masc": "a power-tailored look — a sharp suit with a crisp shirt, polished",
+        "look": "boardroom power, confident"},
+    "italiansummer": {"label": "Italian Summer", "emoji": "🍅", "group": "Glam & Pro",
+        "fem": "an Italian-summer look — a red or terracotta linen sundress with a straw hat and gold jewelry",
+        "masc": "an Italian-summer look — an open linen shirt in warm tones with tailored shorts and loafers",
+        "look": "sun-drenched Mediterranean warmth"},
+    "bohofestival": {"label": "Boho Festival", "emoji": "🌾", "group": "Glam & Pro",
+        "fem": "a flowy printed maxi with fringe and layered necklaces, loose waves",
+        "masc": "a relaxed open linen or printed shirt with layered beaded necklaces and tousled hair",
+        "look": "warm golden-hour light with a soft open-air backdrop"},
+    # --- Indian — heritage ---
+    "kanjeevaram": {"label": "Kanjeevaram", "emoji": "🪔", "group": "Indian Heritage",
+        "fem": "a lustrous Kanjeevaram-style silk saree with a contrast zari border and temple-gold jewelry",
+        "masc": "a fine silk kurta with a zari-bordered silk angavastram (stole) and a veshti",
+        "look": "warm festive South-Indian elegance"},
+    "banarasi": {"label": "Banarasi", "emoji": "✨", "group": "Indian Heritage",
+        "fem": "a rich Banarasi-style silk saree with intricate gold brocade and heirloom jewelry",
+        "masc": "a regal silk kurta-churidar with a gold-brocade nehru jacket",
+        "look": "opulent North-Indian bridal warmth"},
+    "bandhani": {"label": "Bandhani", "emoji": "🪞", "group": "Indian Heritage",
+        "fem": "a vibrant bandhani tie-dye chaniya choli with mirror-work and oxidised jewelry",
+        "masc": "a bandhani-print kurta with a mirror-work jacket",
+        "look": "festive Navratri energy, bright and celebratory"},
+    "kasavu": {"label": "Kerala Kasavu", "emoji": "🌼", "group": "Indian Heritage",
+        "fem": "a white-and-gold Kerala kasavu saree with jasmine in the hair and gold jewelry",
+        "masc": "a white-and-gold kasavu mundu with a matching angavastram",
+        "look": "serene Onam elegance, cream and gold"},
+    # --- Indian — occasion ---
+    "royallehenga": {"label": "Royal Lehenga", "emoji": "👑", "group": "Indian Occasion",
+        "fem": "an opulent embroidered bridal lehenga with heavy zardozi, a dupatta and statement jewelry",
+        "masc": "a richly embroidered sherwani with a brooch, churidar and a stole",
+        "look": "grand wedding-couture opulence"},
+    "sherwani": {"label": "Sherwani", "emoji": "🤵", "group": "Indian Occasion",
+        "fem": "an embroidered sherwani-inspired jacket over a flowing dress or palazzo",
+        "masc": "a classic embroidered sherwani with churidar, a brooch and a stole",
+        "look": "regal groom elegance"},
+    "anarkali": {"label": "Anarkali", "emoji": "💃", "group": "Indian Occasion",
+        "fem": "a flowing floor-length Anarkali suit with delicate embroidery and a dupatta",
+        "masc": "a long embroidered angrakha-style kurta with churidar",
+        "look": "graceful festive elegance"},
+    "chikankari": {"label": "Chikankari", "emoji": "🧵", "group": "Indian Occasion",
+        "fem": "a delicate white chikankari-embroidered kurta with pastel palazzos",
+        "masc": "a crisp white chikankari-embroidered kurta with a nehru jacket",
+        "look": "soft Lucknowi refinement, white-on-white"},
+    "indowestern": {"label": "Indo-Western", "emoji": "👖", "group": "Indian Occasion",
+        "fem": "an Indo-Western co-ord — an embroidered kurta with tailored palazzos or a cape and modern jewelry",
+        "masc": "an Indo-Western look — a bandhgala jacket over a tee with tailored trousers",
+        "look": "modern metro fusion, culturally rooted"},
 }
 
 
-def _trend_prompt(trend_key: str) -> str:
+def _trend_prompt(trend_key: str, gender: str = "auto") -> str:
     """Instruction for a style-trend render: Nano receives ONLY the person image and restyles the
     SAME person into the chosen iconic aesthetic. No garment image, no impersonation — the user's
-    own face/identity is preserved; only the styling changes."""
+    own face/identity AND gender presentation are preserved; only the styling changes. `gender`
+    (woman|man|neutral|auto) picks the garment variant; 'auto' asks Nano to match the photo."""
     t = _STYLE_TRENDS.get(trend_key) or {}
-    clause = t.get("clause") or "a polished, flattering editorial outfit"
+    fem = t.get("fem") or t.get("clause") or "a polished, flattering editorial outfit"
+    masc = t.get("masc") or fem
+    look = t.get("look") or ""
+    g = (gender or "auto").strip().lower()
+    if g in ("woman", "women", "female", "f", "she"):
+        outfit = fem
+    elif g in ("man", "men", "male", "m", "he"):
+        outfit = masc
+    else:  # neutral / auto — let the photo decide, but never default to womenswear
+        outfit = (f"attire matching the person's own gender presentation in the photo — if they "
+                  f"present feminine: {fem}; if they present masculine: {masc}")
+    tail = (" " + look + ".") if look else ""
     return (
         "Using the image as the person, generate a photorealistic portrait of the SAME person — "
-        "keep their face, identity and body exactly — now styled as " + clause + " "
-        "Dress them head-and-shoulders to mid-body, flattering and realistic. Do not change their "
-        "face or make them look like someone else. No text or watermarks."
+        "keep their face, identity and body exactly. " + _GENDER_GUARD +
+        "Style them in " + outfit + "." + tail +
+        " Flattering and realistic, head to mid-body. Do not change their face or make them look "
+        "like someone else. No text or watermarks."
     )
 
 
@@ -363,15 +485,17 @@ def closet_trends():
     from render import banana as banana_mod
     live = banana_mod.banana_configured()
     return {"live": live,
-            "trends": [{"key": k, "label": v["label"], "emoji": v.get("emoji", "✨")}
+            "trends": [{"key": k, "label": v["label"], "emoji": v.get("emoji", "✨"),
+                        "group": v.get("group", "Trends")}
                        for k, v in _STYLE_TRENDS.items()]}
 
 
 @app.post("/closet/trend")
 async def closet_trend(trend: str = Form(...), owner_hint: str = Form(...),
-                       person: UploadFile = File(...)):
+                       person: UploadFile = File(...), gender: str = Form("auto")):
     """Render the user's own photo into an iconic style trend via Nano (no garment). Synchronous —
-    returns the finished look directly, which the client can add to the ranking tray like any look."""
+    returns the finished look directly, which the client can add to the ranking tray like any look.
+    `gender` (woman|man|neutral|auto) keeps a man from being dressed in womenswear (guardrail)."""
     from app import catalog as catalog_mod
     from render import banana as banana_mod
     from starlette.concurrency import run_in_threadpool
@@ -382,7 +506,7 @@ async def closet_trend(trend: str = Form(...), owner_hint: str = Form(...),
     person_bytes = _normalize_upload(await person.read())
     if not person_bytes:
         raise HTTPException(400, "missing person image")
-    prompt = _trend_prompt(trend) + await run_in_threadpool(_skin_tone_clause, person_bytes)
+    prompt = _trend_prompt(trend, gender) + await run_in_threadpool(_skin_tone_clause, person_bytes)
     try:
         png = await run_in_threadpool(banana_mod.generate, person_bytes, None, prompt)
     except Exception as e:

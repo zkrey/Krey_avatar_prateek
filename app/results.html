@@ -40,13 +40,15 @@
     <div class="muted" id="confthanks" hidden style="margin-top:.5rem">Logged — thanks 💛</div>
   </div>
 
+  <button class="btn primary" id="shareres" style="width:100%;padding:.85rem">📲 Send these results to WhatsApp</button>
   <button class="btn" id="refresh">↻ Refresh votes</button>
-  <button class="btn primary" id="again">Make another ballot</button>
+  <button class="btn" id="again">Make another ballot</button>
   <div class="muted" id="tip"></div>
 
 <script>
 const DATA=__DATA__;   // {set_id}
 const $=id=>document.getElementById(id);
+let RES={};   // {name, image_url, pb, votes, decisive} of the current leader, for sharing
 async function load(){
   let d={looks:[],votes:0};
   try{ const r=await fetch("/results/"+encodeURIComponent(DATA.set_id)+"/data"); d=await r.json(); }catch(e){}
@@ -82,7 +84,28 @@ async function load(){
       : "It's close — a few more votes will break the tie.";
     buildConf(looks[0]);   // current leader
   }
+  const lead = looks[0] || {};
+  RES = {name: lead.name, image_url: lead.image_url, pb: Math.round(lead.p_best||0),
+         votes: d.votes||0, decisive: decisive};
 }
+// Send results to WhatsApp/anywhere — the winner image as a thumbnail + a one-line verdict + link.
+async function thumbFromUrl(u){
+  try{ if(!u) return null; const r=await fetch(u,{mode:"cors"}); if(!r.ok) return null;
+    const b=await r.blob(); return new File([b],"krey-result.jpg",{type:b.type||"image/jpeg"}); }catch(e){ return null; }
+}
+$("shareres").onclick=async()=>{
+  const url=location.origin+"/results/"+encodeURIComponent(DATA.set_id);
+  const text = !RES.votes ? "My Krey fit ranking — vote and see which looks best on me 👇"
+    : RES.decisive ? `Friends picked my best fit: ${RES.name||"the winner"} (${RES.pb}% sure) 👑 — see the full ranking:`
+    : `My fit ranking so far (${RES.votes} votes) — still close, add yours:`;
+  let file=await thumbFromUrl(RES.image_url);
+  try{
+    if(navigator.share && file && navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({title:"Krey results", text, url, files:[file]});
+    } else if(navigator.share){ await navigator.share({title:"Krey results", text, url}); }
+    else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); }
+  }catch(e){}
+};
 
 function sid(){ try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s;}catch(e){return "anon";} }
 let CONF_DONE=false;
