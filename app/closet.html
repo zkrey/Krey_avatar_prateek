@@ -78,6 +78,7 @@
       </div>
     </div>
     <button class="btn primary" id="addphoto">Add your photo</button>
+    <button class="btn" id="selfie" style="margin-top:.5rem">📸 Take a selfie</button>
     <div class="muted" id="gatemsg" style="margin-top:.7rem"></div>
   </div>
 
@@ -132,7 +133,7 @@ if(REF){ try{ fetch("/referral",{method:"POST",headers:{"Content-Type":"applicat
 function markActivated(){ if(ACTIVATED||!REF) return; ACTIVATED=true; try{ fetch("/referral",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({referrer_hint:REF,visitor_hint:sid(),source:"closet",activated:true})}); }catch(e){} }
 function logEvent(g,event_type,channel){ try{ fetch("/closet/event",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({garment_id:g.garment_id,event_type,segment:g.segment,cloth_type:g.cloth_type,session_hint:sid(),channel:channel||null,referrer_hint:REF||null})}); }catch(e){} }
 
-function pickPhoto(cb){ const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; inp.onchange=()=>{ if(inp.files[0]) cb(inp.files[0]); }; inp.click(); }
+function pickPhoto(cb, selfie){ const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; if(selfie) inp.capture="user"; inp.onchange=()=>{ if(inp.files[0]) cb(inp.files[0]); }; inp.click(); }
 
 async function analyze(file){
   $("gatemsg").textContent="Reading your photo… ✨"; $("addphoto").disabled=true;
@@ -313,6 +314,7 @@ async function makeBallot(){
 $("rankbtn").onclick=makeBallot;
 
 $("addphoto").onclick=()=>pickPhoto(analyze);
+$("selfie").onclick=()=>pickPhoto(analyze, true);
 $("changephoto").onclick=()=>pickPhoto(analyze);
 $("unlockbtn").onclick=()=>pickPhoto(analyze);
 $("segfilters").querySelector('[data-s=""]').onclick=()=>{ S=""; syncChips(); load(); };
