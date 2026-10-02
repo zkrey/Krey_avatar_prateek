@@ -338,8 +338,45 @@ async function makeBallot(){
       + ' · <a href="'+esc(results)+'" style="color:var(--gold)">see results</a>';
     try{ localStorage.setItem("krey_last_results", results); }catch(e){}
     const text="Which of these looks best on me? Tap to pick 👇";
-    try{ if(navigator.share){ await navigator.share({title:"Krey",text,url}); } else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); } }catch(e){}
+    // Make the share VISUAL: attach a side-by-side thumbnail of the looks so the chat message
+    // itself shows the fits (not just a link). Falls back to a plain text+link share.
+    const file=await ballotThumb(LOOKS);
+    try{
+      if(navigator.share && file && navigator.canShare && navigator.canShare({files:[file]})){
+        await navigator.share({title:"Krey", text, url, files:[file]});
+      } else if(navigator.share){
+        await navigator.share({title:"Krey", text, url});
+      } else {
+        window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank");
+      }
+    }catch(e){}
   }catch(e){ $("traymsg").textContent="Couldn't create the ballot — try again."; $("rankbtn").disabled=false; }
+}
+// Build a single JPEG collage of up to 3 looks (cover-fit, side by side) to attach to the share
+// sheet. Uses fetch->blob->ImageBitmap so the canvas is never CORS-tainted. Returns a File or null.
+async function ballotThumb(looks){
+  try{
+    const pics=(looks||[]).filter(l=>l.image_url).slice(0,3);
+    if(!pics.length) return null;
+    const bmps=[];
+    for(const l of pics){
+      const r=await fetch(l.image_url,{mode:"cors"});
+      if(!r.ok) return null;
+      bmps.push(await createImageBitmap(await r.blob()));
+    }
+    const cellW=400, cellH=520, gap=10, n=bmps.length;
+    const cv=document.createElement("canvas");
+    cv.width=cellW*n+gap*(n-1); cv.height=cellH;
+    const ctx=cv.getContext("2d"); ctx.fillStyle="#0f1012"; ctx.fillRect(0,0,cv.width,cv.height);
+    bmps.forEach((bm,i)=>{
+      const x=i*(cellW+gap);
+      const s=Math.max(cellW/bm.width, cellH/bm.height);    // cover-fit
+      const dw=bm.width*s, dh=bm.height*s;
+      ctx.drawImage(bm, x+(cellW-dw)/2, (cellH-dh)/2, dw, dh);
+    });
+    const blob=await new Promise(res=>cv.toBlob(res,"image/jpeg",0.9));
+    return blob ? new File([blob],"krey-fits.jpg",{type:"image/jpeg"}) : null;
+  }catch(e){ return null; }
 }
 $("rankbtn").onclick=makeBallot;
 
