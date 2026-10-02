@@ -193,6 +193,27 @@ def _normalize_upload(raw: bytes) -> bytes:
         return raw
 
 
+def _to_jpeg(raw: bytes, max_dim: int = 1280, quality: int = 85) -> tuple[bytes, str, str]:
+    """Compress a rendered look to a web-light JPEG before we store + serve it. Nano returns
+    ~1.5 MB PNGs; re-encoding to a capped JPEG cuts storage/egress ~7× and makes link-preview
+    thumbnails reliable (big PNGs get skipped by WhatsApp/iMessage crawlers). Returns
+    (bytes, content_type, ext); falls back to the original PNG on any failure."""
+    try:
+        import io as _io
+        from PIL import Image
+        im = Image.open(_io.BytesIO(raw)).convert("RGB")
+        if max(im.size) > max_dim:
+            im.thumbnail((max_dim, max_dim), Image.LANCZOS)
+        buf = _io.BytesIO()
+        im.save(buf, format="JPEG", quality=quality, optimize=True)
+        out = buf.getvalue()
+        if out and len(out) < len(raw):           # only swap if it actually got smaller
+            return out, "image/jpeg", "jpg"
+    except Exception:
+        pass
+    return raw, "image/png", "png"
+
+
 @app.post("/closet/analyze")
 async def closet_analyze(person: UploadFile = File(...)):
     """'Detect, don't demand': from the user's photo, return which cloth_types are renderable
@@ -511,7 +532,8 @@ async def closet_trend(trend: str = Form(...), owner_hint: str = Form(...),
         png = await run_in_threadpool(banana_mod.generate, person_bytes, None, prompt)
     except Exception as e:
         raise HTTPException(502, f"render failed: {e}")
-    url = catalog_mod.upload_image(png, content_type="image/png", ext="png")
+    body, ct, ext = _to_jpeg(png)
+    url = catalog_mod.upload_image(body, content_type=ct, ext=ext)
     label = _STYLE_TRENDS[trend]["label"]
     look_id = catalog_mod.create_look(owner_hint=owner_hint, name=f"{label} trend", image_url=url)
     return {"look_id": look_id, "image_url": url,
@@ -549,7 +571,8 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
             png = await run_in_threadpool(banana_mod.generate, person_bytes, garment_bytes, prompt)
         except Exception as e:
             raise HTTPException(502, f"render failed: {e}")
-        url = catalog_mod.upload_image(png, content_type="image/png", ext="png")
+        body, ct, ext = _to_jpeg(png)
+        url = catalog_mod.upload_image(body, content_type=ct, ext=ext)
         look_id = catalog_mod.create_look(owner_hint=owner_hint, name=g.get("name"), image_url=url,
                                           segment=g.get("segment"), subsegment=g.get("subsegment"))
         return {"look_id": look_id, "image_url": url,
@@ -595,7 +618,8 @@ async def closet_tryon_result(job_id: str, garment_id: str, owner_hint: str = "a
     if png is None:
         return Response(status_code=202, content='{"status":"pending"}', media_type="application/json")
     g = catalog_mod.get_garment(garment_id) or {}
-    url = catalog_mod.upload_image(png, content_type="image/png", ext="png")
+    body, ct, ext = _to_jpeg(png)
+    url = catalog_mod.upload_image(body, content_type=ct, ext=ext)
     look_id = catalog_mod.create_look(owner_hint=owner_hint, name=g.get("name"), image_url=url,
                                       segment=g.get("segment"), subsegment=g.get("subsegment"))
     return {"look_id": look_id, "image_url": url, "look_url": f"/look/{look_id}" if look_id else None}

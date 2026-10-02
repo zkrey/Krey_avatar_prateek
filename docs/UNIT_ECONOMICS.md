@@ -52,9 +52,11 @@ platform drives ranking."
 | **Railway** (Service A, Hobby) | $5/mo base + usage; ~$10–40/mo at this scale | Railway usage-based |
 | **Supabase** Pro | $25/mo (8 GB DB, 100 GB storage, 250 GB egress incl.) | storage $0.021/GB, egress $0.09/GB over |
 
-**Render output size matters.** Nano returns ~1.5 MB PNGs. At scale, storage + egress is
-driven by this. Re-encoding looks to **JPEG (~200 KB)** before upload cuts storage/egress
-~7× — the single biggest cost lever after the per-image fee. (Flagged as a quick win.)
+**Render output size — DONE (2026-10).** Nano returned ~1.5 MB PNGs; every rendered look is
+now re-encoded to a capped **JPEG (~200 KB, ≤1280px, q85)** before upload (`_to_jpeg` in
+`app/main.py`, applied to Studio, 80s, Trends and CatVTON). This cut storage + egress **~7×**
+and made link-preview thumbnails reliable (big PNGs were skipped by WhatsApp/iMessage
+crawlers). The per-image Nano fee is now the only large render cost.
 
 ---
 
@@ -82,27 +84,56 @@ Nano session is **~1–2 min of active time**; a CatVTON cold session can hit 5 
 ## 4. Monthly projection — 10k MAU
 
 **Assumptions:** 10,000 monthly active users · 4 renders/user avg · engine mix 80% Nano /
-20% CatVTON · 1.5 ballots/user shared · ~6 voters/ballot · 3 looks viewed each · PNG today.
+20% CatVTON · 1.5 ballots/user shared · ~6 voters/ballot · 3 looks viewed each · **JPEG output
+now live** · Service A run with **2 replicas behind Railway's load balancer** for HA + burst.
 
 | Line | Volume | Cost |
 |---|---|---|
 | Nano renders | 40k × 80% = 32k × $0.067 | **~$2,150** |
 | CatVTON renders | 40k × 20% = 8k × $0.02 | ~$160 |
 | Supabase Pro base | — | $25 |
-| Egress (PNG) | ~400 GB − 250 incl. → 150 GB × $0.09 | ~$14 |
-| Railway | — | ~$30 |
-| **Total opex** | | **≈ $2,380 / month** |
+| Egress (JPEG ~200 KB) | ~55 GB — under 250 GB incl. | ~$0 |
+| Railway — 2 replicas + built-in LB | 2 × ~$25 | ~$50 |
+| CDN in front of image storage (optional) | Cloudflare free–$20 | ~$0–20 |
+| **Total opex** | | **≈ $2,385 / month** |
 
 - **Blended cost / render ≈ $0.058** · **cost / MAU ≈ $0.24.**
-- **Nano is ~90% of the bill** — it is the thing to optimize.
-- **With JPEG + Lite + CatVTON-default-for-clean-shots:** the same 10k MAU drops to **~$900–
-  1,200/mo** (cost/MAU ~$0.10). Those three levers are the roadmap.
+- **Nano is ~90% of the bill** — it is the thing to optimize. JPEG already zeroed the egress
+  line; the next levers are engine mix + model tier.
+- **With Nano Lite ($0.034) + CatVTON-default-for-clean-shots:** the same 10k MAU drops to
+  **~$900–1,200/mo** (cost/MAU ~$0.10). That's the roadmap.
 
 **Scale-up (linear in renders):** 100k MAU ≈ **$24k/mo** at today's mix, or **~$9–12k** with
 the levers. Cost is almost entirely **marginal per render** — there is no step-function until
 you decide to self-host the frontier model.
 
 ---
+
+## 4b. Load balancing & handling traffic spikes
+
+Good news: **most of the load balancing is already managed for us** — the cost is small and
+mostly for the one component we run ourselves (Service A on Railway).
+
+| Layer | Who load-balances it | Cost to us |
+|---|---|---|
+| **Render — Nano (Gemini API)** | Google, server-side (managed endpoint, autoscaled) | $0 infra — pay per image only |
+| **Render — CatVTON (Modal)** | Modal autoscales containers + spreads concurrency | $0 infra — pay per GPU-sec; set a max-container cap |
+| **Service A (FastAPI on Railway)** | **Railway's built-in edge proxy spreads traffic across replicas** — no separate LB product to buy | ~$25 **per extra replica**/mo |
+| **Image serving (Supabase Storage)** | fine to ~hundreds of GB; a **CDN** (Cloudflare) absorbs voter spikes | $0–20/mo |
+
+**What to actually provision for traffic:**
+- **2–3 Railway replicas** (`numReplicas`) for a launch push: HA + burst headroom, behind
+  Railway's LB automatically. ~$50–75/mo. Scale replicas up on a viral day, back down after.
+- **A CDN in front of look images** once sharing scales — ballot/results images are read far
+  more than written (6+ voters per ballot). Cloudflare caches them, so Supabase egress stays
+  flat regardless of virality. ~$0 (free tier) to ~$20/mo.
+- **A render rate-limit / budget guard** — this is the important one for *cost*, not latency:
+  a sudden viral spike load-balances fine but can run the **Nano bill** up fast. Cap renders
+  per session/IP and set a daily spend ceiling so a spike can't blow the budget.
+
+**Added traffic-handling cost:** budget **~$50–95/mo at 10k MAU** (replicas + optional CDN) on
+top of the render opex. It scales with replica count, not linearly with users — the per-render
+Nano fee remains the thing that grows with usage.
 
 ## 5. Capex vs opex
 
