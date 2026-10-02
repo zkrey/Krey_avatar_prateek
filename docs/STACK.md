@@ -43,7 +43,7 @@ MediaPipe + Monk skin-tone profiling and a stdlib ranking engine.
 | Engine | What it does | Where | Status |
 |---|---|---|---|
 | **CatVTON** (SD-1.5 inpaint + DensePose/SCHP) | faithful real garment on the real photo | self-hosted, **Modal** app `krey-render` (T4), fire-and-poll | **Default** |
-| **SDXL + InstantID** | stylised "80s vibe", identity from selfie, garment via text | self-hosted, **Modal** app `krey-vibe` (L4), model-CPU-offload | Beta |
+| **SDXL + InstantID** | stylised "80s vibe", identity from selfie, garment via text | self-hosted, **Modal** app `krey-vibe` (L4), model-CPU-offload | Retired from UI — the 80s look now routes to Nano ("80s ✨" chip = `banana80s`); backend branch kept but unsurfaced |
 | **Nano Banana / Gemini 2.5 Flash Image** | person + garment images composed in one pass (frontier quality) | Google **Gemini API** (closed, paid) | **Live** — billing enabled 2026-10, verified end-to-end |
 
 - Render weights are baked into the Modal images at build time.

@@ -92,8 +92,8 @@
       <div class="flabel">Render style</div>
       <div class="filters" id="modefilters">
         <button class="chip on" data-m="banana" hidden>Studio ✨</button>
+        <button class="chip" data-m="banana80s" hidden>80s ✨</button>
         <button class="chip" data-m="catvton">Realistic fit</button>
-        <button class="chip" data-m="vibe" hidden>80s Vibe · beta</button>
       </div>
       <div class="muted" id="modehint" style="margin:-.2rem 0 .3rem;font-size:.8rem"></div>
     </div>
@@ -121,8 +121,8 @@ const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",
 let T="", S="", RENDER_LIVE=false, VIBE_LIVE=false, BANANA_LIVE=false, MODE="catvton", MODE_PICKED=false, ALL=[], ALLOWED=[], PHOTO=null, LOOKS=[];
 const MODE_HINT={
   banana:"AI studio — your face + the real garment composed together. ~15–30s. Recommended.",
-  catvton:"Faithful fallback — the real garment on your real photo. Best with a clean full-body shot.",
-  vibe:"Beta · AI 80s portrait — stylised you (gets the vibe, not the exact garment)."
+  banana80s:"AI 80s portrait — the real you + the real garment, retro-styled. ~15–30s.",
+  catvton:"Faithful fallback — the real garment on your real photo. Best with a clean full-body shot."
 };
 const TYPELABEL={upper:"Tops",lower:"Bottoms",overall:"Dresses"};
 
@@ -204,7 +204,7 @@ async function load(){
 }
 function setupModeToggle(){
   const box=$("modebox"); if(!box) return;
-  const live={catvton:true, banana:BANANA_LIVE, vibe:VIBE_LIVE};
+  const live={catvton:true, banana:BANANA_LIVE, banana80s:BANANA_LIVE, vibe:VIBE_LIVE};
   // only offer the choice when at least one alt engine is live; else stay on the realistic path
   if(!BANANA_LIVE && !VIBE_LIVE){ box.hidden=true; MODE="catvton"; return; }
   box.hidden=false;
@@ -243,7 +243,7 @@ async function onShare(g){
 }
 async function onTry(g){
   logEvent(g,"try");
-  const live = MODE==="vibe" ? VIBE_LIVE : (MODE==="banana" ? BANANA_LIVE : RENDER_LIVE);
+  const live = (MODE==="banana"||MODE==="banana80s") ? BANANA_LIVE : (MODE==="vibe" ? VIBE_LIVE : RENDER_LIVE);
   if(!live){ alert("This render style isn't switched on yet."); return; }
   if(!PHOTO){ alert("Add your photo first."); return; }
   showRender("loading",g);
@@ -275,7 +275,9 @@ function showRender(state,g,j){
   let ov=$("renderov");
   if(!ov){ ov=document.createElement("div"); ov.id="renderov"; ov.style.cssText="position:fixed;inset:0;background:#000d;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px"; document.body.appendChild(ov); }
   if(state==="loading"){
-    const line = MODE==="banana"
+    const line = MODE==="banana80s"
+      ? "styling your 80s look ✨ — your face + the real garment, retro-graded. About 15–30 seconds."
+      : MODE==="banana"
       ? "composing your face + the real garment ✨ — about 15–30 seconds."
       : MODE==="vibe"
       ? "styling your 80s look ✨ — the first one warms the GPU (up to ~3–4 min); after that it's quick. Keep this open."

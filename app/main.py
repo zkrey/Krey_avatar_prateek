@@ -280,19 +280,34 @@ def _skin_tone_clause(person_bytes: bytes) -> str:
         return ""
 
 
-def _banana_prompt(g: dict) -> str:
+def _banana_prompt(g: dict, style: str = "studio") -> str:
     """Instruction for Nano Banana (Gemini). It receives the person image (1st) and the garment
     image (2nd), so we ask it to dress the SAME person in the ACTUAL garment shown — real garment,
-    real identity, light 80s flavour."""
+    real identity. `style` picks the aesthetic:
+      - "studio"  : clean, faithful, flattering editorial portrait (the default Studio look).
+      - "eighties": the 80s trend — strong 1980s retro-portrait styling, still the same person and
+        the actual garment (this replaces the old SDXL+InstantID vibe path, which used the garment
+        as text only and lost identity)."""
     name = g.get("name") or "the outfit"
-    return (
+    base = (
         "Using the first image as the person and the second image as the garment, generate a "
         f"photorealistic image of the SAME person — keep their face and identity exactly — now "
         f"wearing the garment from the second image ({name}). Fit the garment naturally to their "
-        "body and pose. Give it a subtle 1980s retro-portrait vibe: warm film lighting, gentle "
-        "vintage color grade, clean flattering background. Keep it realistic and tasteful, "
-        "no text or watermarks."
+        "body and pose. "
     )
+    if style == "eighties":
+        look = (
+            "Style it as a bold 1980s retro studio portrait: warm film lighting with a soft glow, "
+            "vintage color grade and gentle film grain, feathered-light rim highlights, and a clean "
+            "retro studio backdrop (soft gradient or muted pastel). Keep the EXACT garment from the "
+            "second image — do not restyle or replace it. "
+        )
+    else:
+        look = (
+            "Keep it a clean, flattering editorial portrait: natural lighting, true-to-life colour, "
+            "a simple uncluttered background. "
+        )
+    return base + look + "Keep it realistic and tasteful, no text or watermarks."
 
 
 @app.post("/closet/tryon")
@@ -311,14 +326,16 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
     if not person_bytes:
         raise HTTPException(400, "missing person image")
 
-    if mode == "banana":
+    if mode in ("banana", "banana80s"):
         # Nano Banana / Gemini: person + garment images -> one composed image, synchronously
         # (fast enough to finish inside the request). Returns the finished look directly.
+        # "banana80s" is the 80s trend routed through Nano (same engine, stronger retro styling).
         from render import banana as banana_mod
         if not banana_mod.banana_configured():
             raise HTTPException(503, "nano-banana backend not configured (set GEMINI_API_KEY)")
+        style = "eighties" if mode == "banana80s" else "studio"
         garment_bytes = catalog_mod.fetch_bytes(g.get("image_url"))
-        prompt = _banana_prompt(g) + await run_in_threadpool(_skin_tone_clause, person_bytes)
+        prompt = _banana_prompt(g, style) + await run_in_threadpool(_skin_tone_clause, person_bytes)
         try:
             png = await run_in_threadpool(banana_mod.generate, person_bytes, garment_bytes, prompt)
         except Exception as e:
@@ -327,7 +344,7 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
         look_id = catalog_mod.create_look(owner_hint=owner_hint, name=g.get("name"), image_url=url,
                                           segment=g.get("segment"), subsegment=g.get("subsegment"))
         return {"look_id": look_id, "image_url": url,
-                "look_url": f"/look/{look_id}" if look_id else None, "mode": "banana", "done": True}
+                "look_url": f"/look/{look_id}" if look_id else None, "mode": mode, "done": True}
 
     if mode == "vibe":
         if not render_client.vibe_configured():
