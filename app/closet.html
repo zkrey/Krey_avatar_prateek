@@ -370,13 +370,14 @@ function showRender(state,g,j){
     const url=location.origin+(j.look_url||"/closet");
     $("rov_share").onclick=async()=>{
       const text=`Check out this ${g.name} on me — Krey ✨`;
-      let file=null; try{ file=await thumbFromUrls([j.image_url]); }catch(e){}
+      let file=null, channel="native"; try{ file=await thumbFromUrls([j.image_url]); }catch(e){}
       try{
         if(navigator.share && file && navigator.canShare && navigator.canShare({files:[file]})){
-          await navigator.share({title:"Krey", text, url, files:[file]});   // attach the look so a thumbnail shows
-        } else if(navigator.share){ await navigator.share({title:"Krey",text,url}); }
-        else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); }
+          await navigator.share({title:"Krey", text, url, files:[file]}); channel="native";   // attach the look so a thumbnail shows
+        } else if(navigator.share){ await navigator.share({title:"Krey",text,url}); channel="native"; }
+        else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); channel="whatsapp"; }
       }catch(e){}
+      logEvent(g,"share",channel);
     };
     if($("rov_rank")) $("rov_rank").onclick=()=>{ ov.remove(); makeBallot(); };
     $("rov_close").onclick=()=>ov.remove();
@@ -433,17 +434,18 @@ async function makeBallot(){
 // Rebuilds the visual thumbnail from the given image URLs (works even after a page reload).
 async function shareBallot(url, thumbUrls){
   const text="Which of these looks best on me? Tap to pick 👇";
-  let file=null;
+  let file=null, channel="native";
   try{ file=await thumbFromUrls(thumbUrls); }catch(e){}
   try{
     if(navigator.share && file && navigator.canShare && navigator.canShare({files:[file]})){
-      await navigator.share({title:"Krey", text, url, files:[file]});
+      await navigator.share({title:"Krey", text, url, files:[file]}); channel="native";
     } else if(navigator.share){
-      await navigator.share({title:"Krey", text, url});
+      await navigator.share({title:"Krey", text, url}); channel="native";
     } else {
-      window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank");
+      window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); channel="whatsapp";
     }
   }catch(e){}
+  logEvent({garment_id:"ballot"},"share",channel);   // reshare + channel counter
 }
 // --- persistent ballot store so the owner never loses their rankings ---
 function getBallots(){ try{ return JSON.parse(localStorage.getItem("krey_ballots")||"[]"); }catch(e){ return []; } }

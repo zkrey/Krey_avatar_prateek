@@ -62,6 +62,12 @@ MediaPipe + Monk skin-tone profiling and a stdlib ranking engine.
   (`app/skin_tone.py` + `app/monk.py`); measured tone is fed into the generative
   render prompts for exposed-skin consistency.
 
+### Analytics & unit economics
+- `/admin?token=…` — live dashboard: realtime active users, renders, reshares, platform
+  breakdowns, referral first-timers, cycle count, Glicko-2 leaderboard, K-factor,
+  confidence lift. See [`UNIT_ECONOMICS.md`](./UNIT_ECONOMICS.md) for per-activity costs,
+  the 10k-MAU monthly projection, downtime/redundancy, and capex vs opex.
+
 ### Ranking engine
 - `app/rating.py` — pure stdlib: Glicko-2, Bradley-Terry (regularized Zermelo),
   Plackett-Luce (per-rank probabilities), Kendall's τ (self↔crowd convergence),

@@ -47,6 +47,23 @@
   </div>
   <div class="verdict" id="verdict"></div>
 
+  <h2>Live <span class="muted" style="font-size:.75rem;text-transform:none">— usage right now</span></h2>
+  <div class="kpis">
+    <div class="kpi"><div class="n big" id="l_active">–</div><div class="l">Active now</div><div class="s">last 15 min</div></div>
+    <div class="kpi"><div class="n" id="l_today">–</div><div class="l">Active today</div></div>
+    <div class="kpi"><div class="n" id="l_users">–</div><div class="l">Total users</div><div class="s">distinct browsers</div></div>
+    <div class="kpi"><div class="n" id="l_renders">–</div><div class="l">Renders</div><div class="s">photos generated</div></div>
+    <div class="kpi"><div class="n" id="l_reshares">–</div><div class="l">Reshares</div></div>
+  </div>
+
+  <h2>Growth loop</h2>
+  <div class="kpis">
+    <div class="kpi"><div class="n" id="g_first">–</div><div class="l">Referral first-timers</div></div>
+    <div class="kpi"><div class="n" id="g_act">–</div><div class="l">Activations</div></div>
+    <div class="kpi"><div class="n big" id="g_cycles">–</div><div class="l">Total cycles</div><div class="s">rank→referral loops</div></div>
+    <div class="kpi"><div class="n" id="g_cyc_owner">–</div><div class="l">Cycles / owner</div></div>
+  </div>
+
   <h2>Funnel</h2>
   <div class="kpis">
     <div class="kpi"><div class="n" id="f_looks">–</div><div class="l">Looks</div></div>
@@ -61,8 +78,12 @@
   <table id="lb"><thead><tr><th>#</th><th>Look</th><th>Segment</th><th class="num">Rating</th><th class="num">W/G</th></tr></thead><tbody></tbody></table>
 
   <div class="grid2">
-    <div><h2>Shares by segment</h2><table id="seg"><tbody></tbody></table></div>
+    <div><h2>Ranking clicks by platform</h2><table id="plat"><tbody></tbody></table></div>
     <div><h2>Shares by channel</h2><table id="chan"><tbody></tbody></table></div>
+  </div>
+  <div class="grid2">
+    <div><h2>Referrals by platform</h2><table id="refplat"><tbody></tbody></table></div>
+    <div><h2>Shares by segment</h2><table id="seg"><tbody></tbody></table></div>
   </div>
 
 <script>
@@ -93,6 +114,13 @@ async function load(){
   const sr = (T.views? (T.shares/T.views) : 0);
   $("k_share").textContent = T.views? (Math.round(sr*100)+"%") : "–";
   $("k_votes").textContent = T.votes||0;
+  // live + growth
+  const L=d.live||{}, G=d.growth||{};
+  $("l_active").textContent=L.active_15m||0; $("l_today").textContent=L.active_today||0;
+  $("l_users").textContent=L.users_total||0; $("l_renders").textContent=L.renders||0;
+  $("l_reshares").textContent=L.reshares||0;
+  $("g_first").textContent=G.first_timers||0; $("g_act").textContent=G.activations||0;
+  $("g_cycles").textContent=G.total_cycles||0; $("g_cyc_owner").textContent=G.avg_cycles_per_owner||0;
   // funnel
   $("f_looks").textContent=T.looks||0; $("f_views").textContent=T.views||0;
   $("f_tries").textContent=T.tries||0; $("f_shares").textContent=T.shares||0;
@@ -114,6 +142,8 @@ async function load(){
     : `<tr><td colspan="5" class="muted">no votes yet</td></tr>`;
   rows("seg", d.shares_by_segment);
   rows("chan", d.shares_by_channel);
+  rows("plat", d.rank_visits_by_platform);
+  rows("refplat", d.referrals_by_platform);
   $("asof").textContent = "updated "+new Date().toLocaleTimeString();
 }
 $("refresh").onclick=load;

@@ -358,10 +358,10 @@ def admin_snapshot() -> dict:
 
     votes_raw = _get_all("rank_votes?select=set_id,winner_look_id,loser_look_id")
     looks = _get_all("looks?select=look_id,name,image_url,owner_hint,segment,confidence_self")
-    referrals = _get_all("referrals?select=referrer_hint,activated")
-    events = _get_all("garment_events?select=event_type,segment,channel")
+    referrals = _get_all("referrals?select=referrer_hint,visitor_hint,activated,source,created_at")
+    events = _get_all("garment_events?select=event_type,segment,channel,session_hint,garment_id,created_at")
     conf = _get_all("confidence_marks?select=set_id,look_id,owner_hint,phase,value")
-    sets = _get_all("rank_sets?select=set_id,look_ids")
+    sets = _get_all("rank_sets?select=set_id,owner_hint,look_ids")
 
     # --- Glicko-2 leaderboard ---
     look_by_id = {l["look_id"]: l for l in looks}
@@ -437,6 +437,56 @@ def admin_snapshot() -> dict:
             by_segment[s] = by_segment.get(s, 0) + 1
             by_channel[c] = by_channel.get(c, 0) + 1
 
+    # --- realtime + growth counters the social test needs ---
+    import datetime as _dt
+
+    def _parse(ts):
+        if not ts:
+            return None
+        try:
+            return _dt.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    now = _dt.datetime.now(_dt.timezone.utc)
+    sess_all, sess_15m, sess_today = set(), set(), set()
+    renders_total = reshares_total = 0
+    rank_visits_by_platform = {}
+    for e in events:
+        sh = e.get("session_hint")
+        when = _parse(e.get("created_at"))
+        if sh:
+            sess_all.add(sh)
+            if when:
+                if (now - when).total_seconds() <= 900:
+                    sess_15m.add(sh)
+                if when.date() == now.date():
+                    sess_today.add(sh)
+        et = e.get("event_type")
+        if et == "try":
+            renders_total += 1                         # each try == one render
+        elif et == "share":
+            reshares_total += 1
+        # inbound ranking clicks tagged with the platform they came from (garment_id='rank')
+        if e.get("garment_id") == "rank" and et == "view":
+            p = e.get("channel") or "direct"
+            rank_visits_by_platform[p] = rank_visits_by_platform.get(p, 0) + 1
+
+    # referral first-timers = distinct people who arrived via someone's link
+    first_timers = {r.get("visitor_hint") for r in referrals if r.get("visitor_hint")}
+    referrals_by_platform = {}
+    for r in referrals:
+        src = (r.get("source") or "")
+        plat = src.split("/", 1)[1] if "/" in src else "direct"
+        referrals_by_platform[plat] = referrals_by_platform.get(plat, 0) + 1
+
+    # cycle count: a cycle = one completed rank -> referral -> (new user) loop. Approximate it as
+    # activations (each activated referral is one new user entering the loop); avg per owner is
+    # activations / distinct owners who actually created a ballot.
+    ballot_owners = {s.get("owner_hint") for s in sets if s.get("owner_hint")}
+    total_cycles = activations
+    avg_cycles_per_owner = round(activations / len(ballot_owners), 2) if ballot_owners else 0.0
+
     return {
         "leaderboard": leaderboard[:50],
         "totals": {
@@ -454,6 +504,22 @@ def admin_snapshot() -> dict:
                         "samples": len(taus)},
         "shares_by_segment": by_segment,
         "shares_by_channel": by_channel,
+        "live": {
+            "active_15m": len(sess_15m),        # realtime active users (last 15 min)
+            "active_today": len(sess_today),
+            "users_total": len(sess_all),       # distinct browsers ever
+            "renders": renders_total,           # photo render counter
+            "reshares": reshares_total,         # reshare counter
+        },
+        "rank_visits_by_platform": rank_visits_by_platform,   # which platform drives ranking clicks
+        "referrals_by_platform": referrals_by_platform,
+        "growth": {
+            "first_timers": len(first_timers),  # distinct referred visitors
+            "activations": activations,
+            "total_cycles": total_cycles,
+            "avg_cycles_per_owner": avg_cycles_per_owner,
+            "ballot_owners": len(ballot_owners),
+        },
     }
 
 

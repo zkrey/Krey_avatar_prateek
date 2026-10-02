@@ -54,8 +54,23 @@ const $=id=>document.getElementById(id);
 function sid(){ try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s;}catch(e){return "anon";} }
 const REF = DATA.ref || DATA.owner_hint || new URLSearchParams(location.search).get("ref") || "";
 try{ if(REF) localStorage.setItem("krey_ref", REF); }catch(e){}
+function platformFromReferrer(){
+  const r=(document.referrer||"").toLowerCase();
+  if(/whatsapp|wa\.me/.test(r)) return "whatsapp";
+  if(/instagram/.test(r)) return "instagram";
+  if(/facebook|fb\./.test(r)) return "facebook";
+  if(/t\.me|telegram/.test(r)) return "telegram";
+  if(/snapchat/.test(r)) return "snapchat";
+  if(/twitter|x\.com|t\.co/.test(r)) return "twitter";
+  if(/linkedin/.test(r)) return "linkedin";
+  return r ? "other" : "direct";
+}
+const PLAT = platformFromReferrer();
+// record the referral (tag the platform in source) + an inbound 'rank view' for platform analytics
 if(REF){ try{ fetch("/referral",{method:"POST",headers:{"Content-Type":"application/json"},
-  body:JSON.stringify({referrer_hint:REF,visitor_hint:sid(),source:"rank"})}); }catch(e){} }
+  body:JSON.stringify({referrer_hint:REF,visitor_hint:sid(),source:"rank/"+PLAT})}); }catch(e){} }
+try{ fetch("/closet/event",{method:"POST",headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({garment_id:"rank",event_type:"view",channel:PLAT,session_hint:sid(),referrer_hint:REF||null})}); }catch(e){}
 
 const looks = DATA.looks||[];
 if(DATA.name) $("hd").textContent = "Help "+DATA.name+" pick — which works better?";

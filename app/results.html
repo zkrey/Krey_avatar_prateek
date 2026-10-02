@@ -98,13 +98,15 @@ $("shareres").onclick=async()=>{
   const text = !RES.votes ? "My Krey fit ranking — vote and see which looks best on me 👇"
     : RES.decisive ? `Friends picked my best fit: ${RES.name||"the winner"} (${RES.pb}% sure) 👑 — see the full ranking:`
     : `My fit ranking so far (${RES.votes} votes) — still close, add yours:`;
-  let file=await thumbFromUrl(RES.image_url);
+  let file=await thumbFromUrl(RES.image_url), channel="native";
   try{
     if(navigator.share && file && navigator.canShare && navigator.canShare({files:[file]})){
-      await navigator.share({title:"Krey results", text, url, files:[file]});
-    } else if(navigator.share){ await navigator.share({title:"Krey results", text, url}); }
-    else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); }
+      await navigator.share({title:"Krey results", text, url, files:[file]}); channel="native";
+    } else if(navigator.share){ await navigator.share({title:"Krey results", text, url}); channel="native"; }
+    else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); channel="whatsapp"; }
   }catch(e){}
+  try{ fetch("/closet/event",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({garment_id:"results",event_type:"share",channel:channel,session_hint:sid()})}); }catch(e){}
 };
 
 function sid(){ try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s;}catch(e){return "anon";} }
