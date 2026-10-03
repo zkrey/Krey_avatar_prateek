@@ -684,6 +684,17 @@ _STYLE_TRENDS: dict[str, dict] = {
         "fem": "an airport-fashion look — an oversized blazer or hoodie over wide-leg pants, chunky sneakers, oversized sunglasses and a designer tote, off-duty-celebrity vibe",
         "masc": "an airport-fashion look — a relaxed bomber or hoodie with joggers, fresh sneakers, a cap and sunglasses, off-duty-celebrity vibe",
         "look": "shot inside a sleek modern airport terminal with a travelator and gate signage behind them, candid paparazzi energy"},
+    # --- Social DP: profile-photo looks (tight headshot crop, via per-entry `frame`) ---
+    "linkedin": {"label": "LinkedIn DP", "emoji": "💼", "group": "Social DP",
+        "fem": "a polished LinkedIn-headshot look — a well-tailored blazer over a simple top, minimal jewelry and neat hair",
+        "masc": "a polished LinkedIn-headshot look — a sharp blazer or crisp shirt (optionally a tie), neatly groomed",
+        "look": "a clean, softly-lit neutral studio background; approachable, confident and professional",
+        "frame": "Frame it as a clean professional head-and-shoulders LinkedIn headshot — tight crop, sharp focus, eyes to camera."},
+    "instagram": {"label": "Instagram DP", "emoji": "📸", "group": "Social DP",
+        "fem": "a trendy Instagram-DP look — a chic, on-trend outfit with glowy skin and effortless styling",
+        "masc": "a trendy Instagram-DP look — a stylish fitted outfit with on-trend styling and fresh grooming",
+        "look": "warm aesthetic lighting with a softly blurred, trendy backdrop",
+        "frame": "Frame it as a stylish head-and-shoulders profile portrait with shallow depth of field."},
 }
 
 
@@ -704,14 +715,15 @@ def _trend_prompt(trend_key: str, gender: str = "auto") -> str:
     else:  # neutral / auto — let the photo decide, but never default to womenswear
         outfit = (f"attire matching the person's own gender presentation in the photo — if they "
                   f"present feminine: {fem}; if they present masculine: {masc}")
+    frame = t.get("frame") or ("Frame it from head to roughly waist so the setting behind them is "
+                               "clearly visible, as a real photo taken on location.")
     tail = (" Scene: " + look + ".") if look else ""
     return (
         "Using the image as the person, generate a photorealistic portrait of the SAME person — "
         "keep their face, identity and body exactly. " + _GENDER_GUARD +
-        "Style them in " + outfit + "." + tail +
-        " Frame it from head to roughly waist so the setting behind them is clearly visible, as a "
-        "real photo taken on location. Flattering and realistic. Do not change their face or make "
-        "them look like someone else. No text or watermarks."
+        "Style them in " + outfit + "." + tail + " " + frame +
+        " Flattering and realistic. Do not change their face or make them look like someone else. "
+        "No text or watermarks."
     )
 
 
