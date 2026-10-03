@@ -444,7 +444,10 @@ def admin_snapshot() -> dict:
         if not ts:
             return None
         try:
-            return _dt.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+            dt = _dt.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+            if dt.tzinfo is None:                       # force tz-aware so arithmetic with `now` is safe
+                dt = dt.replace(tzinfo=_dt.timezone.utc)
+            return dt
         except Exception:
             return None
 
