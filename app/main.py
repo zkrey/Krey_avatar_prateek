@@ -646,39 +646,44 @@ _STYLE_TRENDS: dict[str, dict] = {
         "fem": "a crisp handloom cotton saree with a plain border and a draped shawl, understated and dignified",
         "masc": "a white khadi kurta-pyjama with a sleeveless Nehru jacket (bandi), clean and formal",
         "look": "plain, dignified public-figure formality"},
-    # --- Vacation: top spots around the globe ---
+    # --- Vacation: top spots around the globe. `look` names a recognisable on-location backdrop so
+    #     the render looks authentically shot there (the person really appears at the destination). ---
     "goa": {"label": "Goa", "emoji": "🏖️", "group": "Vacation",
         "fem": "a Goa beach look — a crochet or linen co-ord with a flowy sarong, shell jewelry and beachy waves",
         "masc": "a Goa beach look — an open linen shirt with shorts, a wooden-bead necklace and sunglasses",
-        "look": "golden-hour palm-fringed beach"},
+        "look": "shot on a palm-fringed Goa beach at golden hour, the sea, sand and palms clearly behind them"},
     "santorini": {"label": "Santorini", "emoji": "🏛️", "group": "Vacation",
         "fem": "a Santorini look — a white flowy sundress with blue accents and a straw hat",
         "masc": "a Santorini look — a crisp white linen shirt with beige chinos",
-        "look": "whitewashed Aegean blue-and-white, bright sun"},
+        "look": "shot in Santorini with the whitewashed blue-domed houses and the Aegean sea clearly behind them"},
     "bali": {"label": "Bali", "emoji": "🌴", "group": "Vacation",
         "fem": "a Bali resort look — a tropical floral dress with a frangipani flower in the hair",
         "masc": "a Bali resort look — a batik tropical-print shirt with linen trousers",
-        "look": "lush green tropical resort"},
+        "look": "shot at a lush Bali resort with tropical greenery and rice terraces clearly behind them"},
     "maldives": {"label": "Maldives", "emoji": "🏝️", "group": "Vacation",
         "fem": "a Maldives beach-luxe look — a flowing kaftan swim cover-up with gold jewelry and a sunhat",
         "masc": "a Maldives look — an open linen shirt with tailored swim shorts",
-        "look": "turquoise overwater-villa luxe"},
+        "look": "shot on a Maldives overwater-villa deck with the turquoise lagoon clearly behind them"},
     "dubai": {"label": "Dubai", "emoji": "🏙️", "group": "Vacation",
         "fem": "a Dubai glam look — an elegant maxi with bold statement gold jewelry",
         "masc": "a Dubai look — a sharp smart-casual blazer over a tee with loafers",
-        "look": "opulent desert-city glamour, skyline backdrop"},
+        "look": "shot in Dubai with the Burj Khalifa and the city skyline clearly behind them"},
     "paris": {"label": "Paris", "emoji": "🗼", "group": "Vacation",
         "fem": "a Parisian-chic look — a belted trench over a striped top with a beret and red lip",
         "masc": "a Parisian look — a tailored overcoat over a fine knit with a scarf",
-        "look": "elegant café-lined Paris street"},
+        "look": "shot in Paris with the Eiffel Tower and a café-lined street clearly behind them"},
     "swissalps": {"label": "Swiss Alps", "emoji": "🎿", "group": "Vacation",
         "fem": "an après-ski look — a chunky fur-trim knit with a beanie and ski pants",
         "masc": "an après-ski look — a sleek ski jacket with a knit beanie",
-        "look": "snowy alpine resort, crisp winter light"},
+        "look": "shot on a snowy Swiss Alps slope with the mountain peaks clearly behind them"},
     "hawaii": {"label": "Hawaii", "emoji": "🍍", "group": "Vacation",
         "fem": "a Hawaii look — a bright floral sundress with a flower lei",
         "masc": "a Hawaii look — a classic aloha (Hawaiian) shirt with shorts",
-        "look": "sunny tropical island, hibiscus colours"},
+        "look": "shot on a sunny Hawaiian beach with palm trees and hibiscus clearly behind them"},
+    "airport": {"label": "Airport", "emoji": "🛫", "group": "Vacation",
+        "fem": "an airport-fashion look — an oversized blazer or hoodie over wide-leg pants, chunky sneakers, oversized sunglasses and a designer tote, off-duty-celebrity vibe",
+        "masc": "an airport-fashion look — a relaxed bomber or hoodie with joggers, fresh sneakers, a cap and sunglasses, off-duty-celebrity vibe",
+        "look": "shot inside a sleek modern airport terminal with a travelator and gate signage behind them, candid paparazzi energy"},
 }
 
 
@@ -699,13 +704,14 @@ def _trend_prompt(trend_key: str, gender: str = "auto") -> str:
     else:  # neutral / auto — let the photo decide, but never default to womenswear
         outfit = (f"attire matching the person's own gender presentation in the photo — if they "
                   f"present feminine: {fem}; if they present masculine: {masc}")
-    tail = (" " + look + ".") if look else ""
+    tail = (" Scene: " + look + ".") if look else ""
     return (
         "Using the image as the person, generate a photorealistic portrait of the SAME person — "
         "keep their face, identity and body exactly. " + _GENDER_GUARD +
         "Style them in " + outfit + "." + tail +
-        " Flattering and realistic, head to mid-body. Do not change their face or make them look "
-        "like someone else. No text or watermarks."
+        " Frame it from head to roughly waist so the setting behind them is clearly visible, as a "
+        "real photo taken on location. Flattering and realistic. Do not change their face or make "
+        "them look like someone else. No text or watermarks."
     )
 
 
