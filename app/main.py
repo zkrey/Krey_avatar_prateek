@@ -193,22 +193,66 @@ def _normalize_upload(raw: bytes) -> bytes:
         return raw
 
 
+# Burned-in watermark so the URL travels WITH the pixels — when a rendered look is saved,
+# screenshotted, or re-shared stripped of its link, the brand + URL stays visible on the image
+# (the only "backlink" that survives a bare image file; alt text / links do not). Kept classy:
+# small, low-opacity, bottom-right, no emoji. Configurable via KREY_WATERMARK; empty = off.
+_WATERMARK = os.environ.get("KREY_WATERMARK", "krey-labs-production.up.railway.app")
+
+
+def _watermark(im):
+    """Draw a subtle bottom-right brand/URL caption on the rendered image. Small and understated
+    (soft white, low opacity, feathered shadow for legibility on any background). No-op on any
+    failure or when KREY_WATERMARK is blank."""
+    if not _WATERMARK:
+        return im
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        W, H = im.size
+        fs = max(12, int(H * 0.021))                 # ~2% of height — present but not shouting
+        font = None
+        for p in ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                  "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"):
+            try:
+                font = ImageFont.truetype(p, fs); break
+            except Exception:
+                pass
+        if font is None:
+            try:
+                font = ImageFont.load_default(size=fs)   # Pillow ≥10.1: scalable default
+            except Exception:
+                font = ImageFont.load_default()
+        text = "".join(ch for ch in _WATERMARK if ord(ch) < 128)   # ASCII only — no tofu glyphs
+        over = Image.new("RGBA", im.size, (0, 0, 0, 0))
+        d = ImageDraw.Draw(over)
+        tw = d.textlength(text, font=font)
+        pad = int(fs * 0.7)
+        x = max(pad, W - tw - pad); y = H - fs - int(pad * 1.1)
+        d.text((x + 1, y + 1), text, font=font, fill=(0, 0, 0, 90))     # soft shadow
+        d.text((x, y), text, font=font, fill=(255, 255, 255, 175))      # ~69% white — subtle
+        return Image.alpha_composite(im.convert("RGBA"), over).convert("RGB")
+    except Exception:
+        return im
+
+
 def _to_jpeg(raw: bytes, max_dim: int = 1280, quality: int = 85) -> tuple[bytes, str, str]:
     """Compress a rendered look to a web-light JPEG before we store + serve it. Nano returns
     ~1.5 MB PNGs; re-encoding to a capped JPEG cuts storage/egress ~7× and makes link-preview
-    thumbnails reliable (big PNGs get skipped by WhatsApp/iMessage crawlers). Returns
-    (bytes, content_type, ext); falls back to the original PNG on any failure."""
+    thumbnails reliable (big PNGs get skipped by WhatsApp/iMessage crawlers). Also burns in the
+    brand+URL watermark so the link travels with the pixels. Returns (bytes, content_type, ext);
+    falls back to the original PNG on any failure."""
     try:
         import io as _io
         from PIL import Image
         im = Image.open(_io.BytesIO(raw)).convert("RGB")
         if max(im.size) > max_dim:
             im.thumbnail((max_dim, max_dim), Image.LANCZOS)
+        im = _watermark(im)
         buf = _io.BytesIO()
         im.save(buf, format="JPEG", quality=quality, optimize=True)
         out = buf.getvalue()
-        if out and len(out) < len(raw):           # only swap if it actually got smaller
-            return out, "image/jpeg", "jpg"
+        if out:
+            return out, "image/jpeg", "jpg"      # always prefer the watermarked JPEG
     except Exception:
         pass
     return raw, "image/png", "png"
