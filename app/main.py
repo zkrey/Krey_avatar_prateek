@@ -118,13 +118,112 @@ def alpha():
         return f.read()
 
 
+# Public base URL for absolute OG image links (crawlers need absolute). Override on Railway.
+_PUBLIC_URL = os.environ.get("KREY_PUBLIC_URL", "https://krey-labs-production.up.railway.app").rstrip("/")
+_OG_CACHE: dict = {}   # {key: (ts, jpeg_bytes)}
+
+
+def _og_source_urls(n: int = 3) -> list[str]:
+    """Image URLs for the invite collage. Privacy-safe default = garment catalog shots (no user
+    faces). Set KREY_OG_LOOK_IDS=id1,id2,id3 to curate specific looks instead (your call)."""
+    from app import catalog as catalog_mod
+    ids = [s.strip() for s in os.environ.get("KREY_OG_LOOK_IDS", "").split(",") if s.strip()]
+    urls: list[str] = []
+    if ids:
+        q = "looks?select=image_url&look_id=in.(" + ",".join(urllib.parse.quote(i) for i in ids) + ")"
+        urls = [r.get("image_url") for r in (catalog_mod._get(q) or []) if r.get("image_url")]
+    if not urls:  # safe default: catalog garments (product/model shots, no identity)
+        rows = catalog_mod._get("garments?select=image_url&limit=12") or []
+        urls = [r.get("image_url") for r in rows if r.get("image_url")]
+    return urls[:n]
+
+
+def _build_og_collage() -> bytes | None:
+    """Compose a 1200×630 landscape invite card: a row of a few fits + tagline + URL, to unfurl
+    when the /closet link is shared. Returns JPEG bytes, or None on failure (caller falls back)."""
+    try:
+        import io as _io
+        from app import catalog as catalog_mod
+        from PIL import Image, ImageDraw, ImageFont
+        W, H = 1200, 630
+        canvas = Image.new("RGB", (W, H), (15, 16, 18))
+        d = ImageDraw.Draw(canvas)
+
+        def _font(sz):
+            for p in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                      "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"):
+                try:
+                    return ImageFont.truetype(p, sz)
+                except Exception:
+                    pass
+            try:
+                return ImageFont.load_default(size=sz)
+            except Exception:
+                return ImageFont.load_default()
+
+        # fits row (cover-fit portrait cards, centered)
+        urls = _og_source_urls(3)
+        cards = []
+        for u in urls:
+            b = catalog_mod.fetch_bytes(u)
+            if not b:
+                continue
+            try:
+                cards.append(Image.open(_io.BytesIO(b)).convert("RGB"))
+            except Exception:
+                pass
+        if cards:
+            cw, ch = 300, 400
+            gap = 24
+            total = len(cards) * cw + (len(cards) - 1) * gap
+            x0 = (W - total) // 2
+            y0 = 150
+            for i, im in enumerate(cards):
+                s = max(cw / im.width, ch / im.height)
+                im2 = im.resize((max(1, int(im.width * s)), max(1, int(im.height * s))), Image.LANCZOS)
+                left = (im2.width - cw) // 2; top = (im2.height - ch) // 2
+                im2 = im2.crop((left, top, left + cw, top + ch))
+                canvas.paste(im2, (x0 + i * (cw + gap), y0))
+
+        # headline + tagline + brand/URL
+        gold = (217, 178, 90)
+        title = "See any look on you"
+        tf = _font(60); d.text(((W - d.textlength(title, font=tf)) / 2, 54), title, font=tf, fill=gold)
+        sub = "Studio fits & iconic trends — then friends pick your best"
+        sf = _font(27); d.text(((W - d.textlength(sub, font=sf)) / 2, 122), sub, font=sf, fill=(210, 214, 220))
+        urlf = _font(26); label = "Krey  ·  " + _PUBLIC_URL.split("://")[-1]
+        d.text(((W - d.textlength(label, font=urlf)) / 2, 578), label, font=urlf, fill=(150, 156, 166))
+
+        buf = _io.BytesIO(); canvas.save(buf, format="JPEG", quality=86, optimize=True)
+        return buf.getvalue()
+    except Exception:
+        return None
+
+
+@app.get("/og/fits.jpg")
+def og_fits():
+    """Cached invite-card image for the /closet OG preview (30-min cache)."""
+    import time
+    ck = _OG_CACHE.get("fits")
+    if ck and (time.time() - ck[0]) < 1800:
+        return Response(content=ck[1], media_type="image/jpeg",
+                        headers={"Cache-Control": "public, max-age=1800"})
+    img = _build_og_collage()
+    if not img:
+        raise HTTPException(503, "collage unavailable")
+    _OG_CACHE["fits"] = (time.time(), img)
+    return Response(content=img, media_type="image/jpeg",
+                    headers={"Cache-Control": "public, max-age=1800"})
+
+
 @app.get("/closet", response_class=HTMLResponse)
 def closet():
     """Browse the garment catalog (the try-on 'supply' side). Reads /closet/garments, which is
-    Supabase-backed when configured, else a built-in sample set. 'Try on' wires to the render
-    (Service B) once it's live."""
-    with open(_CLOSET, encoding="utf-8") as f:
-        return f.read()
+    Supabase-backed when configured, else a built-in sample set. Served through the template so the
+    invite link unfurls with a rich fits collage (og:image → /og/fits.jpg)."""
+    return _render_template(_CLOSET, title="Krey · Closet",
+                            og_title="See any look on you — Krey ✨",
+                            og_image=f"{_PUBLIC_URL}/og/fits.jpg", data={})
 
 
 @app.get("/closet/garments")
@@ -513,6 +612,40 @@ _STYLE_TRENDS: dict[str, dict] = {
         "fem": "an Indo-Western co-ord — an embroidered kurta with tailored palazzos or a cape and modern jewelry",
         "masc": "an Indo-Western look — a bandhgala jacket over a tee with tailored trousers",
         "look": "modern metro fusion, culturally rooted"},
+    # --- Regional India (state/local dressing) ---
+    "maharashtrian": {"label": "Maharashtrian", "emoji": "🌺", "group": "Regional India",
+        "fem": "a Maharashtrian nauvari (nine-yard) saree in a bold traditional colour with a nath nose-ring, bindi and mogra flowers",
+        "masc": "a Maharashtrian look — a kurta with a dhoti and a Puneri pheta (turban)",
+        "look": "warm festive Marathi elegance"},
+    "punjabi": {"label": "Punjabi", "emoji": "🪕", "group": "Regional India",
+        "fem": "a Punjabi patiala salwar suit with a vibrant phulkari dupatta and jhumka earrings",
+        "masc": "a Punjabi look — a kurta with a turban (pagri) and a sharp waistcoat",
+        "look": "bright, celebratory Punjabi energy"},
+    "rajasthani": {"label": "Rajasthani", "emoji": "🐪", "group": "Regional India",
+        "fem": "a Rajasthani mirror-work ghagra choli with a leheriya/bandhej dupatta and oxidised silver jewelry",
+        "masc": "a Rajasthani look — a kurta with a bandhej safa (turban) and a bandhgala jacket",
+        "look": "royal desert warmth, rich colour"},
+    "bengali": {"label": "Bengali", "emoji": "🐟", "group": "Regional India",
+        "fem": "a Bengali white-and-red laal-paar tant saree with a red bindi and shakha-pola bangles",
+        "masc": "a Bengali look — a kurta with a dhoti and a draped uttariya",
+        "look": "Durga-Puja festive elegance"},
+    "kashmiri": {"label": "Kashmiri", "emoji": "🏔️", "group": "Regional India",
+        "fem": "a Kashmiri embroidered pheran with a kasaba headdress and silver jewelry",
+        "masc": "a Kashmiri look — a warm embroidered pheran with a karakul cap",
+        "look": "soft mountain-winter warmth"},
+    "assamese": {"label": "Assamese", "emoji": "🌾", "group": "Regional India",
+        "fem": "an Assamese mekhela chador in golden muga silk with traditional Assamese jewelry",
+        "masc": "an Assamese look — a kurta with a seleng gamosa draped over the shoulder",
+        "look": "serene Bihu-festive golden tones"},
+    "hyderabadi": {"label": "Hyderabadi", "emoji": "🕌", "group": "Regional India",
+        "fem": "a Hyderabadi khada dupatta or sharara with Nizami pearl jewelry",
+        "masc": "a Hyderabadi look — a sherwani with pearl buttons and a dastar",
+        "look": "regal Nizami opulence"},
+    # --- Neta: a timeless, apolitical 'public figure' archetype (no party, person, or event) ---
+    "neta": {"label": "Neta", "emoji": "🎙️", "group": "Statement",
+        "fem": "a crisp handloom cotton saree with a plain border and a draped shawl, understated and dignified",
+        "masc": "a white khadi kurta-pyjama with a sleeveless Nehru jacket (bandi), clean and formal",
+        "look": "plain, dignified public-figure formality"},
 }
 
 
