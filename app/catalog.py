@@ -363,6 +363,14 @@ def admin_snapshot() -> dict:
     conf = _get_all("confidence_marks?select=set_id,look_id,owner_hint,phase,value")
     sets = _get_all("rank_sets?select=set_id,owner_hint,look_ids")
 
+    # Drop /health/cycle probe rows so the round-trip test never pollutes real analytics
+    # (it inserts a vote on set '__healthcheck__' with look ids '__hc_w__'/'__hc_l__').
+    _HC = "__healthcheck__"
+    votes_raw = [v for v in votes_raw
+                 if v.get("set_id") != _HC
+                 and not str(v.get("winner_look_id") or "").startswith("__")
+                 and not str(v.get("loser_look_id") or "").startswith("__")]
+
     # --- Glicko-2 leaderboard ---
     look_by_id = {l["look_id"]: l for l in looks}
     pairs = [(v.get("winner_look_id"), v.get("loser_look_id")) for v in votes_raw
@@ -404,9 +412,12 @@ def admin_snapshot() -> dict:
         taus.append(rating.kendall_tau(self_order, crowd))
     avg_tau = (sum(taus) / len(taus)) if taus else None
 
-    # --- K-factor (activations per distinct inviter) ---
+    # --- K-factor (distinct activated invitees per distinct inviter) ---
+    # Count DISTINCT activated visitors, not referral rows — the /referral endpoint fires on every
+    # rank-page load, so row counts wildly overcount real activations.
     inviters = {r.get("referrer_hint") for r in referrals if r.get("referrer_hint")}
-    activations = sum(1 for r in referrals if r.get("activated"))
+    activations = len({r.get("visitor_hint") for r in referrals
+                       if r.get("activated") and r.get("visitor_hint")})
     k_factor = (activations / len(inviters)) if inviters else 0.0
 
     # --- confidence lift (post - pre), per owner then averaged ---
