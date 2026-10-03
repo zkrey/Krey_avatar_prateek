@@ -68,6 +68,12 @@ MediaPipe + Monk skin-tone profiling and a stdlib ranking engine.
   confidence lift. See [`UNIT_ECONOMICS.md`](./UNIT_ECONOMICS.md) for per-activity costs,
   the 10k-MAU monthly projection, downtime/redundancy, and capex vs opex.
 
+### Attribution (planned, for later)
+- [`ATTRIBUTION.md`](./ATTRIBUTION.md) — creator-provenance + revenue-share design: credit the
+  originator of a fit/idea and share brand revenue back through vetted backlinks. Not built; the
+  substrate (`looks.owner_hint`, `referrals`, `garment_events`) is already accruing so credit can
+  be back-dated when it's switched on post-validation.
+
 ### Ranking engine
 - `app/rating.py` — pure stdlib: Glicko-2, Bradley-Terry (regularized Zermelo),
   Plackett-Luce (per-rank probabilities), Kendall's τ (self↔crowd convergence),
