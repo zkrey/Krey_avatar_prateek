@@ -27,7 +27,7 @@
 </style>
 </head>
 <body>
-  <h1 id="hd">Your results</h1>
+  <h1 id="hd">Your OOTD 👑</h1>
   <div class="sub" id="sub">Loading votes…</div>
   <div id="list"></div>
   <div id="converge" class="muted" style="margin:.6rem 0"></div>
@@ -57,9 +57,9 @@ async function load(){
   if(!d.votes){
     $("sub").textContent = "No votes yet — send the link to friends to see the ranking.";
   } else if(decisive){
-    $("sub").textContent = `${d.votes} vote${d.votes>1?"s":""} · a clear favourite emerged 👑`;
+    $("sub").textContent = `${d.votes} vote${d.votes>1?"s":""} · your people picked a clear winner 👑`;
   } else {
-    $("sub").innerHTML = `${d.votes} vote${d.votes>1?"s":""} · <b>too close to call</b> — pairwise ranking sharpens with more voters, so share it wider.`;
+    $("sub").innerHTML = `${d.votes} vote${d.votes>1?"s":""} · <b>too close to call</b> — a couple more from your circle will break the tie.`;
   }
   $("list").innerHTML = looks.map((l,i)=>{
     const pb=Math.round(l.p_best||0);
@@ -95,9 +95,9 @@ async function thumbFromUrl(u){
 }
 $("shareres").onclick=async()=>{
   const url=location.origin+"/results/"+encodeURIComponent(DATA.set_id);
-  const text = !RES.votes ? "My Krey fit ranking — vote and see which looks best on me 👇"
-    : RES.decisive ? `Friends picked my best fit: ${RES.name||"the winner"} (${RES.pb}% sure) 👑 — see the full ranking:`
-    : `My fit ranking so far (${RES.votes} votes) — still close, add yours:`;
+  const text = !RES.votes ? "need your honest eye 💛 which of these is most me? tap to pick:"
+    : RES.decisive ? `my people picked this as my best fit: ${RES.name||"the winner"} (${RES.pb}% sure) 👑 — see the full take:`
+    : `my fit vote so far (${RES.votes} in) — still close, want your honest tie-breaker? 💛`;
   let file=await thumbFromUrl(RES.image_url), channel="native";
   try{
     if(navigator.share && file && navigator.canShare && navigator.canShare({files:[file]})){
@@ -118,8 +118,8 @@ function buildConf(winner, decisive){
   if(CONF_DONE) return;
   const box=$("confbox"), row=$("confrow"); box.hidden=false; row.innerHTML="";
   // name the payoff: friends picked X
-  if(decisive && winner && winner.name) $("cf_hd").textContent = `Friends picked “${winner.name}” 👑`;
-  else $("cf_hd").textContent = "Your friends have weighed in 👀";
+  if(decisive && winner && winner.name) $("cf_hd").textContent = `Your people picked “${winner.name}” 👑`;
+  else $("cf_hd").textContent = "Your people have weighed in 💛";
   // same 4-point scale as the PRE tap at ballot creation, so post − pre is a clean lift
   [["Not sure 😐",2],["Maybe 🙂",5],["Pretty sure 😎",8],["Love it 🔥",10]].forEach(([label,val])=>{
     const b=document.createElement("button"); b.className="btn"; b.style.flex="1"; b.style.minWidth="45%"; b.textContent=label;

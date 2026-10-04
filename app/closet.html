@@ -4,7 +4,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Krey · Closet</title>
 <meta property="og:title" content="__OG_TITLE__">
-<meta property="og:description" content="See any look on you — studio fits, iconic trends — then let friends pick your best. Takes a minute.">
+<meta property="og:description" content="See any look on you — studio fits, iconic trends — then let your close circle pick your best. Takes a minute.">
 <meta property="og:image" content="__OG_IMAGE__">
 <meta property="og:image:secure_url" content="__OG_IMAGE__">
 <meta property="og:image:alt" content="A few looks you can try on with Krey">
@@ -136,7 +136,7 @@
   <div id="tray" class="tray" hidden>
     <div class="traytop"><b>Your looks</b> <span class="muted" id="traycount"></span></div>
     <div class="traythumbs" id="traythumbs"></div>
-    <button class="btn primary" id="rankbtn" disabled>👀 Ask friends which looks best on me</button>
+    <button class="btn primary" id="rankbtn" disabled>💛 Ask your people which looks best on me</button>
     <div class="muted" id="traymsg" style="margin-top:.4rem"></div>
   </div>
 
@@ -361,16 +361,16 @@ function showRender(state,g,j){
     if(j.look_id) addLook({look_id:j.look_id, image_url:j.image_url, name:g.name});
     const canRank = LOOKS.length>=2;
     const head = canRank
-      ? `🔥 ${LOOKS.length} looks ready — which is <b>THE one</b> on you?`
+      ? `🔥 ${LOOKS.length} looks ready — let the people who'll keep it real pick`
       : `Added to your looks ✓`;
     ov.innerHTML=`<div style="text-align:center;max-width:420px;width:100%">
       <img src="${esc(j.image_url)}" style="max-width:100%;max-height:52vh;border-radius:14px;border:1px solid var(--line)">
       <div style="margin:.6rem 0 .5rem;font-weight:600">${head}</div>
       ${canRank
-        ? `<button class="btn primary" id="rov_rank" style="width:100%;padding:.95rem;font-size:1.02rem">👀 Ask friends which looks best on me</button>
+        ? `<button class="btn primary" id="rov_rank" style="width:100%;padding:.95rem;font-size:1.02rem">💛 Ask your people which looks best on me</button>
            <button class="btn" id="rov_close" style="width:100%;margin-top:.5rem">+ Try another look</button>`
         : `<button class="btn primary" id="rov_close" style="width:100%;padding:.95rem;font-size:1.02rem">+ Add one more look</button>
-           <div class="muted" style="margin-top:.4rem;font-size:.82rem">One more look and the “ask friends to vote” unlocks 👀</div>`}
+           <div class="muted" style="margin-top:.4rem;font-size:.82rem">One more look, then ask the people who'll keep it real 💛</div>`}
       <div class="muted" style="margin-top:.55rem;cursor:pointer;text-decoration:underline" id="rov_share">or share just this one</div>
       </div>`;
     const url=location.origin+(j.look_url||"/closet");
@@ -409,8 +409,8 @@ function renderTray(){
   const rb=$("rankbtn"); rb.disabled=LOOKS.length<2;
   rb.classList.toggle("ready", LOOKS.length>=2);   // glow when the vote is unlocked
   $("traymsg").textContent = LOOKS.length<2
-    ? "Add one more look and the vote unlocks 👀"
-    : "Friends tap through your looks, 2 at a time — takes them 10 seconds.";
+    ? "Add one more, then ask the people who'll keep it real 💛"
+    : "Just your close circle — they tap through 2 at a time, 10 sec. Not the whole feed.";
 }
 async function makeBallot(){
   if(LOOKS.length<2) return;
@@ -426,38 +426,38 @@ async function makeBallot(){
     saveBallot({set_id:j.set_id, rank_url:url, results_url:results, count:LOOKS.length,
                 thumbs:LOOKS.map(l=>l.image_url).filter(Boolean).slice(0,3)});
     try{ localStorage.setItem("krey_last_results", results); }catch(e){}
-    // big, tappable actions + a one-tap PRE confidence (captured here, at the engaged moment, so it
-    // reliably pairs with the POST tap on results → powers the confidence-lift thesis).
+    // Flow: self-validation FIRST, THEN a quiet send to a close circle. We do NOT auto-open the
+    // share sheet — an unprompted broadcast is exactly the embarrassment we're avoiding; the user
+    // consciously sends to a few people they trust. The pre tap also pairs with the results post tap.
     const scale=[["Not sure 😐",2],["Maybe 🙂",5],["Pretty sure 😎",8],["Love them 🔥",10]];
     $("traymsg").innerHTML=
       '<div style="margin-top:.6rem;border:1px solid var(--gold-dim);border-radius:12px;padding:.6rem;margin-bottom:.6rem">'
-      +'<div id="pre_lab" style="font-weight:600;font-size:.9rem;margin-bottom:.4rem">Before friends weigh in — how confident are you in these?</div>'
+      +'<div id="pre_lab" style="font-weight:600;font-size:.9rem;margin-bottom:.4rem">First — your gut. How much do you love these?</div>'
       +'<div id="pre_row" style="display:flex;gap:.35rem;flex-wrap:wrap">'
       + scale.map(([t,v])=>`<button class="btn preb" data-v="${v}" style="flex:1;min-width:46%;padding:.5rem;font-size:.82rem">${t}</button>`).join("")
       +'</div></div>'
       +'<div style="display:flex;flex-direction:column;gap:.5rem">'
-      +'<button class="btn primary" id="tm_share" style="width:100%;padding:.9rem;font-size:1rem">📲 Share to friends to vote</button>'
-      +'<button class="btn" id="tm_results" style="width:100%;padding:.8rem;font-size:.95rem">📊 See my results</button>'
-      +'<div class="muted" style="font-size:.78rem">You can re-share anytime — your ballots stay saved up top.</div>'
+      +'<button class="btn primary" id="tm_share" style="width:100%;padding:.9rem;font-size:1rem">💛 Send to your close circle</button>'
+      +'<button class="btn" id="tm_results" style="width:100%;padding:.8rem;font-size:.95rem">📊 See what they pick</button>'
+      +'<div class="muted" style="font-size:.78rem">Send it to 2–3 people whose taste you trust — not the whole feed. It stays between you.</div>'
       +'</div>';
     const SET=j.set_id;
     $("traymsg").querySelectorAll(".preb").forEach(b=>b.onclick=()=>{
       $("traymsg").querySelectorAll(".preb").forEach(x=>{x.disabled=true;x.classList.remove("primary");});
       b.classList.add("primary");
-      const lab=$("pre_lab"); if(lab) lab.textContent="Got it ✓ — we'll ask again once friends vote.";
+      const lab=$("pre_lab"); if(lab) lab.textContent="Got it ✓ — now see if your people agree.";
       try{ fetch("/closet/confidence",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({set_id:SET, owner_hint:sid(), value:+b.dataset.v})}); }catch(e){}   // phase=pre (server)
     });
     $("tm_share").onclick=()=>shareBallot(url, LOOKS.map(l=>l.image_url).filter(Boolean).slice(0,3));
     $("tm_results").onclick=()=>{ location.href=results; };
-    renderMyBallots();
-    shareBallot(url, LOOKS.map(l=>l.image_url).filter(Boolean).slice(0,3));  // open the share sheet once now
+    renderMyBallots();   // no auto-share: the user chooses to send, on their terms
   }catch(e){ $("traymsg").textContent="Couldn't create the ballot — try again."; $("rankbtn").disabled=false; }
 }
 // Reusable share — re-opens the native share sheet every time (issue: it only fired once before).
 // Rebuilds the visual thumbnail from the given image URLs (works even after a page reload).
 async function shareBallot(url, thumbUrls){
-  const text="Which of these looks best on me? Tap to pick 👇";
+  const text="hey, need your honest eye 💛 which of these is most me? tap to pick — 10 sec, just you";
   let file=null, channel="native";
   try{ file=await thumbFromUrls(thumbUrls); }catch(e){}
   try{

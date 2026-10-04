@@ -189,7 +189,7 @@ def _build_og_collage() -> bytes | None:
         gold = (217, 178, 90)
         title = "See any look on you"
         tf = _font(60); d.text(((W - d.textlength(title, font=tf)) / 2, 54), title, font=tf, fill=gold)
-        sub = "Studio fits & iconic trends — then friends pick your best"
+        sub = "Studio fits & iconic trends — then your people pick your best"
         sf = _font(27); d.text(((W - d.textlength(sub, font=sf)) / 2, 122), sub, font=sf, fill=(210, 214, 220))
         urlf = _font(26); label = "Krey  ·  " + _PUBLIC_URL.split("://")[-1]
         d.text(((W - d.textlength(label, font=urlf)) / 2, 578), label, font=urlf, fill=(150, 156, 166))

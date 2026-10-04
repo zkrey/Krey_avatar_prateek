@@ -37,15 +37,15 @@
 </style>
 </head>
 <body>
-  <h1 id="hd">Which fit works better?</h1>
+  <h1 id="hd">Be honest — which is more <i>them</i>? 💛</h1>
   <div class="muted" id="progress"></div>
   <div id="strip" class="strip"></div>
   <div id="stage"></div>
 
   <div class="cta" id="cta" hidden>
-    <div style="font-weight:600;margin-bottom:.3rem">Nice — that helped! 🙌</div>
-    <div class="muted">Your turn: add 2–3 of <b>your</b> fits and let friends pick. Takes a minute.</div>
-    <button class="btn primary" id="tryown" style="margin-top:.8rem">✨ Rate my fit</button>
+    <div style="font-weight:600;margin-bottom:.3rem">That really helped them 💛</div>
+    <div class="muted">Your turn: try a few fits on you, then ask <b>your</b> people. Just your circle — takes a minute.</div>
+    <button class="btn primary" id="tryown" style="margin-top:.8rem">✨ Try it on me</button>
   </div>
 
 <script>
@@ -73,7 +73,7 @@ try{ fetch("/closet/event",{method:"POST",headers:{"Content-Type":"application/j
   body:JSON.stringify({garment_id:"rank",event_type:"view",channel:PLAT,session_hint:sid(),referrer_hint:REF||null})}); }catch(e){}
 
 const looks = DATA.looks||[];
-if(DATA.name) $("hd").textContent = "Help "+DATA.name+" pick — which works better?";
+if(DATA.name) $("hd").textContent = DATA.name+" trusts your eye 💛 — which is more them?";
 
 // mixed adaptive sampler: the server picks each next pair (concurrency-safe). A voter does at
 // most K matchups (K = number of fits), so it stays short even for 5 fits (which have 10 pairs).
@@ -105,7 +105,7 @@ async function nextRound(){
     `<div class="pair">
        <button class="opt" data-w="${a.look_id}" data-l="${b.look_id}">${card(a)}<div class="lab">This one</div></button>
        <button class="opt" data-w="${b.look_id}" data-l="${a.look_id}">${card(b)}<div class="lab">This one</div></button>
-     </div><div class="or">tap the better look</div>`;
+     </div><div class="or">tap the one that's more them</div>`;
   $("stage").querySelectorAll(".opt").forEach(btn=>btn.onclick=()=>{
     try{ fetch("/rank/vote",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({set_id:DATA.set_id,winner_look_id:btn.dataset.w,loser_look_id:btn.dataset.l,voter_hint:sid(),referrer_hint:REF})}); }catch(e){}
