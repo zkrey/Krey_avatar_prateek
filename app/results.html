@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Krey · Your results</title>
+<title>Krey · Your OOTD</title>
 <style>
   :root{--bg:#0f1012;--surface:#17181c;--line:#2a2d34;--text:#eceef2;--muted:#9aa0aa;
         --gold:#d9b25a;--gold-dim:#5a4d2b;--green:#4bbf73}
@@ -28,21 +28,21 @@
 </head>
 <body>
   <h1 id="hd">Your OOTD 👑</h1>
-  <div class="sub" id="sub">Loading votes…</div>
+  <div class="sub" id="sub">Loading your people's picks…</div>
   <div id="list"></div>
   <div id="converge" class="muted" style="margin:.6rem 0"></div>
 
   <!-- post-rank confidence re-tap: the Δconfidence signal (fires once votes exist) -->
   <div id="confbox" hidden style="background:var(--surface);border:1px solid var(--gold);border-radius:14px;padding:1rem;margin:1rem 0">
-    <div id="cf_hd" style="font-weight:700;margin-bottom:.2rem">Now that your friends have weighed in…</div>
+    <div id="cf_hd" style="font-weight:700;margin-bottom:.2rem">Now that your people have chimed in 💛</div>
     <div class="muted" id="cf_sub" style="text-align:left;margin-bottom:.6rem">How confident do you feel to wear it now?</div>
     <div id="confrow" style="display:flex;gap:.4rem;flex-wrap:wrap"></div>
     <div class="muted" id="confthanks" hidden style="margin-top:.5rem">Logged — thanks 💛 That closes the loop on your fit.</div>
   </div>
 
-  <button class="btn primary" id="shareres" style="width:100%;padding:.85rem">📲 Send these results to WhatsApp</button>
-  <button class="btn" id="refresh">↻ Refresh votes</button>
-  <button class="btn" id="again">Make another ballot</button>
+  <button class="btn primary" id="shareres" style="width:100%;padding:.85rem">📲 Share your OOTD</button>
+  <button class="btn" id="refresh">↻ See new picks</button>
+  <button class="btn" id="again">Style another look</button>
   <div class="muted" id="tip"></div>
 
 <script>
@@ -55,11 +55,11 @@ async function load(){
   const looks=d.looks||[];
   const decisive = !!d.decisive;
   if(!d.votes){
-    $("sub").textContent = "No votes yet — send the link to friends to see the ranking.";
+    $("sub").textContent = "No picks yet — send it to your people to see what they love 💛";
   } else if(decisive){
-    $("sub").textContent = `${d.votes} vote${d.votes>1?"s":""} · your people picked a clear winner 👑`;
+    $("sub").textContent = `${d.votes} pick${d.votes>1?"s":""} · your people have a clear favourite 👑`;
   } else {
-    $("sub").innerHTML = `${d.votes} vote${d.votes>1?"s":""} · <b>too close to call</b> — a couple more from your circle will break the tie.`;
+    $("sub").innerHTML = `${d.votes} pick${d.votes>1?"s":""} · <b>neck and neck</b> — a couple more from your circle will call it.`;
   }
   $("list").innerHTML = looks.map((l,i)=>{
     const pb=Math.round(l.p_best||0);
@@ -70,9 +70,9 @@ async function load(){
       <div style="flex:1">
         <div>${lead?'<span class="crown">👑</span> ':''}${l.name||'Fit '+(i+1)} <span class="pct" style="float:right">${d.votes?pb+'%':'—'}</span></div>
         <div class="bar"><i style="width:${d.votes?score:0}%"></i></div>
-        <div class="muted" style="text-align:left;margin-top:.3rem">${d.votes?('friends '+pb+'% sure this is your best · '):''}${l.wins||0} win${(l.wins||0)!==1?'s':''} · ${l.games||0} matchup${(l.games||0)!==1?'s':''}</div>
+        <div class="muted" style="text-align:left;margin-top:.3rem">${d.votes?('your people '+pb+'% love this one · '):''}their pick ${l.wins||0}/${l.games||0} times</div>
       </div></div>`;
-  }).join("") || `<div class="muted">This ballot has no looks.</div>`;
+  }).join("") || `<div class="muted">No looks here yet.</div>`;
   // self vs crowd convergence
   if(d.tau!=null){
     const agree = d.tau>0.5 ? "matches your gut ✅" : (d.tau<0 ? "flips your gut 🔄" : "partly differs from your gut");
@@ -80,8 +80,8 @@ async function load(){
   } else { $("converge").textContent=""; }
   if(d.votes && looks.length){
     $("tip").textContent = decisive
-      ? "Confident about the winner? Wear it. That's the whole point 💛"
-      : "It's close — a few more votes will break the tie.";
+      ? "Love your top look? Wear it. That's the whole point 💛"
+      : "It's close — a few more picks from your circle will call it.";
     if(ownsBallot()) buildConf(looks[0], decisive);   // only the OWNER self-rates (powers Δconfidence)
   }
   const lead = looks[0] || {};
@@ -96,8 +96,8 @@ async function thumbFromUrl(u){
 $("shareres").onclick=async()=>{
   const url=location.origin+"/results/"+encodeURIComponent(DATA.set_id);
   const text = !RES.votes ? "need your honest eye 💛 which of these is most me? tap to pick:"
-    : RES.decisive ? `my people picked this as my best fit: ${RES.name||"the winner"} (${RES.pb}% sure) 👑 — see the full take:`
-    : `my fit vote so far (${RES.votes} in) — still close, want your honest tie-breaker? 💛`;
+    : RES.decisive ? `my people love this one on me: ${RES.name||"this look"} (${RES.pb}% of them 👑) — see them all:`
+    : `my looks so far (${RES.votes} picks in) — still close, want to be my tie-breaker? 💛`;
   let file=await thumbFromUrl(RES.image_url), channel="native";
   try{
     if(navigator.share && file && navigator.canShare && navigator.canShare({files:[file]})){
@@ -119,7 +119,7 @@ function buildConf(winner, decisive){
   const box=$("confbox"), row=$("confrow"); box.hidden=false; row.innerHTML="";
   // name the payoff: friends picked X
   if(decisive && winner && winner.name) $("cf_hd").textContent = `Your people picked “${winner.name}” 👑`;
-  else $("cf_hd").textContent = "Your people have weighed in 💛";
+  else $("cf_hd").textContent = "Your people have chimed in 💛";
   // same 4-point scale as the PRE tap at ballot creation, so post − pre is a clean lift
   [["Not sure 😐",2],["Maybe 🙂",5],["Pretty sure 😎",8],["Love it 🔥",10]].forEach(([label,val])=>{
     const b=document.createElement("button"); b.className="btn"; b.style.flex="1"; b.style.minWidth="45%"; b.textContent=label;

@@ -414,12 +414,12 @@ function renderTray(){
 }
 async function makeBallot(){
   if(LOOKS.length<2) return;
-  $("rankbtn").disabled=true; $("traymsg").textContent="Creating your ballot…";
+  $("rankbtn").disabled=true; $("traymsg").textContent="Getting it ready…";
   try{
     const r=await fetch("/closet/ballot",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({owner_hint:sid(), look_ids:LOOKS.map(l=>l.look_id)})});
     const j=await r.json();
-    if(!j.rank_url){ $("traymsg").textContent=(j.detail||"couldn't create the ballot"); $("rankbtn").disabled=false; return; }
+    if(!j.rank_url){ $("traymsg").textContent=(j.detail||"couldn't set it up — try again"); $("rankbtn").disabled=false; return; }
     const url=location.origin+j.rank_url;
     const results=location.origin+"/results/"+encodeURIComponent(j.set_id||"");
     // persist so the owner can always come back to share again + see results (issue: link opened once)
@@ -452,7 +452,7 @@ async function makeBallot(){
     $("tm_share").onclick=()=>shareBallot(url, LOOKS.map(l=>l.image_url).filter(Boolean).slice(0,3));
     $("tm_results").onclick=()=>{ location.href=results; };
     renderMyBallots();   // no auto-share: the user chooses to send, on their terms
-  }catch(e){ $("traymsg").textContent="Couldn't create the ballot — try again."; $("rankbtn").disabled=false; }
+  }catch(e){ $("traymsg").textContent="Couldn't set it up — try again."; $("rankbtn").disabled=false; }
 }
 // Reusable share — re-opens the native share sheet every time (issue: it only fired once before).
 // Rebuilds the visual thumbnail from the given image URLs (works even after a page reload).

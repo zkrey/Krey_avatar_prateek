@@ -7,7 +7,7 @@
 <meta property="og:description" content="Help pick the best fit — one tap. Then try your own on Krey.">
 <meta property="og:image" content="__OG_IMAGE__">
 <meta property="og:image:secure_url" content="__OG_IMAGE__">
-<meta property="og:image:alt" content="Fits to rank on Krey">
+<meta property="og:image:alt" content="Help a friend pick their look · Krey">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Krey">
 <meta name="twitter:card" content="summary_large_image">
@@ -113,7 +113,7 @@ async function nextRound(){
   });
 }
 function finish(){
-  $("stage").innerHTML = `<div class="muted">All done — thanks for voting! 🎉</div>`;
+  $("stage").innerHTML = `<div class="muted">All done — thanks, that really helps 💛</div>`;
   $("progress").textContent=""; $("cta").hidden=false;
 }
 $("tryown").onclick=()=>{ location.href="/closet"+(REF?("?ref="+encodeURIComponent(REF)):""); };
