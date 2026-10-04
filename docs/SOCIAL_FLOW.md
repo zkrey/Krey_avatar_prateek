@@ -25,7 +25,10 @@ me?" is a **cold broadcast to a loose network** → embarrassment → people ren
 
 ---
 
-## Two graphs: follow (inspiration) vs friend (validation)
+## Two graphs: follow (inspiration) vs friend (validation) — [M2]
+
+**Scope: both edges ship together in M2** (follow + friend). They are baked into the model now
+so nothing in M1 blocks them later.
 
 There are **two different relationship edges**, with different jobs and different vulnerability
 levels. Keeping them separate is the architecture:
@@ -84,11 +87,11 @@ upload photo → fit check (render) → SELF-validation (your own gut)
 
 ## Tester vs. launch (scope line)
 
-| | Tester (now) | Launch |
+| | Tester / M1 (now) | M2 (launch) |
 |---|---|---|
-| Circle / friend graph | ❌ none — approximated by warm "close circle" copy + external send (user picks who) | ✅ add-friends is the on-ramp; accounts + a real graph |
+| Graphs | ❌ none — approximated by warm "close circle" copy + external send (user picks who) | ✅ **both follow + friend**; add-friends is the on-ramp; accounts + real graph |
 | Notification | external share (WhatsApp etc.) | in-app warm notify to circle members |
-| Validation ask | framed intimate, but still a cold-ish broadcast | happens inside an established, consented circle |
+| Validation ask | framed intimate, but still a cold-ish broadcast | happens inside an established, consented friend circle (never followers) |
 
 **What the tester can tell us anyway:** even without the friend layer, does the *warm,
 close-circle framing* lift ranking vs. the old broadcast framing? If yes, it confirms the
