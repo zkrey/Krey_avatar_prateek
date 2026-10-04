@@ -68,6 +68,13 @@ MediaPipe + Monk skin-tone profiling and a stdlib ranking engine.
   confidence lift. See [`UNIT_ECONOMICS.md`](./UNIT_ECONOMICS.md) for per-activity costs,
   the 10k-MAU monthly projection, downtime/redundancy, and capex vs opex.
 
+### Social flow & trust on-ramp (planned, for launch)
+- [`SOCIAL_FLOW.md`](./SOCIAL_FLOW.md) — why ranking lags (asking for validation feels
+  vulnerable; adding a friend feels safe) and the launch fix: add-friends-first as the trust
+  on-ramp, self-validation before any social step, validation inside a consented circle. Also
+  the dual graph — **follow = inspiration (one-way), friend = validation (mutual); never cross
+  them**. The tester approximates all this with warm "close circle" copy only.
+
 ### Attribution (planned, for later)
 - [`ATTRIBUTION.md`](./ATTRIBUTION.md) — creator-provenance + revenue-share design: credit the
   originator of a fit/idea and share brand revenue back through vetted backlinks. Not built; the
