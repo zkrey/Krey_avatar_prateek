@@ -69,14 +69,14 @@
 </head>
 <body>
   <h1>Your closet ✨</h1>
-  <div class="sub" id="sub">Add a photo and we'll show what you can try on. <span id="src" class="src">…</span></div>
+  <div class="sub" id="sub">Welcome in 💛 Add a photo and watch any look come alive on you. <span id="src" class="src">…</span></div>
 
   <!-- returning owner: your created ballots + their results (persists across visits) -->
   <div id="myballots" hidden style="margin:.6rem 0"></div>
 
   <!-- photo gate: shown until a photo is added -->
   <div class="gate" id="gate">
-    <h2>See it on you 👀</h2>
+    <h2>See how good you look ✨</h2>
     <span class="muted">Match this framing for the best result — head &amp; chest in view, arms down.</span>
     <div class="tmpl">
       <div class="tmplframe">
@@ -361,8 +361,8 @@ function showRender(state,g,j){
     if(j.look_id) addLook({look_id:j.look_id, image_url:j.image_url, name:g.name});
     const canRank = LOOKS.length>=2;
     const head = canRank
-      ? `🔥 ${LOOKS.length} looks ready — let the people who'll keep it real pick`
-      : `Added to your looks ✓`;
+      ? `🔥 ${LOOKS.length} looks ready — let the people who love you pick your best`
+      : `You look great in this ✨`;
     ov.innerHTML=`<div style="text-align:center;max-width:420px;width:100%">
       <img src="${esc(j.image_url)}" style="max-width:100%;max-height:52vh;border-radius:14px;border:1px solid var(--line)">
       <div style="margin:.6rem 0 .5rem;font-weight:600">${head}</div>

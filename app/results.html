@@ -55,11 +55,11 @@ async function load(){
   const looks=d.looks||[];
   const decisive = !!d.decisive;
   if(!d.votes){
-    $("sub").textContent = "No picks yet — send it to your people to see what they love 💛";
+    $("sub").textContent = "No picks yet — send it to your people to see what they love on you 💛";
   } else if(decisive){
-    $("sub").textContent = `${d.votes} pick${d.votes>1?"s":""} · your people have a clear favourite 👑`;
+    $("sub").innerHTML = `${d.votes} of your people showed up for you 💛 — they love this one on you 👑`;
   } else {
-    $("sub").innerHTML = `${d.votes} pick${d.votes>1?"s":""} · <b>neck and neck</b> — a couple more from your circle will call it.`;
+    $("sub").innerHTML = `${d.votes} of your people showed up for you 💛 — it's close, one more from your circle will call it.`;
   }
   $("list").innerHTML = looks.map((l,i)=>{
     const pb=Math.round(l.p_best||0);
