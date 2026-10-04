@@ -372,19 +372,7 @@ function showRender(state,g,j){
         : `<button class="btn primary" id="rov_close" style="width:100%;padding:.95rem;font-size:1.02rem">+ Add one more look</button>
            <div class="muted" style="margin-top:.4rem;font-size:.82rem">One more look and the “ask friends to vote” unlocks 👀</div>`}
       <div class="muted" style="margin-top:.55rem;cursor:pointer;text-decoration:underline" id="rov_share">or share just this one</div>
-      <div style="margin-top:.7rem;border-top:1px solid var(--line);padding-top:.55rem">
-        <div class="muted" id="rov_conflab" style="margin:0 0 .3rem;font-size:.82rem">How confident do you feel in this?</div>
-        <div id="rov_conf" style="display:flex;gap:.25rem;justify-content:center;flex-wrap:wrap">
-          ${[1,2,3,4,5,6,7,8,9,10].map(n=>`<button class="btn cfb" data-v="${n}" style="padding:.3rem .5rem;min-width:2rem;font-size:.85rem">${n}</button>`).join("")}</div>
-      </div></div>`;
-    // pre (pre-crowd) self-confidence -> /closet/confidence, tied to this look. One tap, best-effort.
-    if(j.look_id){ ov.querySelectorAll(".cfb").forEach(b=>b.onclick=()=>{
-      ov.querySelectorAll(".cfb").forEach(x=>x.classList.remove("primary"));
-      b.classList.add("primary");
-      const lab=$("rov_conflab"); if(lab) lab.textContent="Got it — "+b.dataset.v+"/10 ✓";
-      try{ fetch("/closet/confidence",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({look_id:j.look_id, owner_hint:sid(), value:+b.dataset.v})}); }catch(e){}
-    }); }
+      </div>`;
     const url=location.origin+(j.look_url||"/closet");
     $("rov_share").onclick=async()=>{
       const text=`Check out this ${g.name} on me — Krey ✨`;
@@ -438,13 +426,28 @@ async function makeBallot(){
     saveBallot({set_id:j.set_id, rank_url:url, results_url:results, count:LOOKS.length,
                 thumbs:LOOKS.map(l=>l.image_url).filter(Boolean).slice(0,3)});
     try{ localStorage.setItem("krey_last_results", results); }catch(e){}
-    // big, tappable actions (not tiny text links)
+    // big, tappable actions + a one-tap PRE confidence (captured here, at the engaged moment, so it
+    // reliably pairs with the POST tap on results → powers the confidence-lift thesis).
+    const scale=[["Not sure 😐",2],["Maybe 🙂",5],["Pretty sure 😎",8],["Love them 🔥",10]];
     $("traymsg").innerHTML=
-      '<div style="display:flex;flex-direction:column;gap:.5rem;margin-top:.6rem">'
+      '<div style="margin-top:.6rem;border:1px solid var(--gold-dim);border-radius:12px;padding:.6rem;margin-bottom:.6rem">'
+      +'<div id="pre_lab" style="font-weight:600;font-size:.9rem;margin-bottom:.4rem">Before friends weigh in — how confident are you in these?</div>'
+      +'<div id="pre_row" style="display:flex;gap:.35rem;flex-wrap:wrap">'
+      + scale.map(([t,v])=>`<button class="btn preb" data-v="${v}" style="flex:1;min-width:46%;padding:.5rem;font-size:.82rem">${t}</button>`).join("")
+      +'</div></div>'
+      +'<div style="display:flex;flex-direction:column;gap:.5rem">'
       +'<button class="btn primary" id="tm_share" style="width:100%;padding:.9rem;font-size:1rem">📲 Share to friends to vote</button>'
       +'<button class="btn" id="tm_results" style="width:100%;padding:.8rem;font-size:.95rem">📊 See my results</button>'
       +'<div class="muted" style="font-size:.78rem">You can re-share anytime — your ballots stay saved up top.</div>'
       +'</div>';
+    const SET=j.set_id;
+    $("traymsg").querySelectorAll(".preb").forEach(b=>b.onclick=()=>{
+      $("traymsg").querySelectorAll(".preb").forEach(x=>{x.disabled=true;x.classList.remove("primary");});
+      b.classList.add("primary");
+      const lab=$("pre_lab"); if(lab) lab.textContent="Got it ✓ — we'll ask again once friends vote.";
+      try{ fetch("/closet/confidence",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({set_id:SET, owner_hint:sid(), value:+b.dataset.v})}); }catch(e){}   // phase=pre (server)
+    });
     $("tm_share").onclick=()=>shareBallot(url, LOOKS.map(l=>l.image_url).filter(Boolean).slice(0,3));
     $("tm_results").onclick=()=>{ location.href=results; };
     renderMyBallots();

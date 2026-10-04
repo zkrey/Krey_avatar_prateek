@@ -33,11 +33,11 @@
   <div id="converge" class="muted" style="margin:.6rem 0"></div>
 
   <!-- post-rank confidence re-tap: the Δconfidence signal (fires once votes exist) -->
-  <div id="confbox" hidden style="background:var(--surface);border:1px solid var(--gold-dim);border-radius:14px;padding:1rem;margin:1rem 0">
-    <div style="font-weight:600;margin-bottom:.2rem">Now that your friends have weighed in…</div>
-    <div class="muted" style="text-align:left;margin-bottom:.6rem">How confident are you to wear the winning fit?</div>
+  <div id="confbox" hidden style="background:var(--surface);border:1px solid var(--gold);border-radius:14px;padding:1rem;margin:1rem 0">
+    <div id="cf_hd" style="font-weight:700;margin-bottom:.2rem">Now that your friends have weighed in…</div>
+    <div class="muted" id="cf_sub" style="text-align:left;margin-bottom:.6rem">How confident do you feel to wear it now?</div>
     <div id="confrow" style="display:flex;gap:.4rem;flex-wrap:wrap"></div>
-    <div class="muted" id="confthanks" hidden style="margin-top:.5rem">Logged — thanks 💛</div>
+    <div class="muted" id="confthanks" hidden style="margin-top:.5rem">Logged — thanks 💛 That closes the loop on your fit.</div>
   </div>
 
   <button class="btn primary" id="shareres" style="width:100%;padding:.85rem">📲 Send these results to WhatsApp</button>
@@ -82,7 +82,7 @@ async function load(){
     $("tip").textContent = decisive
       ? "Confident about the winner? Wear it. That's the whole point 💛"
       : "It's close — a few more votes will break the tie.";
-    buildConf(looks[0]);   // current leader
+    if(ownsBallot()) buildConf(looks[0], decisive);   // only the OWNER self-rates (powers Δconfidence)
   }
   const lead = looks[0] || {};
   RES = {name: lead.name, image_url: lead.image_url, pb: Math.round(lead.p_best||0),
@@ -110,11 +110,18 @@ $("shareres").onclick=async()=>{
 };
 
 function sid(){ try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s;}catch(e){return "anon";} }
+// Is the viewer the ballot OWNER? (they created it → it's saved in their krey_ballots.) Only the
+// owner self-rates post-vote, so the Δconfidence pairs with the pre they gave at ballot creation.
+function ownsBallot(){ try{ return JSON.parse(localStorage.getItem("krey_ballots")||"[]").some(b=>b&&b.set_id===DATA.set_id); }catch(e){ return false; } }
 let CONF_DONE=false;
-function buildConf(winner){
+function buildConf(winner, decisive){
   if(CONF_DONE) return;
   const box=$("confbox"), row=$("confrow"); box.hidden=false; row.innerHTML="";
-  [["Still unsure 😐",2],["A bit more 🙂",5],["Yes, I'd wear it 😎",8],["Totally 🔥",10]].forEach(([label,val])=>{
+  // name the payoff: friends picked X
+  if(decisive && winner && winner.name) $("cf_hd").textContent = `Friends picked “${winner.name}” 👑`;
+  else $("cf_hd").textContent = "Your friends have weighed in 👀";
+  // same 4-point scale as the PRE tap at ballot creation, so post − pre is a clean lift
+  [["Not sure 😐",2],["Maybe 🙂",5],["Pretty sure 😎",8],["Love it 🔥",10]].forEach(([label,val])=>{
     const b=document.createElement("button"); b.className="btn"; b.style.flex="1"; b.style.minWidth="45%"; b.textContent=label;
     b.onclick=()=>{
       CONF_DONE=true;
@@ -124,6 +131,7 @@ function buildConf(winner){
     };
     row.appendChild(b);
   });
+  try{ box.scrollIntoView({behavior:"smooth",block:"center"}); }catch(e){}   // make it unmissable
 }
 $("refresh").onclick=load;
 $("again").onclick=()=>location.href="/closet";
