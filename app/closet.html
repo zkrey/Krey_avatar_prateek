@@ -14,8 +14,8 @@
 <meta name="twitter:title" content="__OG_TITLE__">
 <meta name="twitter:image" content="__OG_IMAGE__">
 <style>
-  :root{--bg:#eef2fb;--surface:#ffffff;--surface-2:#f4f7fd;--line:#e3e8f2;--text:#0f1222;
-        --muted:#6b7280;--gold:#2f6bff;--gold-dim:#c9d8ff;--azure:#2f6bff;--coral:#ff6b4a;--green:#19c37d}
+  :root{--bg:#0f1012;--surface:#17181c;--surface-2:#1e2026;--line:#2a2d34;--text:#eceef2;
+        --muted:#9aa0aa;--gold:#d9b25a;--gold-dim:#5a4d2b}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;
        padding:16px;max-width:760px;margin:0 auto}
@@ -32,14 +32,9 @@
   .tmplnote .no{color:var(--muted);margin-top:.3rem}
   #gatemsg{font-size:.9rem}
   .btn{border:1px solid var(--gold-dim);background:transparent;color:var(--gold);border-radius:10px;padding:.6rem .9rem;font-size:.9rem;cursor:pointer}
-  .btn.primary{background:var(--gold);color:#fff;border-color:var(--gold);font-weight:700}
-  /* coral = the warm, emotional 'ask your people' moments; azure stays for precise primary actions */
-  #rankbtn,#rov_rank,#tm_share{background:var(--coral);border-color:var(--coral);color:#fff}
+  .btn.primary{background:var(--gold);color:#1a1400;border-color:var(--gold);font-weight:700}
   .btn.ready{animation:kpulse 1.8s ease-in-out infinite}
-  @keyframes kpulse{0%,100%{box-shadow:0 0 0 0 rgba(255,107,74,.0)}50%{box-shadow:0 0 0 5px rgba(255,107,74,.30)}}
-  /* render popup: its content sits on a white card so it never merges into the scrim */
-  #renderov>div{background:var(--surface);color:var(--text);border-radius:18px;padding:20px 18px;
-                max-width:440px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(15,18,34,.32)}
+  @keyframes kpulse{0%,100%{box-shadow:0 0 0 0 rgba(217,178,90,.0)}50%{box-shadow:0 0 0 5px rgba(217,178,90,.28)}}
   .me{display:flex;align-items:center;gap:.6rem;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:.5rem .7rem;margin-bottom:.7rem}
   .me img{width:40px;height:52px;object-fit:cover;border-radius:8px;background:#222}
   .me .t{flex:1;font-size:.82rem}
@@ -49,7 +44,7 @@
   .filters{display:flex;gap:.4rem;flex-wrap:wrap;margin:.4rem 0}
   .chip{border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:999px;
         padding:.35rem .8rem;font-size:.85rem;cursor:pointer;text-transform:capitalize}
-  .chip.on{background:var(--gold);color:#fff;border-color:var(--gold);font-weight:600}
+  .chip.on{background:var(--gold);color:#1a1400;border-color:var(--gold);font-weight:600}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.7rem;margin-top:.8rem}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
   .ph{aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;color:#0009;font-size:.8rem}
@@ -346,7 +341,7 @@ async function onTry(g){
 }
 function showRender(state,g,j){
   let ov=$("renderov");
-  if(!ov){ ov=document.createElement("div"); ov.id="renderov"; ov.style.cssText="position:fixed;inset:0;background:rgba(15,18,34,.55);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px"; document.body.appendChild(ov); }
+  if(!ov){ ov=document.createElement("div"); ov.id="renderov"; ov.style.cssText="position:fixed;inset:0;background:#000d;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px"; document.body.appendChild(ov); }
   if(state==="loading"){
     const isTrend = g && g.garment_id && String(g.garment_id).indexOf("trend:")===0;
     const line = isTrend
