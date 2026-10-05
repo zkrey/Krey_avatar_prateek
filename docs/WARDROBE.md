@@ -43,8 +43,10 @@ It makes the three loops we've already designed converge on one object (the fit)
 
 ## The hard parts (de-risk before committing)
 
-1. **Multi-garment render fidelity** — we render one garment today; a full outfit is several
-   composited. Prototype this first (does Nano hold top+bottom+layer convincingly?).
+1. **Multi-garment render fidelity** — ✅ **tested viable (2026-10-05).** Nano composited a
+   person + navy blazer + beige chinos in one call, both garments faithful + identity kept (see
+   `CATALOG_INGEST.md`). Remaining bar: real product shots with **patterns/logos/textures**
+   (the easy case passed; texture faithfulness is the true test — pairs with ingestion).
 2. **Where buyable SKUs come from** — affiliate networks, brand partnerships, or a marketplace.
    No commerce loop without a product source + buy links. This is a BD/partnership dependency,
    not just code.

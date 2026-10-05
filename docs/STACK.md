@@ -75,6 +75,13 @@ MediaPipe + Monk skin-tone profiling and a stdlib ranking engine.
   the social graph into one shoppable, attributable "fit" unit. Phased M3–M4; hard parts =
   multi-garment render + a buyable-SKU source.
 
+### Catalogue ingestion & product crawler (planned)
+- [`CATALOG_INGEST.md`](./CATALOG_INGEST.md) — how real product inventory gets onto Krey:
+  Phase 1 scripted acquisition (feeds/APIs/scraping → images + metadata + textures + buy links,
+  Soham's track), Phase 2 a real-time crawler that curates a seller's live inventory once they
+  have a seller account ("Google for product inventory"). Records the multi-garment render
+  de-risk (✅ full-outfit compositing works).
+
 ### Social flow & trust on-ramp (planned, for launch)
 - [`SOCIAL_FLOW.md`](./SOCIAL_FLOW.md) — why ranking lags (asking for validation feels
   vulnerable; adding a friend feels safe) and the launch fix: add-friends-first as the trust
