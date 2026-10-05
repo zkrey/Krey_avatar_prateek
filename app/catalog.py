@@ -281,6 +281,36 @@ def create_rank_set(owner_hint: str, look_ids: list[str], name: str | None = Non
     return set_id if ok else None
 
 
+def create_wardrobe_item(owner_hint: str, name: str | None, image_url: str | None,
+                         cloth_type: str | None = None, color: str | None = None,
+                         pattern: str | None = None, formality: str | None = None,
+                         season: str | None = None) -> str | None:
+    """Insert a personal wardrobe item (a user's own garment). Returns its short item_id slug.
+    Needs the `wardrobe` table + anon insert/select RLS (docs/catalog_schema.sql)."""
+    item_id = secrets.token_urlsafe(7)
+    ok = _post("wardrobe", [{
+        "item_id": item_id,
+        "owner_hint": str(owner_hint)[:64] if owner_hint else None,
+        "name": str(name)[:120] if name else None,
+        "image_url": image_url,
+        "cloth_type": cloth_type if cloth_type in CLOTH_TYPES else None,
+        "color": str(color)[:40] if color else None,
+        "pattern": str(pattern)[:40] if pattern else None,
+        "formality": str(formality)[:24] if formality else None,
+        "season": str(season)[:24] if season else None,
+    }])
+    return item_id if ok else None
+
+
+def list_wardrobe(owner_hint: str, limit: int = 200) -> list[dict]:
+    """A user's own wardrobe items, newest first. Empty list on any error / no owner."""
+    if not owner_hint:
+        return []
+    q = ("wardrobe?select=item_id,name,image_url,cloth_type,color,pattern,formality,season,created_at"
+         f"&owner_hint=eq.{urllib.parse.quote(str(owner_hint))}&order=created_at.desc&limit={int(limit)}")
+    return _get(q) or []
+
+
 def next_pair(set_id: str, seen: set[str] | None = None, explore: float = 0.75) -> dict | None:
     """Mixed (epsilon-greedy) adaptive sampler for the pairwise ballot — concurrency-safe.
 

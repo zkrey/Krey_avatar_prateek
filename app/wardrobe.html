@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Krey · Your wardrobe</title>
+<style>
+  :root{--bg:#0f1012;--surface:#17181c;--surface-2:#1e2026;--line:#2a2d34;--text:#eceef2;
+        --muted:#9aa0aa;--gold:#d9b25a;--gold-dim:#5a4d2b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;
+       padding:16px;max-width:760px;margin:0 auto;padding-bottom:40px}
+  h1{font-size:1.3rem;margin:.2rem 0 .1rem}
+  .sub{color:var(--muted);font-size:.9rem;margin-bottom:1rem}
+  .btn{border:1px solid var(--gold-dim);background:transparent;color:var(--gold);border-radius:10px;padding:.7rem 1rem;font-size:.95rem;cursor:pointer}
+  .btn.primary{background:var(--gold);color:#1a1400;border-color:var(--gold);font-weight:700;width:100%;padding:.85rem}
+  .addrow{display:flex;gap:.5rem;margin-bottom:1rem}
+  .addrow .btn{flex:1}
+  .msg{color:var(--muted);font-size:.85rem;margin:.4rem 0 1rem;min-height:1.1rem}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.7rem}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column}
+  .card img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block;background:var(--surface-2)}
+  .card .ph{width:100%;aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem;background:var(--surface-2)}
+  .meta{padding:.5rem .6rem}
+  .nm{font-size:.9rem;font-weight:600;line-height:1.2}
+  .tags{margin-top:.25rem;display:flex;flex-wrap:wrap;gap:.25rem}
+  .tag{font-size:.66rem;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:.05rem .4rem;text-transform:capitalize}
+  .empty{color:var(--muted);text-align:center;padding:2rem 0}
+  .pend{position:relative}
+  .pend::after{content:"styling…";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#000a;color:var(--gold);font-size:.8rem;border-radius:14px}
+  a{color:var(--gold)}
+</style>
+</head>
+<body>
+  <h1>Your wardrobe 👗</h1>
+  <div class="sub">Snap your clothes — we clean them up and catalogue them for you. Build your closet, then style fits from it. <a href="/closet">← back to closet</a></div>
+
+  <div class="addrow">
+    <button class="btn primary" id="add">＋ Add a garment</button>
+    <button class="btn" id="snap">📸 Snap</button>
+  </div>
+  <div class="msg" id="msg"></div>
+
+  <div id="grid" class="grid"></div>
+  <div id="empty" class="empty" hidden>No items yet — add your first garment ☝️</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function sid(){ try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s;}catch(e){return "anon";} }
+let ITEMS=[];
+
+function pickPhoto(cb, selfie){ const inp=document.createElement("input"); inp.type="file"; inp.accept="image/*"; if(selfie) inp.capture="environment"; inp.onchange=()=>{ if(inp.files[0]) cb(inp.files[0]); }; inp.click(); }
+
+function card(it, pending){
+  const tags=[it.cloth_type,it.color,it.pattern,it.formality].filter(Boolean)
+    .map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+  return `<div class="card${pending?' pend':''}">
+    ${it.image_url?`<img src="${esc(it.image_url)}" alt="">`:`<div class="ph">${pending?'':'no image'}</div>`}
+    <div class="meta"><div class="nm">${esc(it.name||'Garment')}</div><div class="tags">${tags}</div></div>
+  </div>`;
+}
+function render(){
+  $("empty").hidden = ITEMS.length>0;
+  $("grid").innerHTML = ITEMS.map(it=>card(it,false)).join("");
+}
+
+async function load(){
+  try{ const r=await fetch("/wardrobe/items?owner_hint="+encodeURIComponent(sid())); const d=await r.json(); ITEMS=d.items||[]; }catch(e){ ITEMS=[]; }
+  render();
+}
+
+async function addGarment(file){
+  if(!file) return;
+  $("msg").textContent="Cleaning up & cataloguing your garment… (~15–20s)";
+  // optimistic pending tile
+  const url=URL.createObjectURL(file);
+  $("grid").insertAdjacentHTML("afterbegin", card({image_url:url,name:"…"}, true));
+  $("empty").hidden=true;
+  const fd=new FormData(); fd.append("owner_hint",sid()); fd.append("photo",file);
+  try{
+    const r=await fetch("/wardrobe/add",{method:"POST",body:fd});
+    const j=await r.json();
+    if(j.image_url){ $("msg").textContent = j.saved ? "Added ✓" : "Added (not saved — wardrobe table not set up yet)"; }
+    else { $("msg").textContent = "Couldn't add that — try another photo."; }
+  }catch(e){ $("msg").textContent="Couldn't add that — try again."; }
+  await load();   // refresh from server (replaces the pending tile)
+}
+
+$("add").onclick=()=>pickPhoto(addGarment,false);
+$("snap").onclick=()=>pickPhoto(addGarment,true);
+load();
+</script>
+</body>
+</html>

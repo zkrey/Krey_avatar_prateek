@@ -190,6 +190,29 @@ create policy "anon insert confidence" on confidence_marks for insert with check
 create policy "public read confidence" on confidence_marks for select using (true);
 
 -- ---------------------------------------------------------------------------
+-- wardrobe — a user's OWN garments (digital closet). Uploaded via /wardrobe → cut out on white
+-- (Nano) + auto-tagged (Gemini vision) → the base for custom fits. Keyed by owner_hint; reuses
+-- the public `looks` Storage bucket for images. Anon insert + read (own items filtered app-side).
+create table if not exists wardrobe (
+    item_id    text primary key,                -- short slug
+    owner_hint text,                            -- whose wardrobe (opaque per-browser id)
+    name       text,                            -- auto label, e.g. "Navy blazer"
+    image_url  text,                            -- clean cut-out (Storage)
+    cloth_type text,                            -- upper | lower | overall
+    color      text,
+    pattern    text,
+    formality  text,                            -- casual | smart | formal
+    season     text,                            -- summer | winter | all-season
+    created_at timestamptz default now()
+);
+create index if not exists wardrobe_owner_idx on wardrobe (owner_hint);
+alter table wardrobe enable row level security;
+drop policy if exists "anon insert wardrobe" on wardrobe;
+drop policy if exists "public read wardrobe" on wardrobe;
+create policy "anon insert wardrobe" on wardrobe for insert with check (true);
+create policy "public read wardrobe" on wardrobe for select using (true);
+
+-- ---------------------------------------------------------------------------
 -- /admin analytics reads these with the anon key. Funnel counts are anonymous hints; fine for the
 -- closed test. Tighten (service-role only, or drop these) before any public launch.
 drop policy if exists "public read events"    on garment_events;

@@ -19,6 +19,9 @@ import urllib.error
 import urllib.request
 
 MODEL = os.environ.get("KREY_BANANA_MODEL", "gemini-2.5-flash-image")
+# A text/vision model (not the image model) for structured garment tagging. gemini-flash-latest
+# returns clean JSON from a garment photo; override with KREY_TAG_MODEL.
+TAG_MODEL = os.environ.get("KREY_TAG_MODEL", "gemini-flash-latest")
 _ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
@@ -61,3 +64,32 @@ def generate(person_bytes: bytes, garment_bytes: bytes | None, prompt: str,
     for cand in data.get("candidates", []):
         reason = cand.get("finishReason") or reason
     raise RuntimeError(f"gemini returned no image (finishReason={reason or '?'}): {json.dumps(data)[:300]}")
+
+
+def tag_garment(image_bytes: bytes, mime: str = "image/jpeg", timeout: int = 60) -> dict:
+    """Auto-catalogue a single garment photo → structured attributes via a Gemini vision model.
+    Returns {name, cloth_type, color, pattern, formality, season} (best-effort; {} on failure)."""
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key or not image_bytes:
+        return {}
+    url = _ENDPOINT.format(model=TAG_MODEL) + "?key=" + key
+    prompt = ("Classify this single clothing item for a wardrobe catalogue. Return ONLY JSON with "
+              "keys: name (short label, e.g. 'Navy blazer'), cloth_type (exactly one of: upper, "
+              "lower, overall), color, pattern, formality (casual|smart|formal), season "
+              "(summer|winter|all-season). No prose.")
+    body = json.dumps({
+        "contents": [{"parts": [
+            {"inlineData": {"mimeType": mime, "data": base64.b64encode(image_bytes).decode()}},
+            {"text": prompt}]}],
+        "generationConfig": {"responseMimeType": "application/json"},
+    }).encode()
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+        txt = "".join(p.get("text", "") for c in data.get("candidates", [])
+                      for p in (c.get("content", {}) or {}).get("parts", []))
+        return json.loads(txt) if txt.strip() else {}
+    except Exception:
+        return {}

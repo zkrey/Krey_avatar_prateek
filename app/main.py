@@ -84,6 +84,7 @@ _RANK = os.path.join(os.path.dirname(__file__), "rank.html")
 _STUDIO = os.path.join(os.path.dirname(__file__), "studio.html")
 _RESULTS = os.path.join(os.path.dirname(__file__), "results.html")
 _ADMIN = os.path.join(os.path.dirname(__file__), "admin.html")
+_WARDROBE = os.path.join(os.path.dirname(__file__), "wardrobe.html")
 
 
 def _render_template(path: str, title: str, og_title: str, og_image: str, data: dict) -> str:
@@ -224,6 +225,56 @@ def closet():
     return _render_template(_CLOSET, title="Krey · Closet",
                             og_title="See any look on you — Krey ✨",
                             og_image=f"{_PUBLIC_URL}/og/fits.jpg", data={})
+
+
+@app.get("/wardrobe", response_class=HTMLResponse)
+def wardrobe_page():
+    """Your digital wardrobe: snap your own garments → auto-cut-out + auto-tagged → saved as a
+    personal catalogue (the base for custom fits). Served raw (no server-side data)."""
+    with open(_WARDROBE, encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/wardrobe/items")
+def wardrobe_items(owner_hint: str = ""):
+    """A user's own wardrobe items (newest first)."""
+    from app import catalog as catalog_mod
+    return {"items": catalog_mod.list_wardrobe(owner_hint)}
+
+
+@app.post("/wardrobe/add")
+async def wardrobe_add(owner_hint: str = Form(...), photo: UploadFile = File(...)):
+    """Add one garment to the wardrobe: cut it out on white (Nano), auto-tag it (Gemini vision),
+    store the clean image + attributes. Returns the catalogued item."""
+    from app import catalog as catalog_mod
+    from render import banana as banana_mod
+    from starlette.concurrency import run_in_threadpool
+    raw = _normalize_upload(await photo.read())
+    if not raw:
+        raise HTTPException(400, "missing photo")
+    # 1) clean product cut-out on white (falls back to the original photo if Nano is off/fails)
+    clean = raw
+    if banana_mod.banana_configured():
+        cut_prompt = ("Isolate ONLY the clothing garment in this photo and place it centered on a "
+                      "plain pure-white background as a clean e-commerce product shot. Remove the "
+                      "person, background and clutter. Keep the garment's exact colour, pattern and "
+                      "texture. No text or watermarks.")
+        try:
+            clean = await run_in_threadpool(banana_mod.generate, raw, None, cut_prompt)
+        except Exception:
+            clean = raw
+    body, ct, ext = _to_jpeg(clean)
+    url = catalog_mod.upload_image(body, content_type=ct, ext=ext)
+    # 2) auto-tag the cleaned garment
+    tags = await run_in_threadpool(banana_mod.tag_garment, body, "image/jpeg") or {}
+    item_id = catalog_mod.create_wardrobe_item(
+        owner_hint=owner_hint, name=tags.get("name"), image_url=url,
+        cloth_type=tags.get("cloth_type"), color=tags.get("color"),
+        pattern=tags.get("pattern"), formality=tags.get("formality"), season=tags.get("season"))
+    return {"item_id": item_id, "image_url": url, "name": tags.get("name"),
+            "cloth_type": tags.get("cloth_type"), "color": tags.get("color"),
+            "pattern": tags.get("pattern"), "formality": tags.get("formality"),
+            "season": tags.get("season"), "saved": bool(item_id)}
 
 
 @app.get("/closet/garments")
