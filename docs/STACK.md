@@ -68,6 +68,13 @@ MediaPipe + Monk skin-tone profiling and a stdlib ranking engine.
   confidence lift. See [`UNIT_ECONOMICS.md`](./UNIT_ECONOMICS.md) for per-activity costs,
   the 10k-MAU monthly projection, downtime/redundancy, and capex vs opex.
 
+### Wardrobe, custom fits & creator commerce (planned — build thesis)
+- [`WARDROBE.md`](./WARDROBE.md) — the core loop the actual build is heading toward: users
+  digitise their wardrobe, create custom fits, broadcast them, and **earn from the purchases
+  those fits drive** (create → broadcast → earn). Fuses wardrobe + attribution/revenue-share +
+  the social graph into one shoppable, attributable "fit" unit. Phased M3–M4; hard parts =
+  multi-garment render + a buyable-SKU source.
+
 ### Social flow & trust on-ramp (planned, for launch)
 - [`SOCIAL_FLOW.md`](./SOCIAL_FLOW.md) — why ranking lags (asking for validation feels
   vulnerable; adding a friend feels safe) and the launch fix: add-friends-first as the trust
