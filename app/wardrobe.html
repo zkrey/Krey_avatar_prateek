@@ -28,6 +28,23 @@
   .pend{position:relative}
   .pend::after{content:"styling…";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#000a;color:var(--gold);font-size:.8rem;border-radius:14px}
   a{color:var(--gold)}
+  .stylist{background:linear-gradient(135deg,#1e2026,#17181c);border:1px solid var(--gold-dim);border-radius:16px;padding:1rem;margin:0 0 1.1rem}
+  .stylist h2{font-size:1.02rem;margin:0 0 .15rem}
+  .stylist p{color:var(--muted);font-size:.85rem;margin:0 0 .7rem}
+  .occ{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.7rem}
+  .chip{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:999px;padding:.35rem .8rem;font-size:.85rem;cursor:pointer}
+  .chip.on{border-color:var(--gold);color:var(--gold);background:#d9b25a14}
+  .ov{position:fixed;inset:0;background:#000c;display:none;align-items:center;justify-content:center;padding:16px;z-index:9}
+  .ov.show{display:flex}
+  .sheet{background:var(--surface);border:1px solid var(--line);border-radius:18px;max-width:420px;width:100%;max-height:92vh;overflow:auto;padding:1rem}
+  .sheet img.hero{width:100%;border-radius:12px;display:block;background:var(--surface-2);aspect-ratio:3/4;object-fit:cover}
+  .sheet h3{margin:.7rem 0 .2rem;font-size:1.05rem}
+  .why{color:var(--muted);font-size:.9rem;margin:0 0 .6rem}
+  .usedrow{display:flex;gap:.4rem;margin:.5rem 0 .8rem}
+  .usedrow img{width:46px;height:60px;object-fit:cover;border-radius:7px;border:1px solid var(--line)}
+  .acts{display:flex;gap:.5rem;flex-wrap:wrap}
+  .acts .btn{flex:1;min-width:120px;text-align:center}
+  .spin{text-align:center;color:var(--gold);padding:2rem 0;font-size:.95rem}
 </style>
 </head>
 <body>
@@ -40,8 +57,26 @@
   </div>
   <div class="msg" id="msg"></div>
 
+  <div class="stylist" id="stylist" hidden>
+    <h2>✨ Make me a fit</h2>
+    <p>Our stylist pairs pieces from your own closet and shows the look on you.</p>
+    <div class="occ" id="occ">
+      <button class="chip on" data-occ="">Anything</button>
+      <button class="chip" data-occ="casual day out">Casual</button>
+      <button class="chip" data-occ="work / office">Work</button>
+      <button class="chip" data-occ="party / night out">Party</button>
+      <button class="chip" data-occ="ethnic / festive">Ethnic</button>
+      <button class="chip" data-occ="date">Date</button>
+    </div>
+    <button class="btn primary" id="makefit">✨ Make me a fit</button>
+  </div>
+
   <div id="grid" class="grid"></div>
   <div id="empty" class="empty" hidden>No items yet — add your first garment ☝️</div>
+
+  <div class="ov" id="ov">
+    <div class="sheet" id="sheet"></div>
+  </div>
 
 <script>
 const $=id=>document.getElementById(id);
@@ -62,7 +97,59 @@ function card(it, pending){
 function render(){
   $("empty").hidden = ITEMS.length>0;
   $("grid").innerHTML = ITEMS.map(it=>card(it,false)).join("");
+  $("stylist").hidden = ITEMS.length<2;   // need ≥2 pieces to style a fit
 }
+
+// ---- stylist: "make me a fit" --------------------------------------------
+let OCC="";                 // selected occasion
+let MEFILE=null;            // the selfie to render fits on (kept for the session)
+$("occ").onclick=e=>{ const b=e.target.closest(".chip"); if(!b) return;
+  [...document.querySelectorAll("#occ .chip")].forEach(c=>c.classList.remove("on"));
+  b.classList.add("on"); OCC=b.dataset.occ||""; };
+
+function closeOv(){ $("ov").classList.remove("show"); $("sheet").innerHTML=""; }
+$("ov").onclick=e=>{ if(e.target===$("ov")) closeOv(); };
+
+function showSpin(){
+  $("sheet").innerHTML='<div class="spin">✨ Styling a fit from your closet…<br><small style="color:var(--muted)">picking pieces + dressing you · ~20–30s</small></div>';
+  $("ov").classList.add("show");
+}
+function showFit(f){
+  const used=(f.items||[]).filter(i=>i.image_url)
+    .map(i=>`<img src="${esc(i.image_url)}" alt="${esc(i.name||'')}">`).join("");
+  const share=location.origin+(f.look_url||"");
+  $("sheet").innerHTML=`
+    <img class="hero" src="${esc(f.image_url)}" alt="your fit">
+    <h3>${esc(f.name||'Your fit')}</h3>
+    ${f.why?`<p class="why">${esc(f.why)}</p>`:""}
+    ${used?`<div class="usedrow">${used}</div>`:""}
+    <div class="acts">
+      <button class="btn primary" id="sh">💛 Share this fit</button>
+      <button class="btn" id="again">✨ Make another</button>
+    </div>
+    <div style="text-align:center;margin-top:.7rem"><a href="#" id="cl">close</a></div>`;
+  $("cl").onclick=e=>{e.preventDefault();closeOv();};
+  $("again").onclick=()=>makeFit();
+  $("sh").onclick=async()=>{
+    const data={title:"My fit on Krey",text:(f.name||"My fit")+" — made from my own closet on Krey 💛",url:share};
+    try{ if(navigator.share){ await navigator.share(data); } else { await navigator.clipboard.writeText(share); $("sh").textContent="Link copied ✓"; } }
+    catch(e){}
+  };
+}
+
+async function postFit(){
+  const fd=new FormData(); fd.append("owner_hint",sid()); fd.append("occasion",OCC); fd.append("person",MEFILE);
+  const r=await fetch("/wardrobe/fit",{method:"POST",body:fd});
+  if(!r.ok){ let d={}; try{d=await r.json();}catch(e){} throw new Error(d.detail||"couldn't style a fit"); }
+  return r.json();
+}
+async function makeFit(){
+  if(!MEFILE){ pickPhoto(f=>{ MEFILE=f; makeFit(); }, true); return; }  // ask for a selfie once
+  showSpin();
+  try{ showFit(await postFit()); }
+  catch(e){ $("sheet").innerHTML=`<div class="spin">😕 ${esc(e.message)}<br><a href="#" id="cl">close</a></div>`; $("cl").onclick=ev=>{ev.preventDefault();closeOv();}; }
+}
+$("makefit").onclick=makeFit;
 
 async function load(){
   try{ const r=await fetch("/wardrobe/items?owner_hint="+encodeURIComponent(sid())); const d=await r.json(); ITEMS=d.items||[]; }catch(e){ ITEMS=[]; }

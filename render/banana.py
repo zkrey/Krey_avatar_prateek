@@ -66,6 +66,64 @@ def generate(person_bytes: bytes, garment_bytes: bytes | None, prompt: str,
     raise RuntimeError(f"gemini returned no image (finishReason={reason or '?'}): {json.dumps(data)[:300]}")
 
 
+def generate_outfit(person_bytes: bytes, garments: list[bytes], prompt: str,
+                    person_mime: str = "image/jpeg", timeout: int = 120) -> bytes:
+    """Multi-garment try-on: dress the person in SEVERAL garments at once (top+bottom+layer).
+    Sends the person image first, then each garment image, then the instruction. Returns bytes."""
+    key = os.environ["GEMINI_API_KEY"]
+    url = _ENDPOINT.format(model=MODEL) + "?key=" + key
+    parts = [{"inlineData": {"mimeType": person_mime, "data": base64.b64encode(person_bytes).decode()}}]
+    for g in (garments or [])[:4]:
+        if g:
+            parts.append({"inlineData": {"mimeType": "image/jpeg", "data": base64.b64encode(g).decode()}})
+    parts.append({"text": prompt})
+    body = json.dumps({"contents": [{"parts": parts}]}).encode()
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"gemini {e.code}: {e.read().decode('utf-8','replace')[:400]}")
+    for cand in data.get("candidates", []):
+        for part in (cand.get("content", {}) or {}).get("parts", []) or []:
+            inline = part.get("inlineData") or part.get("inline_data")
+            if inline and inline.get("data"):
+                return base64.b64decode(inline["data"])
+    raise RuntimeError(f"gemini returned no image: {json.dumps(data)[:300]}")
+
+
+def compose_fit(items: list[dict], occasion: str = "", timeout: int = 60) -> dict:
+    """LLM-stylist: from a user's wardrobe (list of tagged items), pick ONE cohesive outfit.
+    Returns {name, item_ids:[...], why}. {} on failure (caller falls back to simple rules)."""
+    key = os.environ.get("GEMINI_API_KEY")
+    if not key or not items:
+        return {}
+    url = _ENDPOINT.format(model=TAG_MODEL) + "?key=" + key
+    slim = [{"id": i.get("item_id"), "name": i.get("name"), "cloth_type": i.get("cloth_type"),
+             "color": i.get("color"), "pattern": i.get("pattern"), "formality": i.get("formality"),
+             "season": i.get("season")} for i in items]
+    prompt = ("You are a fashion stylist. From this wardrobe JSON, compose ONE cohesive outfit"
+              + (f" for: {occasion}." if occasion else ".")
+              + " Include EITHER exactly one item whose cloth_type is 'overall', OR one 'upper' plus "
+              "one 'lower'; you may add one extra layer if it clearly helps. Choose items that "
+              "harmonise in colour and suit the occasion's formality. Return ONLY JSON: "
+              '{"name": "<short outfit name>", "item_ids": ["<id>", ...], "why": "<one warm sentence>"}. '
+              "Wardrobe: " + json.dumps(slim))
+    body = json.dumps({"contents": [{"parts": [{"text": prompt}]}],
+                       "generationConfig": {"responseMimeType": "application/json"}}).encode()
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("Content-Type", "application/json")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+        txt = "".join(p.get("text", "") for c in data.get("candidates", [])
+                      for p in (c.get("content", {}) or {}).get("parts", []))
+        return json.loads(txt) if txt.strip() else {}
+    except Exception:
+        return {}
+
+
 def tag_garment(image_bytes: bytes, mime: str = "image/jpeg", timeout: int = 60) -> dict:
     """Auto-catalogue a single garment photo → structured attributes via a Gemini vision model.
     Returns {name, cloth_type, color, pattern, formality, season} (best-effort; {} on failure)."""

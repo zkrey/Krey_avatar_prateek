@@ -277,6 +277,62 @@ async def wardrobe_add(owner_hint: str = Form(...), photo: UploadFile = File(...
             "season": tags.get("season"), "saved": bool(item_id)}
 
 
+@app.post("/wardrobe/fit")
+async def wardrobe_fit(owner_hint: str = Form(...), person: UploadFile = File(...),
+                       occasion: str = Form("")):
+    """✨ Make me a fit: an LLM-stylist picks a cohesive outfit from the user's OWN wardrobe, then
+    renders those real garments onto their photo in one pass (multi-garment Nano). The result is
+    saved as a look so it flows into the same share → ask-your-people loop as every other fit."""
+    from app import catalog as catalog_mod
+    from render import banana as banana_mod
+    from starlette.concurrency import run_in_threadpool
+    if not banana_mod.banana_configured():
+        raise HTTPException(503, "stylist backend not configured (set GEMINI_API_KEY)")
+    person_bytes = _normalize_upload(await person.read())
+    if not person_bytes:
+        raise HTTPException(400, "missing person image")
+    items = catalog_mod.list_wardrobe(owner_hint)
+    if len(items) < 2:
+        raise HTTPException(400, "add at least 2 garments to your wardrobe first")
+    # 1) stylist picks the outfit (LLM over the tagged wardrobe; simple rules as a fallback)
+    pick = await run_in_threadpool(banana_mod.compose_fit, items, occasion) or {}
+    by_id = {i.get("item_id"): i for i in items}
+    chosen = [by_id[x] for x in (pick.get("item_ids") or []) if x in by_id]
+    if not chosen:
+        overalls = [i for i in items if i.get("cloth_type") == "overall"]
+        if overalls:
+            chosen = [overalls[0]]
+        else:
+            ups = [i for i in items if i.get("cloth_type") == "upper"]
+            los = [i for i in items if i.get("cloth_type") == "lower"]
+            chosen = (ups[:1] + los[:1]) or items[:2]
+    chosen = chosen[:3]
+    # 2) pull the clean cut-out images of the chosen garments
+    garbytes = [b for b in (catalog_mod.fetch_bytes(i.get("image_url")) for i in chosen) if b]
+    if not garbytes:
+        raise HTTPException(502, "couldn't load the chosen garments")
+    # 3) render all the garments onto the person in one pass
+    prompt = ("Using the FIRST image as the person, dress the SAME person (keep their face, identity, "
+              "body and apparent gender presentation unchanged) in the garments shown in the "
+              "following images, worn together as one complete, well-styled outfit. Fit each garment "
+              "naturally to the body and pose. Flattering, photorealistic, clean neutral background. "
+              "No text or watermarks.")
+    prompt += await run_in_threadpool(_skin_tone_clause, person_bytes)
+    try:
+        png = await run_in_threadpool(banana_mod.generate_outfit, person_bytes, garbytes, prompt)
+    except Exception as e:
+        raise HTTPException(502, f"render failed: {e}")
+    body, ct, ext = _to_jpeg(png)
+    url = catalog_mod.upload_image(body, content_type=ct, ext=ext)
+    name = (pick.get("name") or "Your fit")[:120]
+    look_id = catalog_mod.create_look(owner_hint=owner_hint, name=name, image_url=url)
+    return {"look_id": look_id, "image_url": url,
+            "look_url": f"/look/{look_id}" if look_id else None,
+            "name": name, "why": pick.get("why"),
+            "items": [{"name": i.get("name"), "image_url": i.get("image_url")} for i in chosen],
+            "done": True}
+
+
 @app.get("/closet/garments")
 def closet_garments(cloth_type: Optional[str] = None, segment: Optional[str] = None):
     """Catalog JSON for the closet UI. Filterable by cloth_type (render dimension) and segment
