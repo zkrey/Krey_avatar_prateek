@@ -9,6 +9,7 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;
        padding:16px;max-width:760px;margin:0 auto;padding-bottom:40px}
+  body.hastray{padding-bottom:230px}
   h1{font-size:1.3rem;margin:.2rem 0 .1rem}
   .sub{color:var(--muted);font-size:.9rem;margin-bottom:1rem}
   .btn{border:1px solid var(--gold-dim);background:transparent;color:var(--gold);border-radius:10px;padding:.7rem 1rem;font-size:.95rem;cursor:pointer}
@@ -45,11 +46,23 @@
   .acts{display:flex;gap:.5rem;flex-wrap:wrap}
   .acts .btn{flex:1;min-width:120px;text-align:center}
   .spin{text-align:center;color:var(--gold);padding:2rem 0;font-size:.95rem}
+  .card .see{margin:.2rem .6rem .6rem;border:1px solid var(--gold-dim);background:transparent;color:var(--gold);border-radius:9px;padding:.45rem;font-size:.82rem;font-weight:600;cursor:pointer;width:calc(100% - 1.2rem)}
+  /* pinned looks tray -> ask-your-people (same loop as the closet) */
+  .tray{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:.7rem 16px calc(.7rem + env(safe-area-inset-bottom));z-index:8;max-width:760px;margin:0 auto}
+  .tray h4{margin:0 0 .35rem;font-size:.9rem}
+  .trow{display:flex;gap:.4rem;overflow-x:auto;padding-bottom:.4rem}
+  .trow .lk{position:relative;flex:0 0 auto}
+  .trow .lk img{width:48px;height:62px;object-fit:cover;border-radius:7px;border:1px solid var(--line)}
+  .trow .lk .rm{position:absolute;top:-6px;right:-6px;background:#000c;border:1px solid var(--line);color:#fff;border-radius:999px;width:18px;height:18px;line-height:16px;text-align:center;font-size:.7rem;cursor:pointer}
+  .tray .btn.primary{margin-top:.1rem}
+  .tray .btn.primary.ready{box-shadow:0 0 0 2px var(--gold)}
+  .traymsg{color:var(--muted);font-size:.78rem;margin-top:.4rem}
+  .preb{flex:1;min-width:46%;padding:.5rem;font-size:.82rem}
 </style>
 </head>
 <body>
   <h1>Your wardrobe 👗</h1>
-  <div class="sub">Snap your clothes — we clean them up and catalogue them for you. Build your closet, then style fits from it. <a href="/closet">← back to closet</a></div>
+  <div class="sub">Snap your clothes — we clean them up and catalogue them. Tap any piece to <b>see it on you</b>, or let the stylist build a full fit. <a href="/closet">← back to closet</a></div>
 
   <div class="addrow">
     <button class="btn primary" id="add">＋ Add a garment</button>
@@ -78,6 +91,14 @@
     <div class="sheet" id="sheet"></div>
   </div>
 
+  <!-- pinned tray: every render drops here → ask your people (same loop as the closet) -->
+  <div class="tray" id="tray" hidden>
+    <h4>Your looks <span id="traycount" style="color:var(--muted);font-weight:400"></span></h4>
+    <div class="trow" id="trow"></div>
+    <button class="btn primary" id="rankbtn" disabled>💛 Ask your people which looks best on me</button>
+    <div class="traymsg" id="traymsg"></div>
+  </div>
+
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -92,64 +113,150 @@ function card(it, pending){
   return `<div class="card${pending?' pend':''}">
     ${it.image_url?`<img src="${esc(it.image_url)}" alt="">`:`<div class="ph">${pending?'':'no image'}</div>`}
     <div class="meta"><div class="nm">${esc(it.name||'Garment')}</div><div class="tags">${tags}</div></div>
+    ${(!pending && it.item_id)?`<button class="see" data-id="${esc(it.item_id)}">✨ See it on me</button>`:""}
   </div>`;
 }
 function render(){
   $("empty").hidden = ITEMS.length>0;
   $("grid").innerHTML = ITEMS.map(it=>card(it,false)).join("");
-  $("stylist").hidden = ITEMS.length<2;   // need ≥2 pieces to style a fit
+  $("grid").querySelectorAll(".see").forEach(b=>b.onclick=()=>tryOn(b.dataset.id));
+  $("stylist").hidden = ITEMS.length<2;   // need ≥2 pieces to auto-style a full fit
 }
 
-// ---- stylist: "make me a fit" --------------------------------------------
-let OCC="";                 // selected occasion
-let MEFILE=null;            // the selfie to render fits on (kept for the session)
-$("occ").onclick=e=>{ const b=e.target.closest(".chip"); if(!b) return;
-  [...document.querySelectorAll("#occ .chip")].forEach(c=>c.classList.remove("on"));
-  b.classList.add("on"); OCC=b.dataset.occ||""; };
+// ---- selfie (asked once, reused for every render this session) ------------
+let MEFILE=null;
+function withSelfie(cb){ if(MEFILE){ cb(); return; } pickPhoto(f=>{ MEFILE=f; cb(); }, true); }
 
 function closeOv(){ $("ov").classList.remove("show"); $("sheet").innerHTML=""; }
 $("ov").onclick=e=>{ if(e.target===$("ov")) closeOv(); };
-
-function showSpin(){
-  $("sheet").innerHTML='<div class="spin">✨ Styling a fit from your closet…<br><small style="color:var(--muted)">picking pieces + dressing you · ~20–30s</small></div>';
+function showSpin(msg){
+  $("sheet").innerHTML='<div class="spin">'+esc(msg||"✨ Dressing you…")+'<br><small style="color:var(--muted)">~20–30s</small></div>';
   $("ov").classList.add("show");
 }
-function showFit(f){
+function showErr(msg){
+  $("sheet").innerHTML=`<div class="spin">😕 ${esc(msg)}<br><a href="#" id="cl">close</a></div>`;
+  $("cl").onclick=ev=>{ev.preventDefault();closeOv();}; $("ov").classList.add("show");
+}
+
+// ---- result sheet: show the look, drop it in the tray, point to the loop --
+function showLook(f){
+  addLook({look_id:f.look_id, image_url:f.image_url, name:f.name});   // into the shared tray
   const used=(f.items||[]).filter(i=>i.image_url)
     .map(i=>`<img src="${esc(i.image_url)}" alt="${esc(i.name||'')}">`).join("");
   const share=location.origin+(f.look_url||"");
+  const ready=LOOKS.length>=2;
   $("sheet").innerHTML=`
-    <img class="hero" src="${esc(f.image_url)}" alt="your fit">
-    <h3>${esc(f.name||'Your fit')}</h3>
+    <img class="hero" src="${esc(f.image_url)}" alt="your look">
+    <h3>${esc(f.name||'Your look')}</h3>
     ${f.why?`<p class="why">${esc(f.why)}</p>`:""}
     ${used?`<div class="usedrow">${used}</div>`:""}
     <div class="acts">
-      <button class="btn primary" id="sh">💛 Share this fit</button>
-      <button class="btn" id="again">✨ Make another</button>
+      ${ready
+        ? `<button class="btn primary" id="rank">💛 Ask your people</button>
+           <button class="btn" id="again">✨ Make another</button>`
+        : `<button class="btn primary" id="again">✨ Make another look</button>
+           <button class="btn" id="sh">Share just this one</button>`}
     </div>
-    <div style="text-align:center;margin-top:.7rem"><a href="#" id="cl">close</a></div>`;
+    ${ready?`<div class="why" style="text-align:center;margin:.6rem 0 0">Added to your looks below — one more or ask your circle 💛</div>`
+           :`<div class="why" style="text-align:center;margin:.6rem 0 0">Saved to your looks ✓ — add one more, then ask the people who’ll keep it real.</div>`}
+    <div style="text-align:center;margin-top:.6rem"><a href="#" id="cl">close</a></div>`;
   $("cl").onclick=e=>{e.preventDefault();closeOv();};
-  $("again").onclick=()=>makeFit();
-  $("sh").onclick=async()=>{
-    const data={title:"My fit on Krey",text:(f.name||"My fit")+" — made from my own closet on Krey 💛",url:share};
-    try{ if(navigator.share){ await navigator.share(data); } else { await navigator.clipboard.writeText(share); $("sh").textContent="Link copied ✓"; } }
-    catch(e){}
+  const again=$("again"); if(again) again.onclick=()=>{ closeOv(); };
+  const rank=$("rank"); if(rank) rank.onclick=()=>{ closeOv(); makeBallot(); };
+  const sh=$("sh"); if(sh) sh.onclick=async()=>{
+    const data={title:"My look on Krey",text:(f.name||"My look")+" on me — Krey 💛",url:share};
+    try{ if(navigator.share){ await navigator.share(data); } else { await navigator.clipboard.writeText(share); sh.textContent="Link copied ✓"; } }catch(e){}
   };
 }
 
-async function postFit(){
-  const fd=new FormData(); fd.append("owner_hint",sid()); fd.append("occasion",OCC); fd.append("person",MEFILE);
-  const r=await fetch("/wardrobe/fit",{method:"POST",body:fd});
-  if(!r.ok){ let d={}; try{d=await r.json();}catch(e){} throw new Error(d.detail||"couldn't style a fit"); }
-  return r.json();
+// ---- single garment: "see it on me" --------------------------------------
+async function tryOn(itemId){
+  withSelfie(async()=>{
+    showSpin("✨ Putting it on you…");
+    try{
+      const fd=new FormData(); fd.append("owner_hint",sid()); fd.append("item_id",itemId); fd.append("person",MEFILE);
+      const r=await fetch("/wardrobe/tryon",{method:"POST",body:fd});
+      if(!r.ok){ let d={}; try{d=await r.json();}catch(e){} throw new Error(d.detail||"couldn't render that"); }
+      showLook(await r.json());
+    }catch(e){ showErr(e.message); }
+  });
 }
-async function makeFit(){
-  if(!MEFILE){ pickPhoto(f=>{ MEFILE=f; makeFit(); }, true); return; }  // ask for a selfie once
-  showSpin();
-  try{ showFit(await postFit()); }
-  catch(e){ $("sheet").innerHTML=`<div class="spin">😕 ${esc(e.message)}<br><a href="#" id="cl">close</a></div>`; $("cl").onclick=ev=>{ev.preventDefault();closeOv();}; }
+
+// ---- stylist: "make me a fit" (full outfit) ------------------------------
+let OCC="";
+$("occ").onclick=e=>{ const b=e.target.closest(".chip"); if(!b) return;
+  [...document.querySelectorAll("#occ .chip")].forEach(c=>c.classList.remove("on"));
+  b.classList.add("on"); OCC=b.dataset.occ||""; };
+function makeFit(){
+  withSelfie(async()=>{
+    showSpin("✨ Styling a fit from your closet…");
+    try{
+      const fd=new FormData(); fd.append("owner_hint",sid()); fd.append("occasion",OCC); fd.append("person",MEFILE);
+      const r=await fetch("/wardrobe/fit",{method:"POST",body:fd});
+      if(!r.ok){ let d={}; try{d=await r.json();}catch(e){} throw new Error(d.detail||"couldn't style a fit"); }
+      showLook(await r.json());
+    }catch(e){ showErr(e.message); }
+  });
 }
 $("makefit").onclick=makeFit;
+
+// ---- looks tray -> ask your people (the SAME loop as the closet) ----------
+let LOOKS=[];
+function addLook(lk){ if(!lk||!lk.look_id) return; if(LOOKS.some(x=>x.look_id===lk.look_id)) return; LOOKS.push(lk); renderTray(); }
+function renderTray(){
+  const t=$("tray");
+  if(!LOOKS.length){ t.hidden=true; document.body.classList.remove("hastray"); return; }
+  t.hidden=false; document.body.classList.add("hastray");
+  $("traycount").textContent="· "+LOOKS.length+(LOOKS.length===1?" look":" looks");
+  $("trow").innerHTML=LOOKS.map((l,i)=>`<div class="lk"><img src="${esc(l.image_url)}" alt=""><div class="rm" data-i="${i}">✕</div></div>`).join("");
+  $("trow").querySelectorAll(".rm").forEach(b=>b.onclick=()=>{ LOOKS.splice(+b.dataset.i,1); renderTray(); });
+  const rb=$("rankbtn"); rb.disabled=LOOKS.length<2; rb.classList.toggle("ready",LOOKS.length>=2);
+  $("traymsg").textContent = LOOKS.length<2
+    ? "Add one more look, then ask the people who’ll keep it real 💛"
+    : "Just your close circle — they tap through 2 at a time, ~10 sec. Not the whole feed.";
+}
+$("rankbtn").onclick=makeBallot;
+async function makeBallot(){
+  if(LOOKS.length<2) return;
+  $("rankbtn").disabled=true; $("traymsg").textContent="Getting it ready…";
+  try{
+    const r=await fetch("/closet/ballot",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({owner_hint:sid(), look_ids:LOOKS.map(l=>l.look_id)})});
+    const j=await r.json();
+    if(!j.rank_url){ $("traymsg").textContent=(j.detail||"couldn't set it up — try again"); $("rankbtn").disabled=false; return; }
+    const url=location.origin+j.rank_url, results=location.origin+"/results/"+encodeURIComponent(j.set_id||""), SET=j.set_id;
+    try{ localStorage.setItem("krey_last_results", results); }catch(e){}
+    // self-first: a gut-check tap (phase=pre), THEN a quiet send to a close circle (no auto-broadcast)
+    const scale=[["Not sure 😐",2],["Maybe 🙂",5],["Pretty sure 😎",8],["Love them 🔥",10]];
+    $("traymsg").innerHTML=
+      '<div style="border:1px solid var(--gold-dim);border-radius:12px;padding:.6rem;margin:.1rem 0 .6rem">'
+      +'<div id="pre_lab" style="font-weight:600;font-size:.88rem;margin-bottom:.4rem;color:var(--text)">First — your gut. How much do you love these?</div>'
+      +'<div style="display:flex;gap:.35rem;flex-wrap:wrap">'
+      + scale.map(([t,v])=>`<button class="btn preb" data-v="${v}">${t}</button>`).join("")
+      +'</div></div>'
+      +'<div style="display:flex;flex-direction:column;gap:.5rem">'
+      +'<button class="btn primary" id="tm_share">💛 Send to your close circle</button>'
+      +'<button class="btn" id="tm_results">📊 See what they pick</button>'
+      +'<div style="color:var(--muted);font-size:.76rem">Send it to 2–3 people whose taste you trust — not the whole feed. It stays between you.</div>'
+      +'</div>';
+    $("traymsg").querySelectorAll(".preb").forEach(b=>b.onclick=()=>{
+      $("traymsg").querySelectorAll(".preb").forEach(x=>{x.disabled=true;x.classList.remove("primary");});
+      b.classList.add("primary");
+      const lab=$("pre_lab"); if(lab) lab.textContent="Got it ✓ — now see if your people agree.";
+      try{ fetch("/closet/confidence",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({set_id:SET, owner_hint:sid(), value:+b.dataset.v})}); }catch(e){}
+    });
+    $("tm_share").onclick=()=>shareBallot(url);
+    $("tm_results").onclick=()=>{ location.href=results; };
+  }catch(e){ $("traymsg").textContent="Couldn't set it up — try again."; $("rankbtn").disabled=false; }
+}
+async function shareBallot(url){
+  const text="hey, need your honest eye 💛 which of these is most me? tap to pick — 10 sec, just you";
+  try{
+    if(navigator.share){ await navigator.share({title:"Krey", text, url}); }
+    else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); }
+  }catch(e){}
+}
 
 async function load(){
   try{ const r=await fetch("/wardrobe/items?owner_hint="+encodeURIComponent(sid())); const d=await r.json(); ITEMS=d.items||[]; }catch(e){ ITEMS=[]; }
@@ -167,7 +274,7 @@ async function addGarment(file){
   try{
     const r=await fetch("/wardrobe/add",{method:"POST",body:fd});
     const j=await r.json();
-    if(j.image_url){ $("msg").textContent = j.saved ? "Added ✓" : "Added (not saved — wardrobe table not set up yet)"; }
+    if(j.image_url){ $("msg").innerHTML = j.saved ? 'Added ✓ — tap <b>✨ See it on me</b> on the piece to try it on' : "Added (not saved — wardrobe table not set up yet)"; }
     else { $("msg").textContent = "Couldn't add that — try another photo."; }
   }catch(e){ $("msg").textContent="Couldn't add that — try again."; }
   await load();   // refresh from server (replaces the pending tile)

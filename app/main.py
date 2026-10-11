@@ -333,6 +333,39 @@ async def wardrobe_fit(owner_hint: str = Form(...), person: UploadFile = File(..
             "done": True}
 
 
+@app.post("/wardrobe/tryon")
+async def wardrobe_tryon(owner_hint: str = Form(...), item_id: str = Form(...),
+                         person: UploadFile = File(...)):
+    """See ONE of your own saved garments on you (single-garment render). Mirrors /closet/tryon's
+    Nano path but sources the garment from the user's wardrobe, and saves the result as a look so it
+    drops into the same looks-tray → ask-your-people loop as every other fit."""
+    from app import catalog as catalog_mod
+    from render import banana as banana_mod
+    from starlette.concurrency import run_in_threadpool
+    if not banana_mod.banana_configured():
+        raise HTTPException(503, "render backend not configured (set GEMINI_API_KEY)")
+    item = next((i for i in catalog_mod.list_wardrobe(owner_hint) if i.get("item_id") == item_id), None)
+    if not item:
+        raise HTTPException(404, "garment not in your wardrobe")
+    person_bytes = _normalize_upload(await person.read())
+    if not person_bytes:
+        raise HTTPException(400, "missing person image")
+    garment_bytes = catalog_mod.fetch_bytes(item.get("image_url"))
+    if not garment_bytes:
+        raise HTTPException(502, "couldn't load that garment")
+    prompt = _banana_prompt(item, "studio") + await run_in_threadpool(_skin_tone_clause, person_bytes)
+    try:
+        png = await run_in_threadpool(banana_mod.generate, person_bytes, garment_bytes, prompt)
+    except Exception as e:
+        raise HTTPException(502, f"render failed: {e}")
+    body, ct, ext = _to_jpeg(png)
+    url = catalog_mod.upload_image(body, content_type=ct, ext=ext)
+    name = item.get("name") or "Your piece"
+    look_id = catalog_mod.create_look(owner_hint=owner_hint, name=name, image_url=url)
+    return {"look_id": look_id, "image_url": url,
+            "look_url": f"/look/{look_id}" if look_id else None, "name": name, "done": True}
+
+
 @app.get("/closet/garments")
 def closet_garments(cloth_type: Optional[str] = None, segment: Optional[str] = None):
     """Catalog JSON for the closet UI. Filterable by cloth_type (render dimension) and segment
