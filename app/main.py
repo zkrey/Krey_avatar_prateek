@@ -588,7 +588,8 @@ def _skin_tone_clause(person_bytes: bytes) -> str:
 
 
 def _biggest_face_embedding(img_bytes: bytes):
-    """ArcFace embedding of the largest face in an image (None if no face / deps missing)."""
+    """ArcFace embedding of the most prominent face (det_score x area — matches bench/render_eval's
+    _best_face so the live gate and the offline benchmark judge identity the same way)."""
     try:
         import cv2
         import numpy as np
@@ -599,8 +600,10 @@ def _biggest_face_embedding(img_bytes: bytes):
         faces = identity.detect_faces(img)
         if not faces:
             return None
-        f = max(faces, key=lambda x: (x["bbox"][2] - x["bbox"][0]) * (x["bbox"][3] - x["bbox"][1]))
-        return f["embedding"]
+        def prom(f):
+            x0, y0, x1, y1 = f["bbox"]
+            return f.get("det_score", 1.0) * max(1, (x1 - x0) * (y1 - y0))
+        return max(faces, key=prom)["embedding"]
     except Exception:
         return None
 
@@ -622,14 +625,14 @@ def _identity_cosine(person_bytes: bytes, render_bytes: bytes):
 
 
 def _id_threshold() -> float:
-    """Identity-retention floor as an ArcFace cosine. Tunable via KREY_ID_MIN_COSINE. Default 0.35
-    matches capture_core.SAME_FACE_COSINE (the tested 'same person' floor) — low enough that a
-    faithful render passes (few retries), high enough to catch a face that drifted to a stranger.
-    Raise it toward 0.45 once real flag data shows where testers stop recognising themselves."""
+    """Render identity-retention floor as an ArcFace cosine — the doctrine's render bar
+    (bench/render_eval.RECOGNISABLE_COSINE = 0.50, "recognisably the same person"). Tunable via
+    KREY_ID_MIN_COSINE; the 'is this you?' feedback loop (/render/feedback -> /admin recognition
+    mapping) is the instrument that recalibrates it on real tester judgements, per the doctrine."""
     try:
-        return float(os.environ.get("KREY_ID_MIN_COSINE", "0.35"))
+        return float(os.environ.get("KREY_ID_MIN_COSINE", "0.50"))
     except Exception:
-        return 0.35
+        return 0.50
 
 
 async def _render_with_identity_guard(person_bytes: bytes, make_png, base_prompt: str):
@@ -1103,6 +1106,23 @@ def closet_ballot(payload: dict = Body(...)):
     if not set_id:
         raise HTTPException(502, "could not create the ballot")
     return {"set_id": set_id, "rank_url": f"/rank/{set_id}"}
+
+
+@app.post("/render/feedback")
+def render_feedback(payload: dict = Body(...)):
+    """One-tap 'does this render look like you?'. Records the human YES/NO against the render's
+    ArcFace identity_score so /admin can map the cosine where testers stop recognising themselves
+    (the doctrine's recalibration instrument). Best-effort. On NO, the client also shows a retake
+    nudge — this endpoint only persists the signal."""
+    from app import catalog as catalog_mod
+    looks_like = payload.get("looks_like")
+    if looks_like is None:
+        raise HTTPException(400, "looks_like (true/false) required")
+    ok = catalog_mod.record_render_feedback(
+        look_id=payload.get("look_id"), owner_hint=payload.get("owner_hint"),
+        looks_like=bool(looks_like), identity_score=payload.get("identity_score"),
+        route=payload.get("route"))
+    return {"ok": bool(ok)}
 
 
 @app.post("/closet/confidence")

@@ -374,6 +374,25 @@ def record_confidence(set_id: str | None, look_id: str | None, owner_hint: str |
     }])
 
 
+def record_render_feedback(look_id: str | None, owner_hint: str | None, looks_like: bool,
+                           identity_score: float | None = None, route: str | None = None) -> bool:
+    """A one-tap 'does this render look like you?' judgement. Pairs the human YES/NO with the
+    ArcFace identity_score the render scored, so /admin can map the cosine at which testers stop
+    recognising themselves — the doctrine's instrument for recalibrating the render floor."""
+    row = {
+        "look_id": str(look_id)[:64] if look_id else None,
+        "owner_hint": str(owner_hint)[:64] if owner_hint else None,
+        "looks_like": bool(looks_like),
+        "route": str(route)[:40] if route else None,
+    }
+    try:
+        if identity_score is not None:
+            row["identity_score"] = round(float(identity_score), 4)
+    except Exception:
+        pass
+    return _post("render_feedback", [row])
+
+
 def _get_all(path_select: str, limit: int = 10000) -> list:
     """Bulk read for /admin analytics. Returns [] on any error."""
     return _get(f"{path_select}&limit={int(limit)}") or []
@@ -531,6 +550,31 @@ def admin_snapshot() -> dict:
     total_cycles = activations
     avg_cycles_per_owner = round(activations / len(ballot_owners), 2) if ballot_owners else 0.0
 
+    # --- render recognition mapping: "does this look like you?" vs the ArcFace identity_score.
+    # The doctrine's instrument for recalibrating the render floor — read the cosine at which
+    # testers start saying "no" and set KREY_ID_MIN_COSINE just above that cluster.
+    rf = _get_all("render_feedback?select=looks_like,identity_score,route")
+    yes_scores = [float(r["identity_score"]) for r in rf
+                  if r.get("looks_like") and r.get("identity_score") is not None]
+    no_scores = [float(r["identity_score"]) for r in rf
+                 if r.get("looks_like") is False and r.get("identity_score") is not None]
+    n_yes = sum(1 for r in rf if r.get("looks_like"))
+    n_no = sum(1 for r in rf if r.get("looks_like") is False)
+    n_tot = n_yes + n_no
+    _avg = lambda xs: round(sum(xs) / len(xs), 3) if xs else None
+    # suggested floor: midpoint between the typical "no" and typical "yes" score, when both exist
+    suggested = None
+    if yes_scores and no_scores:
+        suggested = round((max(no_scores) + min(yes_scores)) / 2, 3)
+    recognition = {
+        "responses": n_tot, "yes": n_yes, "no": n_no,
+        "self_recognition_rate": (round(n_yes / n_tot, 3) if n_tot else None),
+        "avg_score_yes": _avg(yes_scores), "avg_score_no": _avg(no_scores),
+        "max_no_score": (round(max(no_scores), 3) if no_scores else None),
+        "min_yes_score": (round(min(yes_scores), 3) if yes_scores else None),
+        "suggested_floor": suggested,   # KREY_ID_MIN_COSINE candidate from real judgements
+    }
+
     return {
         "leaderboard": leaderboard[:50],
         "totals": {
@@ -564,6 +608,7 @@ def admin_snapshot() -> dict:
             "avg_cycles_per_owner": avg_cycles_per_owner,
             "ballot_owners": len(ballot_owners),
         },
+        "recognition": recognition,   # "does this look like you?" -> maps score at which testers reject
     }
 
 

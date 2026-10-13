@@ -220,6 +220,31 @@ drop policy if exists "public read referrals" on referrals;
 create policy "public read events"    on garment_events for select using (true);
 create policy "public read referrals" on referrals      for select using (true);
 
+-- ---------------------------------------------------------------------------
+-- render_feedback — the "does this render look like you?" judgement. Pairs the human YES/NO with
+-- the ArcFace identity_score the render scored (bench/render_eval metric), so /admin can map the
+-- cosine at which testers stop recognising themselves and recalibrate KREY_ID_MIN_COSINE (the
+-- render floor; doctrine: docs/render_benchmark_plan.md + recognition_thresholds.md). Anonymous.
+create table if not exists render_feedback (
+    id             bigint generated always as identity primary key,
+    look_id        text,
+    owner_hint     text,
+    looks_like     boolean,                    -- true = "that's me", false = "doesn't look like me"
+    identity_score numeric,                     -- ArcFace cosine (input face vs render face), 0..1
+    route          text,                        -- closet-tryon | trend | wardrobe-tryon | wardrobe-fit
+    created_at     timestamptz default now()
+);
+create index if not exists render_feedback_look_idx on render_feedback (look_id);
+alter table render_feedback enable row level security;
+drop policy if exists "anon insert render_feedback" on render_feedback;
+drop policy if exists "public read render_feedback" on render_feedback;
+create policy "anon insert render_feedback" on render_feedback for insert with check (true);
+create policy "public read render_feedback" on render_feedback for select using (true);
+--   recognition mapping (where testers reject their render):
+--     select looks_like, count(*), round(avg(identity_score),3) avg_score,
+--            min(identity_score) lo, max(identity_score) hi
+--       from render_feedback group by looks_like;
+
 -- Loop rollups:
 --   fit-confidence lift by segment (needs rendered looks + baselines):
 --     -- (computed app-side from rank_votes -> Glicko-2; see docs measurement plan)

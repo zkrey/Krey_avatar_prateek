@@ -381,6 +381,11 @@ function showRender(state,g,j){
       : "";
     ov.innerHTML=`<div style="text-align:center;max-width:420px;width:100%">
       <img src="${esc(j.image_url)}" style="max-width:100%;max-height:52vh;border-radius:14px;border:1px solid var(--line)">
+      <div id="isyou" style="display:flex;align-items:center;gap:.5rem;justify-content:center;margin:.5rem 0 .1rem;font-size:.9rem;flex-wrap:wrap">
+        <span>Does this look like you?</span>
+        <button class="btn" id="rf_yes" style="padding:.3rem .8rem">👍 Yes</button>
+        <button class="btn" id="rf_no" style="padding:.3rem .8rem">👎 Not quite</button>
+      </div>
       <div style="margin:.6rem 0 .5rem;font-weight:600">${head}</div>
       ${idwarn}
       ${canRank
@@ -404,6 +409,10 @@ function showRender(state,g,j){
     };
     if($("rov_rank")) $("rov_rank").onclick=()=>{ ov.remove(); makeBallot(); };
     $("rov_close").onclick=()=>ov.remove();
+    const sendRF=ans=>{ try{ fetch("/render/feedback",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({look_id:j.look_id, owner_hint:sid(), looks_like:ans, identity_score:j.identity_score, route:(j.mode||MODE||"closet")})}); }catch(e){} };
+    if($("rf_yes")) $("rf_yes").onclick=()=>{ sendRF(true); $("isyou").innerHTML='<span class="muted">Love it 💛 thanks!</span>'; };
+    if($("rf_no")) $("rf_no").onclick=()=>{ sendRF(false); $("isyou").innerHTML='<span class="muted">Thanks — noted. A clear, front-on, well-lit photo gives the best likeness.</span>'; };
   } else {
     clearInterval(window.__rtick);
     ov.innerHTML=`<div style="text-align:center"><div>Render didn't go through — ${esc((j&&j.detail)||"try again in a moment")}.</div><button class="btn" id="rov_close" style="margin-top:.8rem">Close</button></div>`;

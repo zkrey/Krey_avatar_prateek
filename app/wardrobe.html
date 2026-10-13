@@ -151,6 +151,11 @@ function showLook(f){
   $("sheet").innerHTML=`
     ${idwarn}
     <img class="hero" src="${esc(f.image_url)}" alt="your look">
+    <div id="isyou" style="display:flex;align-items:center;gap:.5rem;justify-content:center;margin:.55rem 0 .1rem;font-size:.9rem;flex-wrap:wrap">
+      <span>Does this look like you?</span>
+      <button class="btn" id="rf_yes" style="padding:.3rem .8rem">👍 Yes</button>
+      <button class="btn" id="rf_no" style="padding:.3rem .8rem">👎 Not quite</button>
+    </div>
     <h3>${esc(f.name||'Your look')}</h3>
     ${f.why?`<p class="why">${esc(f.why)}</p>`:""}
     ${used?`<div class="usedrow">${used}</div>`:""}
@@ -165,6 +170,10 @@ function showLook(f){
            :`<div class="why" style="text-align:center;margin:.6rem 0 0">Saved to your looks ✓ — add one more, then ask the people who’ll keep it real.</div>`}
     <div style="text-align:center;margin-top:.6rem"><a href="#" id="cl">close</a></div>`;
   $("cl").onclick=e=>{e.preventDefault();closeOv();};
+  function sendRF(ans){ try{ fetch("/render/feedback",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({look_id:f.look_id, owner_hint:sid(), looks_like:ans, identity_score:f.identity_score, route:"wardrobe"})}); }catch(e){} }
+  if($("rf_yes")) $("rf_yes").onclick=()=>{ sendRF(true); $("isyou").innerHTML='<span style="color:var(--muted)">Love it 💛 thanks!</span>'; };
+  if($("rf_no")) $("rf_no").onclick=()=>{ sendRF(false); $("isyou").innerHTML='<span style="color:var(--muted)">Thanks — noted. For the best likeness, use a clear, front-on, well-lit selfie, then ✨ Make another.</span>'; };
   const again=$("again"); if(again) again.onclick=()=>{ closeOv(); };
   const rank=$("rank"); if(rank) rank.onclick=()=>{ closeOv(); makeBallot(); };
   const sh=$("sh"); if(sh) sh.onclick=async()=>{
