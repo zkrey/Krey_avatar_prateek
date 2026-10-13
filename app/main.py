@@ -624,15 +624,41 @@ def _identity_cosine(person_bytes: bytes, render_bytes: bytes):
         return None
 
 
+_ID_FLOOR_CACHE = {"v": None, "ts": 0.0}
+
+
 def _id_threshold() -> float:
-    """Render identity-retention floor as an ArcFace cosine — the doctrine's render bar
-    (bench/render_eval.RECOGNISABLE_COSINE = 0.50, "recognisably the same person"). Tunable via
-    KREY_ID_MIN_COSINE; the 'is this you?' feedback loop (/render/feedback -> /admin recognition
-    mapping) is the instrument that recalibrates it on real tester judgements, per the doctrine."""
+    """Render identity-retention floor (ArcFace cosine). Doctrine bar is
+    bench/render_eval.RECOGNISABLE_COSINE = 0.50 ("recognisably the same person").
+
+    SELF-TUNING: the 'is this you?' judgements auto-recalibrate this — once enough testers have
+    answered, the gate adopts the floor that best separates their YES/NO (catalog.learned_id_floor),
+    cached ~10 min and clamped to [0.30, 0.70]. The loop closes with no manual step. Override:
+    set KREY_ID_MIN_COSINE to pin a value; set KREY_ID_AUTOTUNE=off to freeze at the default."""
     try:
-        return float(os.environ.get("KREY_ID_MIN_COSINE", "0.50"))
+        base = float(os.environ.get("KREY_ID_MIN_COSINE", "0.50"))
     except Exception:
-        return 0.50
+        base = 0.50
+    # explicit pin or autotune disabled -> use the fixed value
+    if os.environ.get("KREY_ID_MIN_COSINE") or _is_falsey(os.environ.get("KREY_ID_AUTOTUNE", "on")):
+        return base
+    try:
+        import time
+        now = time.monotonic()
+        if now - _ID_FLOOR_CACHE["ts"] > 600:   # refresh the learned floor at most every 10 min
+            from app import catalog as _cat
+            _ID_FLOOR_CACHE["v"] = _cat.learned_id_floor()
+            _ID_FLOOR_CACHE["ts"] = now
+        learned = _ID_FLOOR_CACHE["v"]
+    except Exception:
+        learned = None
+    if learned is not None:
+        return max(0.30, min(0.70, float(learned)))
+    return base
+
+
+def _is_falsey(v) -> bool:
+    return str(v).strip().lower() in ("0", "off", "false", "no", "")
 
 
 async def _render_with_identity_guard(person_bytes: bytes, make_png, base_prompt: str):

@@ -393,6 +393,62 @@ def record_render_feedback(look_id: str | None, owner_hint: str | None, looks_li
     return _post("render_feedback", [row])
 
 
+def _optimal_floor(yes_scores: list, no_scores: list):
+    """The ArcFace cosine that best separates 'that's me' (YES, above) from 'not me' (NO, below) —
+    the threshold maximising correct classifications over observed judgements. None if either side
+    is empty."""
+    if not yes_scores or not no_scores:
+        return None
+    cands = sorted(set(yes_scores) | set(no_scores))
+    best_t, best_acc = cands[0], -1
+    for t in cands:
+        acc = sum(1 for s in yes_scores if s >= t) + sum(1 for s in no_scores if s < t)
+        if acc > best_acc:
+            best_acc, best_t = acc, t
+    return round(best_t, 3)
+
+
+# How much human data we need before trusting a learned floor (vs the env/default). Provisional.
+_LEARN_MIN_TOTAL, _LEARN_MIN_EACH = 12, 3
+
+
+def recognition_map(rf: list) -> dict:
+    """Map 'does this look like you?' judgements against the render's ArcFace identity_score:
+    self-recognition rate, YES/NO score spread, the separating floor, and whether there's enough
+    data to trust it. Shared by /admin and the live auto-tuned gate."""
+    yes = [float(r["identity_score"]) for r in rf
+           if r.get("looks_like") and r.get("identity_score") is not None]
+    no = [float(r["identity_score"]) for r in rf
+          if r.get("looks_like") is False and r.get("identity_score") is not None]
+    n_yes = sum(1 for r in rf if r.get("looks_like"))
+    n_no = sum(1 for r in rf if r.get("looks_like") is False)
+    n_tot = n_yes + n_no
+    _avg = lambda xs: round(sum(xs) / len(xs), 3) if xs else None
+    floor = _optimal_floor(yes, no)
+    trusted = bool(floor is not None and n_tot >= _LEARN_MIN_TOTAL
+                   and len(yes) >= _LEARN_MIN_EACH and len(no) >= _LEARN_MIN_EACH)
+    return {
+        "responses": n_tot, "yes": n_yes, "no": n_no,
+        "self_recognition_rate": (round(n_yes / n_tot, 3) if n_tot else None),
+        "avg_score_yes": _avg(yes), "avg_score_no": _avg(no),
+        "max_no_score": (round(max(no), 3) if no else None),
+        "min_yes_score": (round(min(yes), 3) if yes else None),
+        "suggested_floor": floor,          # best YES/NO separator from real judgements
+        "floor_trusted": trusted,          # enough data for the live gate to auto-apply it
+        "scored_samples": len(yes) + len(no),
+    }
+
+
+def learned_id_floor():
+    """The auto-tuned render identity floor from real 'is this you?' judgements, or None when there
+    isn't enough data yet. The live gate reads this so the recalibration loop closes itself."""
+    try:
+        m = recognition_map(_get_all("render_feedback?select=looks_like,identity_score"))
+        return m["suggested_floor"] if m.get("floor_trusted") else None
+    except Exception:
+        return None
+
+
 def _get_all(path_select: str, limit: int = 10000) -> list:
     """Bulk read for /admin analytics. Returns [] on any error."""
     return _get(f"{path_select}&limit={int(limit)}") or []
@@ -551,29 +607,9 @@ def admin_snapshot() -> dict:
     avg_cycles_per_owner = round(activations / len(ballot_owners), 2) if ballot_owners else 0.0
 
     # --- render recognition mapping: "does this look like you?" vs the ArcFace identity_score.
-    # The doctrine's instrument for recalibrating the render floor — read the cosine at which
-    # testers start saying "no" and set KREY_ID_MIN_COSINE just above that cluster.
-    rf = _get_all("render_feedback?select=looks_like,identity_score,route")
-    yes_scores = [float(r["identity_score"]) for r in rf
-                  if r.get("looks_like") and r.get("identity_score") is not None]
-    no_scores = [float(r["identity_score"]) for r in rf
-                 if r.get("looks_like") is False and r.get("identity_score") is not None]
-    n_yes = sum(1 for r in rf if r.get("looks_like"))
-    n_no = sum(1 for r in rf if r.get("looks_like") is False)
-    n_tot = n_yes + n_no
-    _avg = lambda xs: round(sum(xs) / len(xs), 3) if xs else None
-    # suggested floor: midpoint between the typical "no" and typical "yes" score, when both exist
-    suggested = None
-    if yes_scores and no_scores:
-        suggested = round((max(no_scores) + min(yes_scores)) / 2, 3)
-    recognition = {
-        "responses": n_tot, "yes": n_yes, "no": n_no,
-        "self_recognition_rate": (round(n_yes / n_tot, 3) if n_tot else None),
-        "avg_score_yes": _avg(yes_scores), "avg_score_no": _avg(no_scores),
-        "max_no_score": (round(max(no_scores), 3) if no_scores else None),
-        "min_yes_score": (round(min(yes_scores), 3) if yes_scores else None),
-        "suggested_floor": suggested,   # KREY_ID_MIN_COSINE candidate from real judgements
-    }
+    # The doctrine's instrument for recalibrating the render floor; the live gate auto-applies
+    # `suggested_floor` once `floor_trusted` (see learned_id_floor), so the loop closes itself.
+    recognition = recognition_map(_get_all("render_feedback?select=looks_like,identity_score"))
 
     return {
         "leaderboard": leaderboard[:50],
