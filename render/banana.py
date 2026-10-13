@@ -18,7 +18,9 @@ import os
 import urllib.error
 import urllib.request
 
-MODEL = os.environ.get("KREY_BANANA_MODEL", "gemini-2.5-flash-image")
+# NOTE: gemini-2.5-flash-image was deprecated/shut down — the default must track the current image
+# model (prod sets KREY_BANANA_MODEL explicitly; this fallback matters only if that var is cleared).
+MODEL = os.environ.get("KREY_BANANA_MODEL", "gemini-3.1-flash-image")
 # A text/vision model (not the image model) for structured garment tagging. gemini-flash-latest
 # returns clean JSON from a garment photo; override with KREY_TAG_MODEL.
 TAG_MODEL = os.environ.get("KREY_TAG_MODEL", "gemini-flash-latest")
