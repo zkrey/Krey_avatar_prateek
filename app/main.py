@@ -316,10 +316,11 @@ async def wardrobe_fit(owner_hint: str = Form(...), person: UploadFile = File(..
               "body and apparent gender presentation unchanged) in the garments shown in the "
               "following images, worn together as one complete, well-styled outfit. Fit each garment "
               "naturally to the body and pose. Flattering, photorealistic, clean neutral background. "
-              "No text or watermarks.")
+              "No text or watermarks. " + _ID_LOCK)
     prompt += await run_in_threadpool(_skin_tone_clause, person_bytes)
     try:
-        png = await run_in_threadpool(banana_mod.generate_outfit, person_bytes, garbytes, prompt)
+        png, id_score = await _render_with_identity_guard(
+            person_bytes, lambda p: banana_mod.generate_outfit(person_bytes, garbytes, p), prompt)
     except Exception as e:
         raise HTTPException(502, f"render failed: {e}")
     body, ct, ext = _to_jpeg(png)
@@ -330,7 +331,7 @@ async def wardrobe_fit(owner_hint: str = Form(...), person: UploadFile = File(..
             "look_url": f"/look/{look_id}" if look_id else None,
             "name": name, "why": pick.get("why"),
             "items": [{"name": i.get("name"), "image_url": i.get("image_url")} for i in chosen],
-            "done": True}
+            "done": True, **_identity_fields(id_score)}
 
 
 @app.post("/wardrobe/tryon")
@@ -355,7 +356,8 @@ async def wardrobe_tryon(owner_hint: str = Form(...), item_id: str = Form(...),
         raise HTTPException(502, "couldn't load that garment")
     prompt = _banana_prompt(item, "studio") + await run_in_threadpool(_skin_tone_clause, person_bytes)
     try:
-        png = await run_in_threadpool(banana_mod.generate, person_bytes, garment_bytes, prompt)
+        png, id_score = await _render_with_identity_guard(
+            person_bytes, lambda p: banana_mod.generate(person_bytes, garment_bytes, p), prompt)
     except Exception as e:
         raise HTTPException(502, f"render failed: {e}")
     body, ct, ext = _to_jpeg(png)
@@ -363,7 +365,8 @@ async def wardrobe_tryon(owner_hint: str = Form(...), item_id: str = Form(...),
     name = item.get("name") or "Your piece"
     look_id = catalog_mod.create_look(owner_hint=owner_hint, name=name, image_url=url)
     return {"look_id": look_id, "image_url": url,
-            "look_url": f"/look/{look_id}" if look_id else None, "name": name, "done": True}
+            "look_url": f"/look/{look_id}" if look_id else None, "name": name, "done": True,
+            **_identity_fields(id_score)}
 
 
 @app.get("/closet/garments")
@@ -584,6 +587,79 @@ def _skin_tone_clause(person_bytes: bytes) -> str:
         return ""
 
 
+def _biggest_face_embedding(img_bytes: bytes):
+    """ArcFace embedding of the largest face in an image (None if no face / deps missing)."""
+    try:
+        import cv2
+        import numpy as np
+        from app import identity
+        img = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
+        if img is None:
+            return None
+        faces = identity.detect_faces(img)
+        if not faces:
+            return None
+        f = max(faces, key=lambda x: (x["bbox"][2] - x["bbox"][0]) * (x["bbox"][3] - x["bbox"][1]))
+        return f["embedding"]
+    except Exception:
+        return None
+
+
+def _identity_cosine(person_bytes: bytes, render_bytes: bytes):
+    """Cosine similarity (ArcFace) between the input face and the rendered face. 0..1-ish; higher =
+    more faithful. None when a face can't be found in either image (so we never gate/retry blind)."""
+    try:
+        from app import identity
+        ep = _biggest_face_embedding(person_bytes)
+        if ep is None:
+            return None
+        er = _biggest_face_embedding(render_bytes)
+        if er is None:
+            return None
+        return float(identity.match(ep, er))
+    except Exception:
+        return None
+
+
+def _id_threshold() -> float:
+    """Identity-retention floor as an ArcFace cosine. Tunable via KREY_ID_MIN_COSINE. Default 0.35
+    matches capture_core.SAME_FACE_COSINE (the tested 'same person' floor) — low enough that a
+    faithful render passes (few retries), high enough to catch a face that drifted to a stranger.
+    Raise it toward 0.45 once real flag data shows where testers stop recognising themselves."""
+    try:
+        return float(os.environ.get("KREY_ID_MIN_COSINE", "0.35"))
+    except Exception:
+        return 0.35
+
+
+async def _render_with_identity_guard(person_bytes: bytes, make_png, base_prompt: str):
+    """Render via `make_png(prompt)->bytes`, measure identity retention, and if it drifts below the
+    benchmark, retry ONCE with a stronger face-lock and keep whichever attempt scored higher.
+    Returns (png_bytes, score_or_None). `make_png` must be a plain callable (run off-thread here)."""
+    from starlette.concurrency import run_in_threadpool
+    png = await run_in_threadpool(make_png, base_prompt)
+    score = await run_in_threadpool(_identity_cosine, person_bytes, png)
+    thr = _id_threshold()
+    if score is not None and score < thr:
+        try:
+            png2 = await run_in_threadpool(make_png, base_prompt + _ID_RETRY)
+            score2 = await run_in_threadpool(_identity_cosine, person_bytes, png2)
+            if score2 is not None and score2 > score:
+                png, score = png2, score2
+        except Exception:
+            pass
+    return png, score
+
+
+def _identity_fields(score) -> dict:
+    """Standard identity block for render responses."""
+    if score is None:
+        return {"identity_score": None, "identity_ok": True}   # couldn't measure -> don't alarm
+    thr = _id_threshold()
+    return {"identity_score": round(score, 3), "identity_ok": bool(score >= thr),
+            "identity_pct": int(round(min(max(score, 0.0), 1.0) * 100))}
+
+
 def _banana_prompt(g: dict, style: str = "studio") -> str:
     """Instruction for Nano Banana (Gemini). It receives the person image (1st) and the garment
     image (2nd), so we ask it to dress the SAME person in the ACTUAL garment shown — real garment,
@@ -597,7 +673,7 @@ def _banana_prompt(g: dict, style: str = "studio") -> str:
         "Using the first image as the person and the second image as the garment, generate a "
         f"photorealistic image of the SAME person — keep their face and identity exactly — now "
         f"wearing the garment from the second image ({name}). Fit the garment naturally to their "
-        "body and pose. " + _GENDER_GUARD
+        "body and pose. " + _GENDER_GUARD + _ID_LOCK
     )
     if style == "eighties":
         look = (
@@ -620,6 +696,23 @@ def _banana_prompt(g: dict, style: str = "studio") -> str:
 _GENDER_GUARD = (
     "Preserve the person's apparent gender presentation exactly as in the photo — do NOT feminize "
     "or masculinize them, and choose garments appropriate to that presentation. "
+)
+
+# Identity-lock — Nano (Gemini image) tends to "re-imagine" the face, drifting the likeness below
+# our recognition benchmark so testers couldn't recognise themselves. This CRITICAL clause is added
+# to EVERY render prompt; the ArcFace gate below measures whether it held and retries if it didn't.
+_ID_LOCK = (
+    "CRITICAL — preserve the person's exact facial identity. Reproduce the SAME face: identical "
+    "face shape, bone structure, jawline, eyes, nose, mouth, eyebrows, hairline and complexion, so "
+    "they are unmistakably the same individual and a close friend would recognise them instantly. "
+    "Do NOT beautify, slim, smooth, reshape, de-age or swap the face — change only clothing, "
+    "styling and background, never the face. "
+)
+# Appended on the retry render when the first attempt drifted past the benchmark.
+_ID_RETRY = (
+    " The previous attempt altered the face too much. Keep the face REGION as close to the source "
+    "photo as possible — same features and proportions, pixel-faithful where you can — and restyle "
+    "only the body/clothing."
 )
 
 # --- Style trends: iconic-look presets applied to the user's OWN photo via Nano, no garment and
@@ -860,7 +953,7 @@ def _trend_prompt(trend_key: str, gender: str = "auto") -> str:
     tail = (" Scene: " + look + ".") if look else ""
     return (
         "Using the image as the person, generate a photorealistic portrait of the SAME person — "
-        "keep their face, identity and body exactly. " + _GENDER_GUARD +
+        "keep their face, identity and body exactly. " + _GENDER_GUARD + _ID_LOCK +
         "Style them in " + outfit + "." + tail + " " + frame +
         " Flattering and realistic. Do not change their face or make them look like someone else. "
         "No text or watermarks."
@@ -897,7 +990,8 @@ async def closet_trend(trend: str = Form(...), owner_hint: str = Form(...),
         raise HTTPException(400, "missing person image")
     prompt = _trend_prompt(trend, gender) + await run_in_threadpool(_skin_tone_clause, person_bytes)
     try:
-        png = await run_in_threadpool(banana_mod.generate, person_bytes, None, prompt)
+        png, id_score = await _render_with_identity_guard(
+            person_bytes, lambda p: banana_mod.generate(person_bytes, None, p), prompt)
     except Exception as e:
         raise HTTPException(502, f"render failed: {e}")
     body, ct, ext = _to_jpeg(png)
@@ -906,7 +1000,7 @@ async def closet_trend(trend: str = Form(...), owner_hint: str = Form(...),
     look_id = catalog_mod.create_look(owner_hint=owner_hint, name=f"{label} trend", image_url=url)
     return {"look_id": look_id, "image_url": url,
             "look_url": f"/look/{look_id}" if look_id else None, "mode": "trend",
-            "trend": trend, "done": True}
+            "trend": trend, "done": True, **_identity_fields(id_score)}
 
 
 @app.post("/closet/tryon")
@@ -936,7 +1030,8 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
         garment_bytes = catalog_mod.fetch_bytes(g.get("image_url"))
         prompt = _banana_prompt(g, style) + await run_in_threadpool(_skin_tone_clause, person_bytes)
         try:
-            png = await run_in_threadpool(banana_mod.generate, person_bytes, garment_bytes, prompt)
+            png, id_score = await _render_with_identity_guard(
+                person_bytes, lambda p: banana_mod.generate(person_bytes, garment_bytes, p), prompt)
         except Exception as e:
             raise HTTPException(502, f"render failed: {e}")
         body, ct, ext = _to_jpeg(png)
@@ -944,7 +1039,8 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
         look_id = catalog_mod.create_look(owner_hint=owner_hint, name=g.get("name"), image_url=url,
                                           segment=g.get("segment"), subsegment=g.get("subsegment"))
         return {"look_id": look_id, "image_url": url,
-                "look_url": f"/look/{look_id}" if look_id else None, "mode": mode, "done": True}
+                "look_url": f"/look/{look_id}" if look_id else None, "mode": mode, "done": True,
+                **_identity_fields(id_score)}
 
     if mode == "vibe":
         if not render_client.vibe_configured():

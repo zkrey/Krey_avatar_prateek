@@ -376,9 +376,13 @@ function showRender(state,g,j){
     const head = canRank
       ? `🔥 ${LOOKS.length} looks ready — let the people who love you pick your best`
       : `You look great in this ✨`;
+    const idwarn = (j.identity_ok===false)
+      ? `<div style="border:1px solid var(--gold-dim);background:rgba(217,178,90,.08);border-radius:10px;padding:.55rem .7rem;margin:.5rem 0 0;font-size:.82rem">🙂 The face came out a little off. For the best likeness, use a <b>clear, front-on, well-lit</b> photo, then try again.</div>`
+      : "";
     ov.innerHTML=`<div style="text-align:center;max-width:420px;width:100%">
       <img src="${esc(j.image_url)}" style="max-width:100%;max-height:52vh;border-radius:14px;border:1px solid var(--line)">
       <div style="margin:.6rem 0 .5rem;font-weight:600">${head}</div>
+      ${idwarn}
       ${canRank
         ? `<button class="btn primary" id="rov_rank" style="width:100%;padding:.95rem;font-size:1.02rem">💛 Ask your people which looks best on me</button>
            <button class="btn" id="rov_close" style="width:100%;margin-top:.5rem">+ Try another look</button>`

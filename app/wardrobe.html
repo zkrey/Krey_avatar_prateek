@@ -145,7 +145,11 @@ function showLook(f){
     .map(i=>`<img src="${esc(i.image_url)}" alt="${esc(i.name||'')}">`).join("");
   const share=location.origin+(f.look_url||"");
   const ready=LOOKS.length>=2;
+  const idwarn = (f.identity_ok===false)
+    ? `<div style="border:1px solid var(--gold-dim);background:#d9b25a14;border-radius:10px;padding:.55rem .7rem;margin:0 0 .6rem;font-size:.82rem;color:var(--text)">🙂 The face came out a little off this time. For the best likeness, use a <b>clear, front-on, well-lit</b> selfie — then tap ✨ Make another.</div>`
+    : "";
   $("sheet").innerHTML=`
+    ${idwarn}
     <img class="hero" src="${esc(f.image_url)}" alt="your look">
     <h3>${esc(f.name||'Your look')}</h3>
     ${f.why?`<p class="why">${esc(f.why)}</p>`:""}
