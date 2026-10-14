@@ -73,11 +73,37 @@
   .traythumbs img{width:44px;height:58px;object-fit:cover;border-radius:6px;border:1px solid var(--line)}
   .traythumbs .rm{position:absolute;top:-6px;right:-6px;background:#000b;color:#fff;border-radius:50%;width:18px;height:18px;font-size:.7rem;display:flex;align-items:center;justify-content:center;cursor:pointer}
   body{padding-bottom:140px}
+  /* first-run walkthrough */
+  #introov{position:fixed;inset:0;background:#000d;z-index:120;display:none;align-items:center;justify-content:center;padding:18px}
+  #introov.show{display:flex}
+  .intro{background:var(--surface);border:1px solid var(--line);border-radius:18px;max-width:380px;width:100%;padding:1.3rem 1.2rem 1.1rem;text-align:center}
+  .intro .emoji{font-size:2.3rem;line-height:1;margin:.2rem 0 .5rem}
+  .intro h2{font-size:1.15rem;margin:0 0 .35rem}
+  .intro p{color:var(--muted);font-size:.92rem;line-height:1.5;margin:0 0 1rem}
+  .intro .dots{display:flex;gap:.35rem;justify-content:center;margin:.2rem 0 1rem}
+  .intro .dot{width:7px;height:7px;border-radius:50%;background:var(--line)}
+  .intro .dot.on{background:var(--gold)}
+  .intro .row{display:flex;gap:.5rem;align-items:center}
+  .intro .row .btn{flex:1}
+  .intro .skip{display:block;margin-top:.7rem;color:var(--muted);font-size:.82rem;text-decoration:underline;cursor:pointer;background:none;border:0}
 </style>
 </head>
 <body>
+  <!-- first-run walkthrough (shown once; replayable via "how it works") -->
+  <div id="introov"><div class="intro">
+    <div class="emoji" id="in_emoji">✨</div>
+    <h2 id="in_title"></h2>
+    <p id="in_body"></p>
+    <div class="dots" id="in_dots"></div>
+    <div class="row">
+      <button class="btn" id="in_back" hidden>Back</button>
+      <button class="btn primary" id="in_next"></button>
+    </div>
+    <button class="skip" id="in_skip">skip</button>
+  </div></div>
+
   <h1>Your closet ✨</h1>
-  <div class="sub" id="sub">Welcome in 💛 Add a photo and watch any look come alive on you. <span id="src" class="src">…</span></div>
+  <div class="sub" id="sub">Welcome in 💛 Add a photo and watch any look come alive on you. <span id="src" class="src">…</span> · <a href="#" id="howitworks" style="color:var(--gold)">how it works</a></div>
   <a href="/wardrobe" class="wardcard">
     <div class="wc_ico">👗</div>
     <div class="wc_txt"><b>Build your wardrobe</b><span>Snap your own clothes → see them on you → style full fits</span></div>
@@ -560,6 +586,34 @@ $("changephoto").onclick=()=>pickPhoto(analyze);
 $("unlockbtn").onclick=()=>pickPhoto(analyze);
 $("segfilters").querySelector('[data-s=""]').onclick=()=>{ S=""; syncChips(); load(); };
 renderMyBallots();   // returning owner: surface saved ballots + results on landing, before any photo
+
+// ---- first-run walkthrough -------------------------------------------------
+const INTRO=[
+  {emoji:"📸", title:"See it on you", body:"Add one selfie and watch any look come alive on you in seconds — no more guessing how it'll actually look."},
+  {emoji:"👗", title:"Your clothes, new fits", body:"Add the clothes you already own, then tap “see it on me” or let the stylist build a full fit from your wardrobe."},
+  {emoji:"💛", title:"Ask the people you trust", body:"Line up a few looks and let your close circle pick the one that's most you — so you step out actually sure."},
+];
+let IN_I=0;
+function renderIntro(){
+  const s=INTRO[IN_I];
+  $("in_emoji").textContent=s.emoji; $("in_title").textContent=s.title; $("in_body").textContent=s.body;
+  $("in_dots").innerHTML=INTRO.map((_,i)=>`<span class="dot${i===IN_I?' on':''}"></span>`).join("");
+  $("in_back").hidden = IN_I===0;
+  $("in_next").textContent = IN_I===INTRO.length-1 ? "Add my photo →" : "Next";
+}
+function openIntro(){ IN_I=0; renderIntro(); $("introov").classList.add("show"); }
+function closeIntro(seen){
+  $("introov").classList.remove("show");
+  if(seen){ try{ localStorage.setItem("krey_seen_intro","1"); }catch(e){} }
+}
+$("in_next").onclick=()=>{
+  if(IN_I<INTRO.length-1){ IN_I++; renderIntro(); }
+  else { closeIntro(true); const a=$("addphoto"); if(a) a.click(); }   // end -> straight into adding a photo
+};
+$("in_back").onclick=()=>{ if(IN_I>0){ IN_I--; renderIntro(); } };
+$("in_skip").onclick=()=>closeIntro(true);
+$("howitworks").onclick=e=>{ e.preventDefault(); openIntro(); };
+try{ if(!localStorage.getItem("krey_seen_intro")) openIntro(); }catch(e){}
 </script>
 </body>
 </html>
