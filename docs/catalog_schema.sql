@@ -245,6 +245,31 @@ create policy "public read render_feedback" on render_feedback for select using 
 --            min(identity_score) lo, max(identity_score) hi
 --       from render_feedback group by looks_like;
 
+-- ---------------------------------------------------------------------------
+-- render_scores — PASSIVE per-render identity log: EVERY render's ArcFace score (input face vs
+-- render face), not just the ones a tester taps on. Gives the full face-distortion distribution
+-- and per-route quality on volume, so the render floor can be judged without waiting for taps.
+-- `retried` = the identity gate fired its one auto-retry on this render. Anonymous.
+create table if not exists render_scores (
+    id             bigint generated always as identity primary key,
+    look_id        text,
+    owner_hint     text,
+    identity_score numeric,                     -- ArcFace cosine, 0..1 (higher = more faithful)
+    route          text,                        -- banana | banana80s | trend | wardrobe
+    retried        boolean default false,
+    created_at     timestamptz default now()
+);
+create index if not exists render_scores_route_idx on render_scores (route);
+alter table render_scores enable row level security;
+drop policy if exists "anon insert render_scores" on render_scores;
+drop policy if exists "public read render_scores" on render_scores;
+create policy "anon insert render_scores" on render_scores for insert with check (true);
+create policy "public read render_scores" on render_scores for select using (true);
+--   distortion distribution by route:
+--     select route, count(*), round(avg(identity_score),3) avg,
+--            round(avg((identity_score < 0.65)::int),3) frac_below_065
+--       from render_scores group by route order by avg;
+
 -- Loop rollups:
 --   fit-confidence lift by segment (needs rendered looks + baselines):
 --     -- (computed app-side from rank_votes -> Glicko-2; see docs measurement plan)

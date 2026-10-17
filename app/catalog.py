@@ -449,6 +449,26 @@ def learned_id_floor():
         return None
 
 
+def record_render_score(look_id: str | None, owner_hint: str | None, identity_score,
+                        route: str | None = None, retried: bool = False) -> bool:
+    """Passive per-render identity log — EVERY render's ArcFace score (not just the ones a tester
+    taps on). Gives the full face-distortion distribution and per-route quality, so the floor can be
+    judged on volume. Best-effort; skipped when no face was measurable (score None)."""
+    if identity_score is None:
+        return False
+    try:
+        sc = round(float(identity_score), 4)
+    except Exception:
+        return False
+    return _post("render_scores", [{
+        "look_id": str(look_id)[:64] if look_id else None,
+        "owner_hint": str(owner_hint)[:64] if owner_hint else None,
+        "identity_score": sc,
+        "route": str(route)[:40] if route else None,
+        "retried": bool(retried),
+    }])
+
+
 def _get_all(path_select: str, limit: int = 10000) -> list:
     """Bulk read for /admin analytics. Returns [] on any error."""
     return _get(f"{path_select}&limit={int(limit)}") or []
@@ -611,6 +631,30 @@ def admin_snapshot() -> dict:
     # `suggested_floor` once `floor_trusted` (see learned_id_floor), so the loop closes itself.
     recognition = recognition_map(_get_all("render_feedback?select=looks_like,identity_score"))
 
+    # --- render quality: the PASSIVE distortion distribution over EVERY render (not just tapped
+    # ones). Overall + per-route, so you can see which path distorts faces most, on volume.
+    rs = _get_all("render_scores?select=identity_score,route,retried")
+    rscores = [float(r["identity_score"]) for r in rs if r.get("identity_score") is not None]
+    _pct_below = lambda xs, t: (round(sum(1 for s in xs if s < t) / len(xs), 3) if xs else None)
+    by_route = {}
+    for r in rs:
+        if r.get("identity_score") is None:
+            continue
+        by_route.setdefault(r.get("route") or "?", []).append(float(r["identity_score"]))
+    route_quality = {rt: {"n": len(xs), "avg": round(sum(xs) / len(xs), 3),
+                          "below_0_65": _pct_below(xs, 0.65)}
+                     for rt, xs in sorted(by_route.items())}
+    render_quality = {
+        "scored": len(rscores),
+        "avg_score": (round(sum(rscores) / len(rscores), 3) if rscores else None),
+        "min": (round(min(rscores), 3) if rscores else None),
+        "max": (round(max(rscores), 3) if rscores else None),
+        "below_0_50": _pct_below(rscores, 0.50),   # would fail the current default floor
+        "below_0_65": _pct_below(rscores, 0.65),   # likely at-risk per early tester signal
+        "retry_rate": (round(sum(1 for r in rs if r.get("retried")) / len(rs), 3) if rs else None),
+        "by_route": route_quality,
+    }
+
     return {
         "leaderboard": leaderboard[:50],
         "totals": {
@@ -645,6 +689,7 @@ def admin_snapshot() -> dict:
             "ballot_owners": len(ballot_owners),
         },
         "recognition": recognition,   # "does this look like you?" -> maps score at which testers reject
+        "render_quality": render_quality,   # passive per-render distortion distribution (+ by route)
     }
 
 

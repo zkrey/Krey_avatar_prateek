@@ -319,7 +319,7 @@ async def wardrobe_fit(owner_hint: str = Form(...), person: UploadFile = File(..
               "No text or watermarks. " + _ID_LOCK)
     prompt += await run_in_threadpool(_skin_tone_clause, person_bytes)
     try:
-        png, id_score = await _render_with_identity_guard(
+        png, id_score, id_retried = await _render_with_identity_guard(
             person_bytes, lambda p: banana_mod.generate_outfit(person_bytes, garbytes, p), prompt)
     except Exception as e:
         raise HTTPException(502, f"render failed: {e}")
@@ -327,6 +327,8 @@ async def wardrobe_fit(owner_hint: str = Form(...), person: UploadFile = File(..
     url = catalog_mod.upload_image(body, content_type=ct, ext=ext)
     name = (pick.get("name") or "Your fit")[:120]
     look_id = catalog_mod.create_look(owner_hint=owner_hint, name=name, image_url=url)
+    if id_score is not None:
+        await run_in_threadpool(catalog_mod.record_render_score, look_id, owner_hint, id_score, "wardrobe", id_retried)
     return {"look_id": look_id, "image_url": url,
             "look_url": f"/look/{look_id}" if look_id else None,
             "name": name, "why": pick.get("why"),
@@ -356,7 +358,7 @@ async def wardrobe_tryon(owner_hint: str = Form(...), item_id: str = Form(...),
         raise HTTPException(502, "couldn't load that garment")
     prompt = _banana_prompt(item, "studio") + await run_in_threadpool(_skin_tone_clause, person_bytes)
     try:
-        png, id_score = await _render_with_identity_guard(
+        png, id_score, id_retried = await _render_with_identity_guard(
             person_bytes, lambda p: banana_mod.generate(person_bytes, garment_bytes, p), prompt)
     except Exception as e:
         raise HTTPException(502, f"render failed: {e}")
@@ -364,6 +366,8 @@ async def wardrobe_tryon(owner_hint: str = Form(...), item_id: str = Form(...),
     url = catalog_mod.upload_image(body, content_type=ct, ext=ext)
     name = item.get("name") or "Your piece"
     look_id = catalog_mod.create_look(owner_hint=owner_hint, name=name, image_url=url)
+    if id_score is not None:
+        await run_in_threadpool(catalog_mod.record_render_score, look_id, owner_hint, id_score, "wardrobe", id_retried)
     return {"look_id": look_id, "image_url": url,
             "look_url": f"/look/{look_id}" if look_id else None, "name": name, "done": True,
             **_identity_fields(id_score)}
@@ -664,12 +668,14 @@ def _is_falsey(v) -> bool:
 async def _render_with_identity_guard(person_bytes: bytes, make_png, base_prompt: str):
     """Render via `make_png(prompt)->bytes`, measure identity retention, and if it drifts below the
     benchmark, retry ONCE with a stronger face-lock and keep whichever attempt scored higher.
-    Returns (png_bytes, score_or_None). `make_png` must be a plain callable (run off-thread here)."""
+    Returns (png_bytes, score_or_None, retried). `make_png` is a plain callable (run off-thread)."""
     from starlette.concurrency import run_in_threadpool
     png = await run_in_threadpool(make_png, base_prompt)
     score = await run_in_threadpool(_identity_cosine, person_bytes, png)
     thr = _id_threshold()
+    retried = False
     if score is not None and score < thr:
+        retried = True
         try:
             png2 = await run_in_threadpool(make_png, base_prompt + _ID_RETRY)
             score2 = await run_in_threadpool(_identity_cosine, person_bytes, png2)
@@ -677,7 +683,7 @@ async def _render_with_identity_guard(person_bytes: bytes, make_png, base_prompt
                 png, score = png2, score2
         except Exception:
             pass
-    return png, score
+    return png, score, retried
 
 
 def _identity_fields(score) -> dict:
@@ -1019,7 +1025,7 @@ async def closet_trend(trend: str = Form(...), owner_hint: str = Form(...),
         raise HTTPException(400, "missing person image")
     prompt = _trend_prompt(trend, gender) + await run_in_threadpool(_skin_tone_clause, person_bytes)
     try:
-        png, id_score = await _render_with_identity_guard(
+        png, id_score, id_retried = await _render_with_identity_guard(
             person_bytes, lambda p: banana_mod.generate(person_bytes, None, p), prompt)
     except Exception as e:
         raise HTTPException(502, f"render failed: {e}")
@@ -1027,6 +1033,8 @@ async def closet_trend(trend: str = Form(...), owner_hint: str = Form(...),
     url = catalog_mod.upload_image(body, content_type=ct, ext=ext)
     label = _STYLE_TRENDS[trend]["label"]
     look_id = catalog_mod.create_look(owner_hint=owner_hint, name=f"{label} trend", image_url=url)
+    if id_score is not None:
+        await run_in_threadpool(catalog_mod.record_render_score, look_id, owner_hint, id_score, "trend", id_retried)
     return {"look_id": look_id, "image_url": url,
             "look_url": f"/look/{look_id}" if look_id else None, "mode": "trend",
             "trend": trend, "done": True, **_identity_fields(id_score)}
@@ -1059,7 +1067,7 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
         garment_bytes = catalog_mod.fetch_bytes(g.get("image_url"))
         prompt = _banana_prompt(g, style) + await run_in_threadpool(_skin_tone_clause, person_bytes)
         try:
-            png, id_score = await _render_with_identity_guard(
+            png, id_score, id_retried = await _render_with_identity_guard(
                 person_bytes, lambda p: banana_mod.generate(person_bytes, garment_bytes, p), prompt)
         except Exception as e:
             raise HTTPException(502, f"render failed: {e}")
@@ -1067,6 +1075,8 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
         url = catalog_mod.upload_image(body, content_type=ct, ext=ext)
         look_id = catalog_mod.create_look(owner_hint=owner_hint, name=g.get("name"), image_url=url,
                                           segment=g.get("segment"), subsegment=g.get("subsegment"))
+        if id_score is not None:
+            await run_in_threadpool(catalog_mod.record_render_score, look_id, owner_hint, id_score, mode, id_retried)
         return {"look_id": look_id, "image_url": url,
                 "look_url": f"/look/{look_id}" if look_id else None, "mode": mode, "done": True,
                 **_identity_fields(id_score)}
