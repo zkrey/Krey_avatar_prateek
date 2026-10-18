@@ -655,6 +655,26 @@ def admin_snapshot() -> dict:
         "by_route": route_quality,
     }
 
+    # --- engagement funnel: render -> multi-render -> ballot -> share (distinct people). Shows
+    # exactly where the cycle leaks, so the nudges can be judged on whether each rate rises.
+    looks_by_owner = {}
+    for l in looks:
+        o = l.get("owner_hint")
+        if o:
+            looks_by_owner[o] = looks_by_owner.get(o, 0) + 1
+    f_rendered = len(looks_by_owner)
+    f_multi = sum(1 for n in looks_by_owner.values() if n >= 2)
+    f_ballot = len({s.get("owner_hint") for s in sets if s.get("owner_hint")})
+    f_shared = len({e.get("session_hint") for e in events
+                    if e.get("event_type") == "share" and e.get("session_hint")})
+    _rate = lambda a, b: (round(a / b, 3) if b else None)
+    funnel = {
+        "rendered": f_rendered,                                  # distinct people who made >=1 look
+        "multi_render": f_multi, "multi_rate": _rate(f_multi, f_rendered),   # went on to a 2nd look
+        "balloted": f_ballot, "ballot_rate": _rate(f_ballot, f_rendered),    # asked their people
+        "shared": f_shared, "share_rate": _rate(f_shared, f_rendered),       # shared anything
+    }
+
     return {
         "leaderboard": leaderboard[:50],
         "totals": {
@@ -690,6 +710,7 @@ def admin_snapshot() -> dict:
         },
         "recognition": recognition,   # "does this look like you?" -> maps score at which testers reject
         "render_quality": render_quality,   # passive per-render distortion distribution (+ by route)
+        "funnel": funnel,             # render -> multi -> ballot -> share conversion (where it leaks)
     }
 
 

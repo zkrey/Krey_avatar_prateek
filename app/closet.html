@@ -416,10 +416,13 @@ function showRender(state,g,j){
       ${idwarn}
       ${canRank
         ? `<button class="btn primary" id="rov_rank" style="width:100%;padding:.95rem;font-size:1.02rem">💛 Ask your people which looks best on me</button>
-           <button class="btn" id="rov_close" style="width:100%;margin-top:.5rem">+ Try another look</button>`
-        : `<button class="btn primary" id="rov_close" style="width:100%;padding:.95rem;font-size:1.02rem">+ Add one more look</button>
-           <div class="muted" style="margin-top:.4rem;font-size:.82rem">One more look, then ask the people who'll keep it real 💛</div>`}
-      <div class="muted" style="margin-top:.55rem;cursor:pointer;text-decoration:underline" id="rov_share">or share just this one</div>
+           <div style="display:flex;gap:.5rem;margin-top:.5rem">
+             <button class="btn" id="rov_close" style="flex:1">+ Try another</button>
+             <button class="btn" id="rov_share" style="flex:1">↗ Share this look</button>
+           </div>`
+        : `<div style="margin:.1rem 0 .55rem;font-size:.85rem;color:var(--gold)">● ○&nbsp; 1 of 2 looks — add one more and your people can pick ✨</div>
+           <button class="btn primary" id="rov_close" style="width:100%;padding:.95rem;font-size:1.02rem">+ Add one more look</button>
+           <button class="btn" id="rov_share" style="width:100%;margin-top:.5rem">↗ Share this look 💛</button>`}
       </div>`;
     const url=location.origin+(j.look_url||"/closet");
     $("rov_share").onclick=async()=>{

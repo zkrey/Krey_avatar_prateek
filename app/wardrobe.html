@@ -159,15 +159,15 @@ function showLook(f){
     <h3>${esc(f.name||'Your look')}</h3>
     ${f.why?`<p class="why">${esc(f.why)}</p>`:""}
     ${used?`<div class="usedrow">${used}</div>`:""}
+    ${ready?"":`<div style="text-align:center;margin:.1rem 0 .5rem;font-size:.85rem;color:var(--gold)">● ○&nbsp; 1 of 2 looks — add one more and your people can pick ✨</div>`}
     <div class="acts">
       ${ready
         ? `<button class="btn primary" id="rank">💛 Ask your people</button>
            <button class="btn" id="again">✨ Make another</button>`
         : `<button class="btn primary" id="again">✨ Make another look</button>
-           <button class="btn" id="sh">Share just this one</button>`}
+           <button class="btn" id="sh">↗ Share this look 💛</button>`}
     </div>
-    ${ready?`<div class="why" style="text-align:center;margin:.6rem 0 0">Added to your looks below — one more or ask your circle 💛</div>`
-           :`<div class="why" style="text-align:center;margin:.6rem 0 0">Saved to your looks ✓ — add one more, then ask the people who’ll keep it real.</div>`}
+    ${ready?`<div class="why" style="text-align:center;margin:.6rem 0 0">Added to your looks below — one more or ask your circle 💛</div>`:""}
     <div style="text-align:center;margin-top:.6rem"><a href="#" id="cl">close</a></div>`;
   $("cl").onclick=e=>{e.preventDefault();closeOv();};
   function sendRF(ans){ try{ fetch("/render/feedback",{method:"POST",headers:{"Content-Type":"application/json"},
