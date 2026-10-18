@@ -86,6 +86,11 @@
   .intro .row{display:flex;gap:.5rem;align-items:center}
   .intro .row .btn{flex:1}
   .intro .skip{display:block;margin-top:.7rem;color:var(--muted);font-size:.82rem;text-decoration:underline;cursor:pointer;background:none;border:0}
+  /* guided coach: walks first-timers from render -> share */
+  .coach{display:flex;align-items:center;gap:.6rem;background:rgba(217,178,90,.10);border:1px solid var(--gold-dim);border-radius:12px;padding:.6rem .8rem;margin:0 0 1rem;font-size:.88rem;line-height:1.35}
+  .coach span{flex:1}
+  .coach b{color:var(--gold)}
+  .coach .cx{background:none;border:0;color:var(--muted);font-size:1.15rem;cursor:pointer;line-height:1;padding:0 .2rem}
 </style>
 </head>
 <body>
@@ -109,6 +114,9 @@
     <div class="wc_txt"><b>Build your wardrobe</b><span>Snap your own clothes → see them on you → style full fits</span></div>
     <div class="wc_go">→</div>
   </a>
+
+  <!-- guided coach: render -> make another -> ask your people -> send to friends -->
+  <div id="coach" class="coach" hidden></div>
 
   <!-- returning owner: your created ballots + their results (persists across visits) -->
   <div id="myballots" hidden style="margin:.6rem 0"></div>
@@ -435,6 +443,7 @@ function showRender(state,g,j){
         else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); channel="whatsapp"; }
       }catch(e){}
       logEvent(g,"share",channel);
+      markCycleDone();   // shared a look with friends -> guided cycle complete
     };
     if($("rov_rank")) $("rov_rank").onclick=()=>{ ov.remove(); makeBallot(); };
     $("rov_close").onclick=()=>ov.remove();
@@ -456,7 +465,7 @@ function addLook(lk){
 }
 function renderTray(){
   const tray=$("tray");
-  if(!LOOKS.length){ tray.hidden=true; return; }
+  if(!LOOKS.length){ tray.hidden=true; renderCoach(); return; }
   tray.hidden=false;
   $("traycount").textContent="· "+LOOKS.length+(LOOKS.length===1?" look":" looks");
   $("traythumbs").innerHTML=LOOKS.map((l,i)=>`<div class="lk"><img src="${esc(l.image_url)}" alt=""><div class="rm" data-i="${i}">✕</div></div>`).join("");
@@ -466,6 +475,7 @@ function renderTray(){
   $("traymsg").textContent = LOOKS.length<2
     ? "Add one more, then ask the people who'll keep it real 💛"
     : "Just your close circle — they tap through 2 at a time, 10 sec. Not the whole feed.";
+  renderCoach();
 }
 async function makeBallot(){
   if(LOOKS.length<2) return;
@@ -507,6 +517,7 @@ async function makeBallot(){
     $("tm_share").onclick=()=>shareBallot(url, LOOKS.map(l=>l.image_url).filter(Boolean).slice(0,3));
     $("tm_results").onclick=()=>{ location.href=results; };
     renderMyBallots();   // no auto-share: the user chooses to send, on their terms
+    renderCoach();       // ballot now exists -> coach advances to "send it to your people"
   }catch(e){ $("traymsg").textContent="Couldn't set it up — try again."; $("rankbtn").disabled=false; }
 }
 // Reusable share — re-opens the native share sheet every time (issue: it only fired once before).
@@ -525,6 +536,7 @@ async function shareBallot(url, thumbUrls){
     }
   }catch(e){}
   logEvent({garment_id:"ballot"},"share",channel);   // reshare + channel counter
+  markCycleDone();   // shared with friends -> the guided cycle is complete
 }
 // --- persistent ballot store so the owner never loses their rankings ---
 function getBallots(){ try{ return JSON.parse(localStorage.getItem("krey_ballots")||"[]"); }catch(e){ return []; } }
@@ -589,6 +601,23 @@ $("changephoto").onclick=()=>pickPhoto(analyze);
 $("unlockbtn").onclick=()=>pickPhoto(analyze);
 $("segfilters").querySelector('[data-s=""]').onclick=()=>{ S=""; syncChips(); load(); };
 renderMyBallots();   // returning owner: surface saved ballots + results on landing, before any photo
+
+// ---- guided coach: keep handholding past the render, all the way to "sent to friends" ----
+function coachOff(){ try{ return localStorage.getItem("krey_cycle_done")==="1" || localStorage.getItem("krey_coach_x")==="1"; }catch(e){ return false; } }
+function markCycleDone(){ try{ localStorage.setItem("krey_cycle_done","1"); }catch(e){} renderCoach(); }
+function renderCoach(){
+  const c=$("coach"); if(!c) return;
+  // only guide once they've made their first look, through to sharing; hidden when done/dismissed
+  if(coachOff() || LOOKS.length<1){ c.hidden=true; return; }
+  const hasBallot = getBallots().length>0;
+  let step, msg;
+  if(LOOKS.length<2){ step=1; msg="Make one more look so your people can pick between them ✨"; }
+  else if(!hasBallot){ step=2; msg="Now <b>ask your people</b> 💛 — tap the gold button at the bottom"; }
+  else { step=3; msg="Last step — <b>send it to 2–3 people</b> whose taste you trust 💛"; }
+  c.innerHTML=`<span><b>Step ${step} of 3</b> · ${msg}</span><button class="cx" id="coach_x" title="dismiss">×</button>`;
+  $("coach_x").onclick=()=>{ try{ localStorage.setItem("krey_coach_x","1"); }catch(e){} c.hidden=true; };
+  c.hidden=false;
+}
 
 // ---- first-run walkthrough -------------------------------------------------
 const INTRO=[
