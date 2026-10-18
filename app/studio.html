@@ -54,8 +54,8 @@
       <div class="muted" id="selfhint" style="font-size:.78rem;margin-top:.3rem"></div>
     </div>
 
-    <button class="btn primary" id="go" disabled>Create ballot & share</button>
-    <div class="note">Photos are shared with the friends you send the link to, for this test only. No account needed for them to vote.</div>
+    <button class="btn primary" id="go" disabled>💛 Ask your people</button>
+    <div class="note">Your looks are shared only with the friends you send the link to, for this test. No account needed for them to pick.</div>
   </div>
 
   <div id="result" class="done hide">
@@ -143,7 +143,7 @@ $("go").onclick=async()=>{
     };
     $("results").onclick=()=>{ location.href=location.origin+j.results_url; };
   }catch(e){
-    $("go").disabled=false; $("go").textContent="Create ballot & share"; alert("Something went wrong — try again.");
+    $("go").disabled=false; $("go").textContent="💛 Ask your people"; alert("Something went wrong — try again.");
   }
 };
 
