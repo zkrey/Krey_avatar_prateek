@@ -85,6 +85,7 @@ _STUDIO = os.path.join(os.path.dirname(__file__), "studio.html")
 _RESULTS = os.path.join(os.path.dirname(__file__), "results.html")
 _ADMIN = os.path.join(os.path.dirname(__file__), "admin.html")
 _WARDROBE = os.path.join(os.path.dirname(__file__), "wardrobe.html")
+_MYFITS = os.path.join(os.path.dirname(__file__), "myfits.html")
 
 
 def _render_template(path: str, title: str, og_title: str, og_image: str, data: dict) -> str:
@@ -232,6 +233,14 @@ def wardrobe_page():
     """Your digital wardrobe: snap your own garments → auto-cut-out + auto-tagged → saved as a
     personal catalogue (the base for custom fits). Served raw (no server-side data)."""
     with open(_WARDROBE, encoding="utf-8") as f:
+        return f.read()
+
+
+@app.get("/me", response_class=HTMLResponse)
+def my_fits_page():
+    """The owner's results hub: one page listing ALL their ballots with live standings (reads the
+    ballots from the browser, fetches each /results/<id>/data). Served raw (no server-side data)."""
+    with open(_MYFITS, encoding="utf-8") as f:
         return f.read()
 
 

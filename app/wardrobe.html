@@ -225,7 +225,15 @@ function makeFit(){
 $("makefit").onclick=makeFit;
 
 // ---- persistent ballot store (shared with the closet) so the owner never loses their results ----
-function getBallots(){ try{ return JSON.parse(localStorage.getItem("krey_ballots")||"[]"); }catch(e){ return []; } }
+function getBallots(){
+  try{
+    const cutoff=Date.now()-15*864e5;   // 15 days: prune stale ballots to keep the view fresh for new ones
+    const arr=JSON.parse(localStorage.getItem("krey_ballots")||"[]");
+    const kept=arr.filter(b=>b && (b.ts||0)>=cutoff);
+    if(kept.length!==arr.length){ try{ localStorage.setItem("krey_ballots", JSON.stringify(kept)); }catch(e){} }
+    return kept;
+  }catch(e){ return []; }
+}
 function saveBallot(b){
   try{ const arr=getBallots().filter(x=>x.set_id!==b.set_id);
     arr.unshift(Object.assign({ts:Date.now()}, b));
@@ -233,9 +241,8 @@ function saveBallot(b){
 }
 function updateResultsLink(){
   const link=$("resultslink"); if(!link) return;
-  const arr=getBallots();
-  if(arr.length && arr[0].results_url){ link.href=arr[0].results_url; link.hidden=false; }
-  else link.hidden=true;
+  link.href="/me";                               // one hub for all results (no more scattered links)
+  link.hidden = getBallots().length===0;
 }
 
 // ---- guided coach: keep handholding past the render, all the way to "sent to friends" ----

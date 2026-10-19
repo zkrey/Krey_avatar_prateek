@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Krey · Your fits</title>
+<style>
+  :root{--bg:#0f1012;--surface:#17181c;--surface-2:#1e2026;--line:#2a2d34;--text:#eceef2;
+        --muted:#9aa0aa;--gold:#d9b25a;--gold-dim:#5a4d2b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 -apple-system,Segoe UI,Roboto,sans-serif;
+       padding:16px;max-width:620px;margin:0 auto;padding-bottom:40px}
+  h1{font-size:1.3rem;margin:.2rem 0 .1rem}
+  .sub{color:var(--muted);font-size:.9rem;margin-bottom:1rem}
+  a{color:var(--gold)}
+  .btn{border:1px solid var(--gold-dim);background:transparent;color:var(--gold);border-radius:10px;padding:.55rem .9rem;font-size:.9rem;cursor:pointer;text-decoration:none;display:inline-block}
+  .btn.primary{background:var(--gold);color:#1a1400;border-color:var(--gold);font-weight:700}
+  .card{display:block;text-decoration:none;color:var(--text);background:var(--surface);border:1px solid var(--line);
+        border-radius:16px;padding:.8rem;margin-bottom:.8rem}
+  .card .top{display:flex;gap:.6rem;align-items:center}
+  .thumbs{display:flex;gap:.3rem;flex:0 0 auto}
+  .thumbs img{width:46px;height:60px;object-fit:cover;border-radius:7px;border:1px solid var(--line);background:var(--surface-2)}
+  .thumbs img.lead{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
+  .meta{flex:1;min-width:0}
+  .lead-nm{font-weight:700;font-size:.98rem}
+  .status{color:var(--muted);font-size:.84rem;margin-top:.15rem}
+  .status b{color:var(--gold)}
+  .when{color:var(--muted);font-size:.74rem;margin-top:.2rem}
+  .acts{display:flex;gap:.5rem;margin-top:.7rem}
+  .acts .btn{flex:1;text-align:center}
+  .empty{text-align:center;color:var(--muted);padding:2.4rem 1rem}
+  .empty .btn{margin-top:1rem}
+  .hdrow{display:flex;justify-content:space-between;align-items:center;gap:.5rem}
+  .ref{background:none;border:0;color:var(--gold);font-size:.85rem;cursor:pointer}
+</style>
+</head>
+<body>
+  <div class="hdrow">
+    <div>
+      <h1>Your fits 💛</h1>
+      <div class="sub">Everything you've asked your people about — all in one place. <a href="/closet">← closet</a></div>
+    </div>
+    <button class="ref" id="refresh" title="refresh">↻</button>
+  </div>
+
+  <div id="list"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const DAY=864e5, TTL=15*DAY;   // keep the last 15 days; older ones are pruned to clear room for new
+
+// prune on read: drop ballots >15 days old so the view stays fresh (and we don't pile up cache)
+function getBallots(){
+  try{
+    const cutoff=Date.now()-TTL;
+    const arr=JSON.parse(localStorage.getItem("krey_ballots")||"[]");
+    const kept=arr.filter(b=>b && (b.ts||0)>=cutoff);
+    if(kept.length!==arr.length){ try{ localStorage.setItem("krey_ballots", JSON.stringify(kept)); }catch(e){} }
+    return kept;
+  }catch(e){ return []; }
+}
+function whenLabel(ts){
+  const d=Math.floor((Date.now()-(ts||Date.now()))/DAY);
+  return d<=0?"today":d===1?"yesterday":d+" days ago";
+}
+async function shareAgain(rankUrl){
+  const text="hey, need your honest eye 💛 which of these is most me? tap to pick — 10 sec, just you";
+  try{ if(navigator.share){ await navigator.share({title:"Krey", text, url:rankUrl}); }
+       else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+rankUrl),"_blank"); } }catch(e){}
+}
+
+async function fetchStanding(b){
+  try{
+    const r=await fetch("/results/"+encodeURIComponent(b.set_id)+"/data");
+    const d=await r.json();
+    return {votes:d.votes||0, looks:(d.looks||[])};
+  }catch(e){ return {votes:0, looks:[]}; }
+}
+
+function cardHTML(b, st){
+  const leadFromData = st.looks && st.looks.length ? st.looks[0] : null;
+  const leadImg = (leadFromData && leadFromData.image_url) || (b.thumbs||[])[0] || "";
+  const thumbs = (b.thumbs && b.thumbs.length ? b.thumbs : (st.looks||[]).map(l=>l.image_url)).filter(Boolean).slice(0,3);
+  const thumbsHTML = thumbs.map(u=>`<img src="${esc(u)}" class="${u===leadImg?'lead':''}" alt="">`).join("");
+  let title, status;
+  if(st.votes>0 && leadFromData){
+    title = `👑 ${esc(leadFromData.name||"Your top fit")}`;
+    status = `<b>${leadFromData.p_best!=null?leadFromData.p_best+"% love this one":"leading"}</b> · ${st.votes} of your people weighed in 💛`;
+  } else {
+    title = "Waiting on your people 💛";
+    status = "Send it to a few you trust — it only takes them 10 seconds.";
+  }
+  return `<div class="card">
+    <div class="top">
+      <div class="thumbs">${thumbsHTML||'<img alt="">'}</div>
+      <div class="meta">
+        <div class="lead-nm">${title}</div>
+        <div class="status">${status}</div>
+        <div class="when">${whenLabel(b.ts)} · ${b.count||thumbs.length} looks</div>
+      </div>
+    </div>
+    <div class="acts">
+      <a class="btn primary" href="${esc(b.results_url||('/results/'+b.set_id))}">See the full picture →</a>
+      <button class="btn shareb">↗ Send again</button>
+    </div>
+  </div>`;
+}
+
+async function render(){
+  const arr=getBallots();
+  if(!arr.length){
+    $("list").innerHTML=`<div class="empty">No fits to check yet.<br>Make a look and ask your people 💛
+      <br><a class="btn primary" href="/closet">✨ Make a fit</a></div>`;
+    return;
+  }
+  $("list").innerHTML=`<div class="sub">Loading your ${arr.length} fit${arr.length>1?"s":""}…</div>`;
+  const stands=await Promise.all(arr.map(fetchStanding));
+  $("list").innerHTML=arr.map((b,i)=>cardHTML(b,stands[i])).join("");
+  // wire "send again" per card (index-aligned)
+  $("list").querySelectorAll(".shareb").forEach((btn,i)=>btn.onclick=e=>{
+    e.preventDefault(); const b=arr[i]; if(b) shareAgain(b.rank_url||(location.origin+"/rank/"+b.set_id));
+  });
+}
+$("refresh").onclick=render;
+render();
+</script>
+</body>
+</html>

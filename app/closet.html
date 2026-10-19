@@ -541,7 +541,15 @@ async function shareBallot(url, thumbUrls){
   markCycleDone();   // shared with friends -> the guided cycle is complete
 }
 // --- persistent ballot store so the owner never loses their rankings ---
-function getBallots(){ try{ return JSON.parse(localStorage.getItem("krey_ballots")||"[]"); }catch(e){ return []; } }
+function getBallots(){
+  try{
+    const cutoff=Date.now()-15*864e5;   // 15 days: prune stale ballots to keep the view fresh for new ones
+    const arr=JSON.parse(localStorage.getItem("krey_ballots")||"[]");
+    const kept=arr.filter(b=>b && (b.ts||0)>=cutoff);
+    if(kept.length!==arr.length){ try{ localStorage.setItem("krey_ballots", JSON.stringify(kept)); }catch(e){} }
+    return kept;
+  }catch(e){ return []; }
+}
 function saveBallot(b){
   try{
     const arr=getBallots().filter(x=>x.set_id!==b.set_id);
@@ -551,30 +559,12 @@ function saveBallot(b){
 }
 function updateResultsLink(){
   const link=$("resultslink"); if(!link) return;
-  const arr=getBallots();
-  if(arr.length && arr[0].results_url){ link.href=arr[0].results_url; link.hidden=false; }
-  else link.hidden=true;
+  link.href="/me";                               // one hub for all results (no more scattered links)
+  link.hidden = getBallots().length===0;
 }
 function renderMyBallots(){
-  updateResultsLink();   // keep the prominent "see what your people picked" button in sync
-  const box=$("myballots"); if(!box) return;
-  const arr=getBallots();
-  if(!arr.length){ box.hidden=true; return; }
-  box.hidden=false;
-  box.innerHTML='<div class="flabel">Your ballots — check results anytime</div>'
-    + arr.map((b,i)=>{
-        const when=new Date(b.ts||Date.now()).toLocaleDateString();
-        const th=(b.thumbs||[]).map(u=>'<img src="'+esc(u)+'" style="width:30px;height:40px;object-fit:cover;border-radius:5px;border:1px solid var(--line)">').join("");
-        return '<div style="display:flex;gap:.5rem;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:12px;padding:.5rem .6rem;margin-bottom:.45rem">'
-          +'<div style="display:flex;gap:.3rem;align-items:center;min-width:0"><div style="display:flex;gap:.2rem">'+th+'</div>'
-          +'<div class="muted" style="font-size:.78rem;white-space:nowrap">'+(b.count||0)+' · '+esc(when)+'</div></div>'
-          +'<div style="display:flex;gap:.35rem;flex:0 0 auto">'
-          +'<button class="btn mb_share" data-i="'+i+'" style="padding:.45rem .7rem">Share</button>'
-          +'<button class="btn primary mb_res" data-r="'+esc(b.results_url)+'" style="padding:.45rem .7rem">Results</button>'
-          +'</div></div>';
-      }).join("");
-  box.querySelectorAll(".mb_share").forEach(btn=>btn.onclick=()=>{ const b=getBallots()[+btn.dataset.i]; if(b) shareBallot(b.rank_url, b.thumbs||[]); });
-  box.querySelectorAll(".mb_res").forEach(btn=>btn.onclick=()=>{ location.href=btn.dataset.r; });
+  updateResultsLink();          // the prominent "see what your people picked" button -> /me hub
+  const box=$("myballots"); if(box) box.hidden=true;   // the /me hub is now the single place for all results
 }
 // Build a single JPEG collage (cover-fit, side by side) from up to 3 image URLs, to attach to the
 // share sheet. Uses fetch->blob->ImageBitmap so the canvas is never CORS-tainted. File or null.
