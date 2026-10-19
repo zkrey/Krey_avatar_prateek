@@ -89,6 +89,13 @@ MediaPipe + Monk skin-tone profiling and a stdlib ranking engine.
   the dual graph — **follow = inspiration (one-way), friend = validation (mutual); never cross
   them**. The tester approximates all this with warm "close circle" copy only.
 
+### Social connect — import your own data (planned, compliance-gated)
+- [`SOCIAL_CONNECT.md`](./SOCIAL_CONNECT.md) — OAuth "connect & import your look": with the
+  user's explicit consent, pull **their own** photos/outfits/taste from Google/Instagram/
+  Pinterest to strengthen the `face_profiles` profile + seed the wardrobe. User-authorized
+  data only (no scraping, no friend-graph import — friends come via in-app invites). Gated on
+  a privacy policy, DPDP/GDPR consent + retention, and platform app review. Not built.
+
 ### Attribution (planned, for later)
 - [`ATTRIBUTION.md`](./ATTRIBUTION.md) — creator-provenance + revenue-share design: credit the
   originator of a fit/idea and share brand revenue back through vetted backlinks. Not built; the
