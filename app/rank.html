@@ -50,6 +50,7 @@
 <body>
   <h1 id="hd">Be honest — which is more <i>them</i>? 💛</h1>
   <div class="muted" id="progress"></div>
+  <div id="ownerbar"></div>
   <div id="strip" class="strip"></div>
   <div id="stage"></div>
 
@@ -94,6 +95,20 @@ try{ fetch("/closet/event",{method:"POST",headers:{"Content-Type":"application/j
 
 const looks = DATA.looks||[];
 if(DATA.name) $("hd").textContent = DATA.name+" trusts your eye 💛 — which is more them?";
+
+// results access: the OWNER can jump to their results anytime; VOTERS only after they finish (so
+// they can't peek before picking). Owner = this ballot is saved as theirs, or their id matches.
+const RESULTS = location.origin + "/results/" + encodeURIComponent(DATA.set_id);
+function ownsBallot(){
+  try{ if(sid()===DATA.owner_hint) return true;
+       return JSON.parse(localStorage.getItem("krey_ballots")||"[]").some(b=>b&&b.set_id===DATA.set_id);
+  }catch(e){ return sid()===DATA.owner_hint; }
+}
+if(ownsBallot()){
+  $("ownerbar").innerHTML=`<div style="background:var(--surface);border:1px solid var(--gold-dim);border-radius:12px;padding:.7rem;margin:.5rem 0 .2rem">
+    <div style="font-size:.9rem;margin-bottom:.55rem">This is your fit 💛 — jump straight to what your people are saying.</div>
+    <a class="btn primary" href="${RESULTS}" style="display:block;text-decoration:none">📊 See my results</a></div>`;
+}
 
 // mixed adaptive sampler: the server picks each next pair (concurrency-safe). A voter does at
 // most K matchups (K = number of fits), so it stays short even for 5 fits (which have 10 pairs).
@@ -157,7 +172,9 @@ async function nextRound(){
   });
 }
 function finish(){
-  $("stage").innerHTML = `<div class="muted">All done — thanks, that really helps 💛</div>`;
+  // voters can see the results only now — AFTER they've submitted their picks (not before)
+  $("stage").innerHTML = `<div class="muted">All done — thanks, that really helps 💛</div>
+    <a class="btn primary" href="${RESULTS}" style="display:block;text-decoration:none;margin-top:.8rem">👀 See how it's going</a>`;
   $("progress").textContent=""; $("cta").hidden=false;
 }
 $("tryown").onclick=()=>{ location.href="/closet"+(REF?("?ref="+encodeURIComponent(REF)):""); };

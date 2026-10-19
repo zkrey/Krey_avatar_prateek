@@ -270,6 +270,31 @@ create policy "public read render_scores" on render_scores for select using (tru
 --            round(avg((identity_score < 0.65)::int),3) frac_below_065
 --       from render_scores group by route order by avg;
 
+-- ---------------------------------------------------------------------------
+-- face_profiles — a per-user face reference that improves recognition the more selfies they add
+-- (running-mean ArcFace embedding = the doctrine's "5-photo aggregation 65% -> 84%"). BIOMETRIC-
+-- DERIVED: written ONLY with the user's explicit consent (face_learn), keyed by the opaque
+-- owner_hint, and deletable on request (/me/face/delete). Stores the embedding vector, not photos.
+-- Access is server-mediated (Service A's key only; the browser never queries Supabase directly).
+create table if not exists face_profiles (
+    owner_hint   text primary key,              -- opaque per-user id (no name/email)
+    embedding    jsonb,                         -- L2-normalised mean ArcFace embedding (512 floats)
+    samples      int default 0,                 -- how many selfies folded into the face embedding
+    monk         numeric,                       -- trusted Monk skin-tone value from good earlier selfies
+    rgb          jsonb,                          -- trusted average skin RGB [r,g,b]
+    tone_samples int default 0,                 -- how many good-light selfies set the tone
+    measurements jsonb,                          -- body measurements when available (from the capture flow)
+    updated_at   timestamptz default now()
+);
+alter table face_profiles enable row level security;
+drop policy if exists "anon rw face_profiles" on face_profiles;
+drop policy if exists "anon read face_profiles" on face_profiles;
+drop policy if exists "anon del face_profiles" on face_profiles;
+create policy "anon rw face_profiles"   on face_profiles for insert with check (true);
+create policy "anon read face_profiles" on face_profiles for select using (true);
+create policy "anon upd face_profiles"  on face_profiles for update using (true) with check (true);
+create policy "anon del face_profiles"  on face_profiles for delete using (true);
+
 -- Loop rollups:
 --   fit-confidence lift by segment (needs rendered looks + baselines):
 --     -- (computed app-side from rank_votes -> Glicko-2; see docs measurement plan)

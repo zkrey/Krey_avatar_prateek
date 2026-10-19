@@ -300,6 +300,7 @@ async def wardrobe_fit(owner_hint: str = Form(...), person: UploadFile = File(..
     person_bytes = _normalize_upload(await person.read())
     if not person_bytes:
         raise HTTPException(400, "missing person image")
+    person_bytes = _normalize_lighting(person_bytes)   # auto-fix a dim/colour-cast selfie (faithful; a well-lit photo is untouched)
     items = catalog_mod.list_wardrobe(owner_hint)
     if len(items) < 2:
         raise HTTPException(400, "add at least 2 garments to your wardrobe first")
@@ -362,6 +363,7 @@ async def wardrobe_tryon(owner_hint: str = Form(...), item_id: str = Form(...),
     person_bytes = _normalize_upload(await person.read())
     if not person_bytes:
         raise HTTPException(400, "missing person image")
+    person_bytes = _normalize_lighting(person_bytes)   # auto-fix a dim/colour-cast selfie (faithful; a well-lit photo is untouched)
     garment_bytes = catalog_mod.fetch_bytes(item.get("image_url"))
     if not garment_bytes:
         raise HTTPException(502, "couldn't load that garment")
@@ -575,29 +577,71 @@ def _vibe_prompt(g: dict) -> tuple[str, str]:
     return prompt, negative
 
 
+# A neutral-lighting instruction added to every render so a dimly-lit or colour-cast selfie doesn't
+# carry its shadows/under-exposure into the result (a dark selfie was rendering a too-dark complexion).
+_NEUTRAL_LIGHT = (" Light the person with even, neutral, flattering studio daylight and correct any "
+                  "under-exposure or colour cast from the source photo — reproduce their TRUE skin "
+                  "tone as in good daylight; do not darken or warm the complexion because the "
+                  "original photo was dim or shot in warm/dark lighting.")
+
+
+def _normalize_lighting(raw: bytes) -> bytes:
+    """Auto-correct a dim / colour-cast selfie BEFORE skin measurement and rendering, so a dark
+    environment doesn't drag the measured tone (and the render) darker than the person really is.
+    Gentle: well-lit photos pass through untouched. Best-effort — returns the original on any issue."""
+    try:
+        import cv2
+        import numpy as np
+        import math
+        bgr = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+        if bgr is None:
+            return raw
+        meanL = float(cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB)[:, :, 0].mean())
+        if meanL >= 110:          # only clearly under-exposed photos — never touch a well-lit one
+            return raw
+        # 1) GENTLE gamma lift toward a healthy mean luminance (clamped tight so we reveal the true
+        #    tone without washing out or blowing up noise — this must not distort the actual person)
+        p = math.log(130.0 / 255.0) / math.log(max(meanL, 1.0) / 255.0)
+        p = max(0.70, min(1.0, p))
+        lut = np.clip(((np.arange(256) / 255.0) ** p) * 255.0, 0, 255).astype("uint8")
+        out = cv2.LUT(bgr, lut).astype(np.float32)
+        # 2) HALF-STRENGTH gray-world white balance — nudges a warm/dark cast toward neutral without
+        #    re-colouring a genuinely warm complexion (gains pulled halfway back toward 1.0)
+        b, g, r = cv2.split(out)
+        mgray = (b.mean() + g.mean() + r.mean()) / 3.0
+        gb = 1 + 0.5 * (mgray / (b.mean() + 1e-6) - 1)
+        gg = 1 + 0.5 * (mgray / (g.mean() + 1e-6) - 1)
+        gr = 1 + 0.5 * (mgray / (r.mean() + 1e-6) - 1)
+        out = cv2.merge([np.clip(b * gb, 0, 255), np.clip(g * gg, 0, 255), np.clip(r * gr, 0, 255)]).astype("uint8")
+        ok, buf = cv2.imencode(".jpg", out, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+        return buf.tobytes() if ok else raw
+    except Exception:
+        return raw
+
+
 def _skin_tone_clause(person_bytes: bytes) -> str:
-    """Measure the person's skin tone (Monk scale + RGB) from their photo and return a prompt
-    clause so the generative render synthesizes any NEWLY-EXPOSED skin (sleeveless/short garments)
-    to match — instead of guessing. Reuses the existing skin_tone + monk pipeline. Degrades to ""
-    on any failure (no face, deps missing) so it never blocks a render."""
+    """Measure the person's skin tone (Monk scale + RGB) from their (lighting-normalised) photo and
+    return a prompt clause so the render reproduces their TRUE complexion on all skin, under neutral
+    daylight. Always returns a neutral-lighting instruction; adds the measured anchor when readable."""
     try:
         import cv2
         import numpy as np
         from app import monk, skin_tone
         bgr = cv2.imdecode(np.frombuffer(person_bytes, np.uint8), cv2.IMREAD_COLOR)
         if bgr is None:
-            return ""
+            return _NEUTRAL_LIGHT
         res = skin_tone.extract_skin_samples(bgr)
         if not res.get("ok"):
-            return ""
+            return _NEUTRAL_LIGHT
         rec = monk.classify(res["samples"])
         r, g, b = rec["rgb"]
         monkv = rec.get("monk_continuous") or rec.get("value")
         return (f" Keep the person's natural skin tone consistent on ALL skin, including any newly "
                 f"exposed areas (arms, legs, midriff): approximately Monk scale {monkv}, "
-                f"average RGB ({r},{g},{b}). Do not lighten, darken, or change their complexion.")
+                f"average RGB ({r},{g},{b}). Do not lighten, darken, or change their complexion."
+                + _NEUTRAL_LIGHT)
     except Exception:
-        return ""
+        return _NEUTRAL_LIGHT
 
 
 def _biggest_face_embedding(img_bytes: bytes):
@@ -674,22 +718,56 @@ def _is_falsey(v) -> bool:
     return str(v).strip().lower() in ("0", "off", "false", "no", "")
 
 
-async def _render_with_identity_guard(person_bytes: bytes, make_png, base_prompt: str):
+def _cos_to_ref(ref, render_bytes):
+    """Cosine between a reference embedding and the biggest face in the render (None if no face)."""
+    if ref is None:
+        return None
+    try:
+        from app import identity
+        r = _biggest_face_embedding(render_bytes)
+        if r is None:
+            return None
+        return float(identity.match(ref, r))
+    except Exception:
+        return None
+
+
+async def _render_with_identity_guard(person_bytes: bytes, make_png, base_prompt: str,
+                                      owner_hint: str | None = None, learn: bool = False):
     """Render via `make_png(prompt)->bytes`, measure identity retention, and if it drifts below the
     benchmark, retry ONCE with a stronger face-lock and keep whichever attempt scored higher.
-    Returns (png_bytes, score_or_None, retried). `make_png` is a plain callable (run off-thread)."""
+
+    The identity anchor is the user's ACCUMULATED face profile when they have one (more robust than
+    a single selfie); `learn` (explicit consent) then folds this selfie into that profile, so
+    recognition improves for the user over time. Returns (png_bytes, score_or_None, retried)."""
     from starlette.concurrency import run_in_threadpool
+    person_emb = await run_in_threadpool(_biggest_face_embedding, person_bytes)
+    ref = person_emb
+    if owner_hint:
+        try:
+            from app import catalog as _cat
+            prof = await run_in_threadpool(_cat.get_face_profile, owner_hint)
+            if prof:
+                ref = prof
+        except Exception:
+            pass
     png = await run_in_threadpool(make_png, base_prompt)
-    score = await run_in_threadpool(_identity_cosine, person_bytes, png)
+    score = await run_in_threadpool(_cos_to_ref, ref, png)
     thr = _id_threshold()
     retried = False
     if score is not None and score < thr:
         retried = True
         try:
             png2 = await run_in_threadpool(make_png, base_prompt + _ID_RETRY)
-            score2 = await run_in_threadpool(_identity_cosine, person_bytes, png2)
+            score2 = await run_in_threadpool(_cos_to_ref, ref, png2)
             if score2 is not None and score2 > score:
                 png, score = png2, score2
+        except Exception:
+            pass
+    if learn and owner_hint and person_emb is not None:
+        try:
+            from app import catalog as _cat
+            await run_in_threadpool(_cat.update_face_profile, owner_hint, person_emb)
         except Exception:
             pass
     return png, score, retried
@@ -1032,6 +1110,7 @@ async def closet_trend(trend: str = Form(...), owner_hint: str = Form(...),
     person_bytes = _normalize_upload(await person.read())
     if not person_bytes:
         raise HTTPException(400, "missing person image")
+    person_bytes = _normalize_lighting(person_bytes)   # auto-fix a dim/colour-cast selfie (faithful; a well-lit photo is untouched)
     prompt = _trend_prompt(trend, gender) + await run_in_threadpool(_skin_tone_clause, person_bytes)
     try:
         png, id_score, id_retried = await _render_with_identity_guard(
@@ -1064,6 +1143,7 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
     person_bytes = _normalize_upload(await person.read())
     if not person_bytes:
         raise HTTPException(400, "missing person image")
+    person_bytes = _normalize_lighting(person_bytes)   # auto-fix a dim/colour-cast selfie (faithful; a well-lit photo is untouched)
 
     if mode in ("banana", "banana80s"):
         # Nano Banana / Gemini: person + garment images -> one composed image, synchronously

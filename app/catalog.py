@@ -86,8 +86,9 @@ def _sb():
     return os.environ["KREY_SUPABASE_URL"].rstrip("/"), os.environ["KREY_SUPABASE_KEY"]
 
 
-def _post(path: str, rows: list[dict], timeout: int = 10) -> bool:
-    """Best-effort insert into a Supabase table via the anon key. Never raises."""
+def _post(path: str, rows: list[dict], timeout: int = 10, upsert: bool = False) -> bool:
+    """Best-effort insert into a Supabase table via the anon key. Never raises.
+    upsert=True merges on the table's primary key (Prefer: resolution=merge-duplicates)."""
     sb = _sb()
     if not sb:
         return False
@@ -97,10 +98,27 @@ def _post(path: str, rows: list[dict], timeout: int = 10) -> bool:
     req.add_header("apikey", key)
     req.add_header("Authorization", f"Bearer {key}")
     req.add_header("Content-Type", "application/json")
-    req.add_header("Prefer", "return=minimal")
+    req.add_header("Prefer", "return=minimal,resolution=merge-duplicates" if upsert else "return=minimal")
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status in (200, 201, 204)
+    except Exception:
+        return False
+
+
+def _delete(path: str, timeout: int = 10) -> bool:
+    """Best-effort DELETE via the anon key (path carries the filter). Never raises."""
+    sb = _sb()
+    if not sb:
+        return False
+    base, key = sb
+    req = urllib.request.Request(f"{base}/rest/v1/{path}", method="DELETE")
+    req.add_header("apikey", key)
+    req.add_header("Authorization", f"Bearer {key}")
+    req.add_header("Prefer", "return=minimal")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status in (200, 204)
     except Exception:
         return False
 
@@ -467,6 +485,64 @@ def record_render_score(look_id: str | None, owner_hint: str | None, identity_sc
         "route": str(route)[:40] if route else None,
         "retried": bool(retried),
     }])
+
+
+def get_face_profile(owner_hint: str | None):
+    """The user's accumulated face reference (L2-normalised mean ArcFace embedding), or None."""
+    if not owner_hint:
+        return None
+    rows = _get(f"face_profiles?owner_hint=eq.{urllib.parse.quote(str(owner_hint))}"
+                f"&select=embedding,samples&limit=1")
+    if rows and rows[0].get("embedding"):
+        try:
+            return [float(x) for x in rows[0]["embedding"]]
+        except Exception:
+            return None
+    return None
+
+
+def face_profile_status(owner_hint: str | None) -> dict:
+    """Does this user have a face profile, and from how many selfies?"""
+    if not owner_hint:
+        return {"has_profile": False, "samples": 0}
+    rows = _get(f"face_profiles?owner_hint=eq.{urllib.parse.quote(str(owner_hint))}"
+                f"&select=samples&limit=1")
+    if rows:
+        return {"has_profile": True, "samples": int(rows[0].get("samples") or 0)}
+    return {"has_profile": False, "samples": 0}
+
+
+def update_face_profile(owner_hint: str | None, embedding) -> bool:
+    """Fold one selfie's embedding into the user's running-mean reference (consent-gated upstream).
+    More selfies -> a more robust anchor -> better identity recognition for THAT user."""
+    if not owner_hint or not embedding:
+        return False
+    import math
+    import datetime
+    try:
+        emb = [float(x) for x in embedding]
+    except Exception:
+        return False
+    cur = get_face_profile(owner_hint)
+    rows = _get(f"face_profiles?owner_hint=eq.{urllib.parse.quote(str(owner_hint))}&select=samples&limit=1")
+    n = int(rows[0].get("samples")) if (rows and rows[0].get("samples") is not None) else 0
+    if cur and len(cur) == len(emb) and n > 0:
+        mean = [(cur[i] * n + emb[i]) / (n + 1) for i in range(len(emb))]
+    else:
+        mean = emb
+    norm = math.sqrt(sum(x * x for x in mean)) or 1.0
+    mean = [x / norm for x in mean]
+    return _post("face_profiles", [{
+        "owner_hint": str(owner_hint)[:64], "embedding": mean, "samples": n + 1,
+        "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }], upsert=True)
+
+
+def delete_face_profile(owner_hint: str | None) -> bool:
+    """Erase the user's face profile (the delete-anytime promise)."""
+    if not owner_hint:
+        return False
+    return _delete(f"face_profiles?owner_hint=eq.{urllib.parse.quote(str(owner_hint))}")
 
 
 def _get_all(path_select: str, limit: int = 10000) -> list:
