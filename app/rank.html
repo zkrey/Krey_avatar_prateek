@@ -22,11 +22,13 @@
   h1{font-size:1.15rem;margin:.3rem 0}
   .muted{color:var(--muted);font-size:.85rem}
   .pair{display:grid;grid-template-columns:1fr 1fr;gap:.6rem;margin:1rem 0}
-  .opt{border:1px solid var(--line);background:var(--surface);border-radius:14px;overflow:hidden;cursor:pointer;padding:0}
+  .opt{border:1px solid var(--line);background:var(--surface);border-radius:14px;overflow:hidden;cursor:pointer;padding:0;display:flex;flex-direction:column}
   .opt img{width:100%;aspect-ratio:3/4;object-fit:cover;display:block}
   .opt .ph{width:100%;aspect-ratio:3/4;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:.8rem}
-  .opt .lab{padding:.5rem;font-size:.85rem;color:var(--gold);font-weight:600}
-  .or{color:var(--muted);font-size:.8rem;margin:.2rem 0}
+  .opt .lab{margin:.45rem;padding:.6rem;font-size:.92rem;background:var(--gold);color:#1a1400;font-weight:700;border-radius:10px}
+  .opt:active{transform:scale(.99)}
+  .opt:active .lab{filter:brightness(.94)}
+  .or{color:var(--muted);font-size:.82rem;margin:.4rem 0}
   .strip{margin:.6rem 0}
   .striplab{color:var(--muted);font-size:.78rem;margin-bottom:.35rem}
   .thumbs{display:flex;gap:.35rem;justify-content:center;flex-wrap:wrap}
@@ -34,6 +36,15 @@
   .btn{border:1px solid var(--gold-dim);background:transparent;color:var(--gold);border-radius:10px;padding:.7rem 1rem;font-size:.95rem;cursor:pointer}
   .btn.primary{background:var(--gold);color:#1a1400;border-color:var(--gold);font-weight:700;width:100%;padding:.8rem}
   .cta{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:1rem;margin-top:1.4rem}
+  .thumbs img{cursor:zoom-in}
+  /* tap-to-zoom lightbox for the fits carousel */
+  .zoomov{position:fixed;inset:0;background:#000e;display:none;align-items:center;justify-content:center;z-index:80}
+  .zoomov.show{display:flex}
+  .zoomov img{max-width:92vw;max-height:80vh;border-radius:12px;border:1px solid var(--line)}
+  .zoomov .zc{position:absolute;top:14px;right:16px;color:#fff;background:#0007;border:0;border-radius:999px;width:38px;height:38px;font-size:1.3rem;cursor:pointer}
+  .zoomov .zp,.zoomov .zn{position:absolute;top:50%;transform:translateY(-50%);color:#fff;background:#0007;border:0;border-radius:999px;width:44px;height:44px;font-size:1.4rem;cursor:pointer}
+  .zoomov .zp{left:10px}.zoomov .zn{right:10px}
+  .zoomov .zcount{position:absolute;bottom:18px;left:0;right:0;text-align:center;color:#fff;font-size:.85rem;opacity:.92}
 </style>
 </head>
 <body>
@@ -46,6 +57,15 @@
     <div style="font-weight:600;margin-bottom:.3rem">You're one of their people 💛</div>
     <div class="muted">That really helped them. Now let <b>your</b> circle do the same for you — try a few looks, it takes a minute.</div>
     <button class="btn primary" id="tryown" style="margin-top:.8rem">✨ Try it on me</button>
+  </div>
+
+  <!-- tap-to-zoom lightbox for the fits carousel -->
+  <div id="zoomov" class="zoomov">
+    <button class="zc" id="z_close" aria-label="close">×</button>
+    <button class="zp" id="z_prev" aria-label="previous">‹</button>
+    <button class="zn" id="z_next" aria-label="next">›</button>
+    <img id="z_img" alt="">
+    <div class="zcount" id="z_count"></div>
   </div>
 
 <script>
@@ -82,11 +102,35 @@ const CAP = Math.min(K, K*(K-1)/2);   // never more than total unique pairs
 const seen = new Set();
 let done = 0;
 
-// show ALL fits up front so voters know it's pairwise (2 at a time)
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+// show ALL fits up front so voters know it's pairwise (2 at a time) — tap any to zoom in
 if(looks.length>2){
-  $("strip").innerHTML = `<div class="striplab">${looks.length} fits — you'll compare a few, two at a time:</div>`
-    + `<div class="thumbs">` + looks.map(l=>l.image_url?`<img src="${l.image_url}" alt="">`:`<span class="tph"></span>`).join("") + `</div>`;
+  $("strip").innerHTML = `<div class="striplab">${looks.length} fits — tap any to zoom · you'll compare a few, two at a time:</div>`
+    + `<div class="thumbs">` + looks.map((l,i)=>l.image_url?`<img src="${esc(l.image_url)}" data-i="${i}" alt="">`:`<span class="tph"></span>`).join("") + `</div>`;
+  $("strip").querySelectorAll(".thumbs img").forEach(im=>im.onclick=()=>openZoom(+im.dataset.i));
 }
+
+// ---- tap-to-zoom lightbox: enlarge the fits one at a time ----
+let ZI=0;
+function zDraw(){
+  const l=looks[ZI]||{};
+  $("z_img").src=l.image_url||""; $("z_img").alt=esc(l.name||"");
+  $("z_count").textContent=(ZI+1)+" / "+looks.length+(l.name?" · "+l.name:"");
+  const multi=looks.length>1;
+  $("z_prev").style.display=multi?"":"none"; $("z_next").style.display=multi?"":"none";
+}
+function openZoom(i){ ZI=i; zDraw(); $("zoomov").classList.add("show"); }
+function zClose(){ $("zoomov").classList.remove("show"); }
+$("z_close").onclick=zClose;
+$("z_prev").onclick=()=>{ ZI=(ZI-1+looks.length)%looks.length; zDraw(); };
+$("z_next").onclick=()=>{ ZI=(ZI+1)%looks.length; zDraw(); };
+$("zoomov").onclick=e=>{ if(e.target.id==="zoomov") zClose(); };   // tap backdrop to close
+document.addEventListener("keydown",e=>{ if(!$("zoomov").classList.contains("show")) return;
+  if(e.key==="Escape") zClose(); else if(e.key==="ArrowLeft") $("z_prev").click(); else if(e.key==="ArrowRight") $("z_next").click(); });
+let _tx=0;
+$("zoomov").addEventListener("touchstart",e=>{ _tx=e.touches[0].clientX; },{passive:true});
+$("zoomov").addEventListener("touchend",e=>{ const dx=e.changedTouches[0].clientX-_tx;
+  if(Math.abs(dx)>40){ (dx<0?$("z_next"):$("z_prev")).click(); } },{passive:true});
 function pairKey(a,b){ return [a,b].sort().join("|"); }
 function card(l){
   return l.image_url
@@ -103,9 +147,9 @@ async function nextRound(){
   $("progress").textContent = `Matchup ${done+1} of ${CAP}`;
   $("stage").innerHTML =
     `<div class="pair">
-       <button class="opt" data-w="${a.look_id}" data-l="${b.look_id}">${card(a)}<div class="lab">This one</div></button>
-       <button class="opt" data-w="${b.look_id}" data-l="${a.look_id}">${card(b)}<div class="lab">This one</div></button>
-     </div><div class="or">tap the one that's more them</div>`;
+       <button class="opt" data-w="${a.look_id}" data-l="${b.look_id}">${card(a)}<div class="lab">✓ Pick this</div></button>
+       <button class="opt" data-w="${b.look_id}" data-l="${a.look_id}">${card(b)}<div class="lab">✓ Pick this</div></button>
+     </div><div class="or">tap the look that's more them 💛</div>`;
   $("stage").querySelectorAll(".opt").forEach(btn=>btn.onclick=()=>{
     try{ fetch("/rank/vote",{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({set_id:DATA.set_id,winner_look_id:btn.dataset.w,loser_look_id:btn.dataset.l,voter_hint:sid(),referrer_hint:REF})}); }catch(e){}
