@@ -306,7 +306,8 @@ async def wardrobe_add(owner_hint: str = Form(...), photo: UploadFile = File(...
 
 @app.post("/wardrobe/fit")
 async def wardrobe_fit(owner_hint: str = Form(...), person: UploadFile = File(...),
-                       occasion: str = Form(""), face_learn: str = Form("")):
+                       occasion: str = Form(""), face_learn: str = Form(""),
+                       background: str = Form("")):
     """✨ Make me a fit: an LLM-stylist picks a cohesive outfit from the user's OWN wardrobe, then
     renders those real garments onto their photo in one pass (multi-garment Nano). The result is
     saved as a look so it flows into the same share → ask-your-people loop as every other fit."""
@@ -347,6 +348,7 @@ async def wardrobe_fit(owner_hint: str = Form(...), person: UploadFile = File(..
               "No text or watermarks. " + _ID_LOCK)
     _learn = not _is_falsey(face_learn)
     prompt += await run_in_threadpool(_skin_tone_clause, person_bytes, owner_hint, _learn)
+    prompt += _bg_clause(background)
     try:
         png, id_score, id_retried = await _render_with_identity_guard(
             person_bytes, lambda p: banana_mod.generate_outfit(person_bytes, garbytes, p), prompt,
@@ -368,7 +370,8 @@ async def wardrobe_fit(owner_hint: str = Form(...), person: UploadFile = File(..
 
 @app.post("/wardrobe/tryon")
 async def wardrobe_tryon(owner_hint: str = Form(...), item_id: str = Form(...),
-                         person: UploadFile = File(...), face_learn: str = Form("")):
+                         person: UploadFile = File(...), face_learn: str = Form(""),
+                         background: str = Form("")):
     """See ONE of your own saved garments on you (single-garment render). Mirrors /closet/tryon's
     Nano path but sources the garment from the user's wardrobe, and saves the result as a look so it
     drops into the same looks-tray → ask-your-people loop as every other fit."""
@@ -388,7 +391,8 @@ async def wardrobe_tryon(owner_hint: str = Form(...), item_id: str = Form(...),
     if not garment_bytes:
         raise HTTPException(502, "couldn't load that garment")
     _learn = not _is_falsey(face_learn)
-    prompt = _banana_prompt(item, "studio") + await run_in_threadpool(_skin_tone_clause, person_bytes, owner_hint, _learn)
+    prompt = (_banana_prompt(item, "studio") + await run_in_threadpool(_skin_tone_clause, person_bytes, owner_hint, _learn)
+              + _bg_clause(background))
     try:
         png, id_score, id_retried = await _render_with_identity_guard(
             person_bytes, lambda p: banana_mod.generate(person_bytes, garment_bytes, p), prompt,
@@ -905,6 +909,32 @@ _ID_RETRY = (
     "only the body/clothing."
 )
 
+# --- Backdrops: optional scene to place the person in (a boring selfie wall -> a festive setting
+# for a kurta, etc.). The UI shows these; the key is validated server-side (unknown -> no change).
+# (label, emoji, scene phrase). "" / "plain" = keep it clean (default, no scene change).
+_BACKGROUNDS: dict[str, tuple] = {
+    "plain":   ("Clean", "⬜", ""),
+    "studio":  ("Studio", "🎞️", "a clean, softly-lit professional studio backdrop"),
+    "festive": ("Festive", "🪔", "a warm Indian festive setting with marigold flowers, glowing diyas "
+                                 "and soft fairy-light bokeh"),
+    "wedding": ("Wedding", "💍", "an elegant wedding venue with floral decor and warm ambient light"),
+    "garden":  ("Garden", "🌿", "a lush green garden in soft natural daylight"),
+    "city":    ("City", "🏙️", "a stylish city street with tasteful background bokeh"),
+    "cafe":    ("Café", "☕", "a cozy, aesthetically-lit café interior"),
+    "beach":   ("Beach", "🏖️", "a sunny beach at golden hour with the sea softly behind"),
+    "rooftop": ("Rooftop", "🌆", "a chic rooftop at dusk with city-light bokeh"),
+}
+
+
+def _bg_clause(bg: str) -> str:
+    """Prompt clause to place the person in a chosen backdrop (empty for 'plain'/unknown)."""
+    scene = (_BACKGROUNDS.get((bg or "").strip().lower()) or (None, None, ""))[2]
+    if not scene:
+        return ""
+    return (f" Set the scene: place the person against {scene}, as a real photo naturally taken "
+            f"there (replace any plain studio wall). Keep the person, their face and the garment "
+            f"exactly the same — only the background changes.")
+
 # --- Style trends: iconic-look presets applied to the user's OWN photo via Nano, no garment and
 # no manual catalog adds. Each is an openly-known fashion aesthetic/era (NOT a real person) — the
 # render always keeps the USER's face/identity, so we never generate a celebrity's likeness. Each
@@ -1202,7 +1232,7 @@ async def closet_trend(trend: str = Form(...), owner_hint: str = Form(...),
 @app.post("/closet/tryon")
 async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
                        person: UploadFile = File(...), mode: str = Form("catvton"),
-                       face_learn: str = Form("")):
+                       face_learn: str = Form(""), background: str = Form("")):
     """Fire-and-poll try-on: SPAWN the render on Modal and return a job_id immediately (the request
     stays short — no Railway 5-min timeout). The client then polls /closet/tryon/result.
     mode: 'catvton' (faithful-garment 2D try-on) or 'vibe' (SDXL+InstantID aspirational 80s render)."""
@@ -1227,7 +1257,8 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
         style = "eighties" if mode == "banana80s" else "studio"
         garment_bytes = catalog_mod.fetch_bytes(g.get("image_url"))
         _learn = not _is_falsey(face_learn)
-        prompt = _banana_prompt(g, style) + await run_in_threadpool(_skin_tone_clause, person_bytes, owner_hint, _learn)
+        prompt = (_banana_prompt(g, style) + await run_in_threadpool(_skin_tone_clause, person_bytes, owner_hint, _learn)
+                  + _bg_clause(background))
         try:
             png, id_score, id_retried = await _render_with_identity_guard(
                 person_bytes, lambda p: banana_mod.generate(person_bytes, garment_bytes, p), prompt,

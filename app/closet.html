@@ -182,6 +182,9 @@
     <div class="flabel">Occasion</div>
     <div class="filters" id="segfilters"><button class="chip on" data-s="">All</button></div>
 
+    <div class="flabel">Backdrop ✨ <span class="muted" style="font-weight:400;font-size:.8rem">— set the scene for your fit</span></div>
+    <div class="filters" id="bgchips"></div>
+
     <div id="grid" class="grid"></div>
     <div id="empty" class="empty" hidden>No garments for this photo yet.</div>
   </div>
@@ -209,6 +212,14 @@ function renderFaceConsent(){
   const done=v=>{ try{ localStorage.setItem("krey_face_consent",v?"1":"0"); localStorage.setItem("krey_face_asked","1"); }catch(e){} el.hidden=true; };
   $("fc_yes").onclick=()=>done(true); $("fc_no").onclick=()=>done(false);
   el.hidden=false;
+}
+// backdrops: set the scene for a garment try-on (a festive kurta, a beach fit, etc.)
+const BGS=[["plain","⬜","Clean"],["festive","🪔","Festive"],["studio","🎞️","Studio"],["wedding","💍","Wedding"],["garden","🌿","Garden"],["city","🏙️","City"],["cafe","☕","Café"],["beach","🏖️","Beach"],["rooftop","🌆","Rooftop"]];
+let BG="plain";
+function renderBgChips(){
+  const box=$("bgchips"); if(!box) return;
+  box.innerHTML=BGS.map(([k,e,l])=>`<button class="chip${k===BG?' on':''}" data-bg="${k}">${e} ${l}</button>`).join("");
+  box.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ BG=c.dataset.bg; box.querySelectorAll(".chip").forEach(x=>x.classList.remove("on")); c.classList.add("on"); });
 }
 let T="", S="", RENDER_LIVE=false, VIBE_LIVE=false, BANANA_LIVE=false, MODE="catvton", MODE_PICKED=false, ALL=[], ALLOWED=[], PHOTO=null, LOOKS=[];
 const MODE_HINT={
@@ -268,7 +279,7 @@ async function analyze(file){
   if(locked.length){ $("unlock").hidden=false; $("unlockmsg").innerHTML = "Locked: "+locked.map(t=>TYPELABEL[t]).join(" · ")+" — add a full-body photo to unlock."; }
   else { $("unlock").hidden=true; }
   buildTypeChips();
-  $("gate").hidden=true; $("shop").hidden=false; renderFaceConsent();
+  $("gate").hidden=true; $("shop").hidden=false; renderFaceConsent(); renderBgChips();
   load();
 }
 function buildTypeChips(){
@@ -382,7 +393,7 @@ async function onTry(g){
   if(!live){ alert("This render style isn't switched on yet."); return; }
   if(!PHOTO){ alert("Add your photo first."); return; }
   showRender("loading",g);
-  const fd=new FormData(); fd.append("garment_id",g.garment_id); fd.append("owner_hint",sid()); fd.append("person",PHOTO); fd.append("mode",MODE); fd.append("face_learn",faceLearn());
+  const fd=new FormData(); fd.append("garment_id",g.garment_id); fd.append("owner_hint",sid()); fd.append("person",PHOTO); fd.append("mode",MODE); fd.append("face_learn",faceLearn()); fd.append("background",BG);
   let job;
   try{
     const r=await fetch("/closet/tryon",{method:"POST",body:fd});

@@ -99,6 +99,11 @@
     <button class="btn primary" id="makefit">✨ Make me a fit</button>
   </div>
 
+  <div id="bgwrap" style="margin:0 0 1rem" hidden>
+    <div style="font-size:.85rem;color:var(--muted);margin-bottom:.4rem">Backdrop ✨ — set the scene for your fit</div>
+    <div class="occ" id="bgchips"></div>
+  </div>
+
   <div id="grid" class="grid"></div>
   <div id="empty" class="empty" hidden>No items yet — add your first garment ☝️</div>
 
@@ -136,6 +141,8 @@ function render(){
   $("grid").innerHTML = ITEMS.map(it=>card(it,false)).join("");
   $("grid").querySelectorAll(".see").forEach(b=>b.onclick=()=>tryOn(b.dataset.id));
   $("stylist").hidden = ITEMS.length<2;   // need ≥2 pieces to auto-style a full fit
+  $("bgwrap").hidden = ITEMS.length<1;    // backdrop applies to any render
+  renderBgChips();
 }
 
 // --- "Krey remembers you" consent (one tap), shared with the closet (same localStorage keys) ---
@@ -150,6 +157,15 @@ function renderFaceConsent(){
   const done=v=>{ try{ localStorage.setItem("krey_face_consent",v?"1":"0"); localStorage.setItem("krey_face_asked","1"); }catch(e){} el.hidden=true; };
   $("fc_yes").onclick=()=>done(true); $("fc_no").onclick=()=>done(false);
   el.hidden=false;
+}
+
+// backdrops: set the scene for a wardrobe render (a festive kurta, a beach fit, etc.)
+const BGS=[["plain","⬜","Clean"],["festive","🪔","Festive"],["studio","🎞️","Studio"],["wedding","💍","Wedding"],["garden","🌿","Garden"],["city","🏙️","City"],["cafe","☕","Café"],["beach","🏖️","Beach"],["rooftop","🌆","Rooftop"]];
+let BG="plain";
+function renderBgChips(){
+  const box=$("bgchips"); if(!box) return;
+  box.innerHTML=BGS.map(([k,e,l])=>`<button class="chip${k===BG?' on':''}" data-bg="${k}">${e} ${l}</button>`).join("");
+  box.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ BG=c.dataset.bg; box.querySelectorAll(".chip").forEach(x=>x.classList.remove("on")); c.classList.add("on"); });
 }
 
 // ---- selfie (asked once, reused for every render this session) ------------
@@ -217,7 +233,7 @@ async function tryOn(itemId){
   withSelfie(async()=>{
     showSpin("✨ Putting it on you…");
     try{
-      const fd=new FormData(); fd.append("owner_hint",sid()); fd.append("item_id",itemId); fd.append("person",MEFILE); fd.append("face_learn",faceLearn());
+      const fd=new FormData(); fd.append("owner_hint",sid()); fd.append("item_id",itemId); fd.append("person",MEFILE); fd.append("face_learn",faceLearn()); fd.append("background",BG);
       const r=await fetch("/wardrobe/tryon",{method:"POST",body:fd});
       if(!r.ok){ let d={}; try{d=await r.json();}catch(e){} throw new Error(d.detail||"couldn't render that"); }
       showLook(await r.json());
@@ -234,7 +250,7 @@ function makeFit(){
   withSelfie(async()=>{
     showSpin("✨ Styling a fit from your closet…");
     try{
-      const fd=new FormData(); fd.append("owner_hint",sid()); fd.append("occasion",OCC); fd.append("person",MEFILE); fd.append("face_learn",faceLearn());
+      const fd=new FormData(); fd.append("owner_hint",sid()); fd.append("occasion",OCC); fd.append("person",MEFILE); fd.append("face_learn",faceLearn()); fd.append("background",BG);
       const r=await fetch("/wardrobe/fit",{method:"POST",body:fd});
       if(!r.ok){ let d={}; try{d=await r.json();}catch(e){} throw new Error(d.detail||"couldn't style a fit"); }
       showLook(await r.json());
