@@ -58,6 +58,11 @@
   .tray .btn.primary.ready{box-shadow:0 0 0 2px var(--gold)}
   .traymsg{color:var(--muted);font-size:.78rem;margin-top:.4rem}
   .preb{flex:1;min-width:46%;padding:.5rem;font-size:.82rem}
+  /* guided coach: walks first-timers from render -> share (mirrors the closet) */
+  .coach{display:flex;align-items:center;gap:.6rem;background:rgba(217,178,90,.10);border:1px solid var(--gold-dim);border-radius:12px;padding:.6rem .8rem;margin:0 0 1rem;font-size:.88rem;line-height:1.35}
+  .coach span{flex:1}
+  .coach b{color:var(--gold)}
+  .coach .cx{background:none;border:0;color:var(--muted);font-size:1.15rem;cursor:pointer;line-height:1;padding:0 .2rem}
 </style>
 </head>
 <body>
@@ -69,6 +74,9 @@
     <button class="btn" id="snap">📸 Snap</button>
   </div>
   <div class="msg" id="msg"></div>
+
+  <!-- guided coach: render -> make another -> ask your people -> send to friends -->
+  <div id="coach" class="coach" hidden></div>
 
   <div class="stylist" id="stylist" hidden>
     <h2>✨ Make me a fit</h2>
@@ -179,6 +187,7 @@ function showLook(f){
   const sh=$("sh"); if(sh) sh.onclick=async()=>{
     const data={title:"My look on Krey",text:(f.name||"My look")+" on me — Krey 💛",url:share};
     try{ if(navigator.share){ await navigator.share(data); } else { await navigator.clipboard.writeText(share); sh.textContent="Link copied ✓"; } }catch(e){}
+    markCycleDone();   // shared a look with friends -> guided cycle complete
   };
 }
 
@@ -213,13 +222,30 @@ function makeFit(){
 }
 $("makefit").onclick=makeFit;
 
+// ---- guided coach: keep handholding past the render, all the way to "sent to friends" ----
+let BALLOTED=false;
+function coachOff(){ try{ return localStorage.getItem("krey_cycle_done")==="1" || localStorage.getItem("krey_coach_x")==="1"; }catch(e){ return false; } }
+function markCycleDone(){ try{ localStorage.setItem("krey_cycle_done","1"); }catch(e){} renderCoach(); }
+function renderCoach(){
+  const c=$("coach"); if(!c) return;
+  if(coachOff() || LOOKS.length<1){ c.hidden=true; return; }
+  let step, msg;
+  if(LOOKS.length<2){ step=1; msg="Make one more look so your people can pick between them ✨"; }
+  else if(!BALLOTED){ step=2; msg="Now <b>ask your people</b> 💛 — tap the gold button at the bottom"; }
+  else { step=3; msg="Last step — <b>send it to 2–3 people</b> whose taste you trust 💛"; }
+  c.innerHTML=`<span><b>Step ${step} of 3</b> · ${msg}</span><button class="cx" id="coach_x" title="dismiss">×</button>`;
+  $("coach_x").onclick=()=>{ try{ localStorage.setItem("krey_coach_x","1"); }catch(e){} c.hidden=true; };
+  c.hidden=false;
+}
+
 // ---- looks tray -> ask your people (the SAME loop as the closet) ----------
 let LOOKS=[];
 function addLook(lk){ if(!lk||!lk.look_id) return; if(LOOKS.some(x=>x.look_id===lk.look_id)) return; LOOKS.push(lk); renderTray(); }
 function renderTray(){
   const t=$("tray");
-  if(!LOOKS.length){ t.hidden=true; document.body.classList.remove("hastray"); return; }
+  if(!LOOKS.length){ t.hidden=true; document.body.classList.remove("hastray"); renderCoach(); return; }
   t.hidden=false; document.body.classList.add("hastray");
+  renderCoach();
   $("traycount").textContent="· "+LOOKS.length+(LOOKS.length===1?" look":" looks");
   $("trow").innerHTML=LOOKS.map((l,i)=>`<div class="lk"><img src="${esc(l.image_url)}" alt=""><div class="rm" data-i="${i}">✕</div></div>`).join("");
   $("trow").querySelectorAll(".rm").forEach(b=>b.onclick=()=>{ LOOKS.splice(+b.dataset.i,1); renderTray(); });
@@ -261,6 +287,7 @@ async function makeBallot(){
     });
     $("tm_share").onclick=()=>shareBallot(url);
     $("tm_results").onclick=()=>{ location.href=results; };
+    BALLOTED=true; renderCoach();   // ballot exists -> coach advances to "send it to your people"
   }catch(e){ $("traymsg").textContent="Couldn't set it up — try again."; $("rankbtn").disabled=false; }
 }
 async function shareBallot(url){
@@ -269,6 +296,7 @@ async function shareBallot(url){
     if(navigator.share){ await navigator.share({title:"Krey", text, url}); }
     else { window.open("https://wa.me/?text="+encodeURIComponent(text+" "+url),"_blank"); }
   }catch(e){}
+  markCycleDone();   // shared with friends -> the guided cycle is complete
 }
 
 async function load(){
