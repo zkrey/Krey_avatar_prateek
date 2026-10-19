@@ -31,6 +31,8 @@
   .empty .btn{margin-top:1rem}
   .hdrow{display:flex;justify-content:space-between;align-items:center;gap:.5rem}
   .ref{background:none;border:0;color:var(--gold);font-size:.85rem;cursor:pointer}
+  .fmgr{margin-top:1.6rem;padding-top:1rem;border-top:1px solid var(--line);color:var(--muted);font-size:.84rem;line-height:1.5}
+  .fmgr b{color:var(--text)}
 </style>
 </head>
 <body>
@@ -43,10 +45,33 @@
   </div>
 
   <div id="list"></div>
+  <div id="facemgr" class="fmgr" hidden></div>
 
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function sid(){ try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s;}catch(e){return "anon";} }
+
+// "Krey remembers you" — show what's stored + a one-tap delete (the delete-anytime promise)
+async function renderFaceMgr(){
+  const el=$("facemgr"); if(!el) return;
+  let st={};
+  try{ const r=await fetch("/me/face/status?owner_hint="+encodeURIComponent(sid())); st=await r.json(); }catch(e){ return; }
+  const on=(()=>{ try{ return localStorage.getItem("krey_face_consent")==="1"; }catch(e){ return false; } })();
+  if(!st.has_profile && !st.has_tone && !on){ el.hidden=true; return; }
+  const bits=[]; if(st.samples) bits.push(st.samples+" selfie"+(st.samples>1?"s":"")); if(st.has_tone) bits.push("your true tone");
+  el.innerHTML=`🔒 <b>Krey remembers you</b>${bits.length?" — "+esc(bits.join(" · ")):""}. This only improves your own looks.
+    <div style="margin-top:.6rem;display:flex;gap:.5rem;flex-wrap:wrap">
+      <button class="btn" id="fm_del">Delete my face data</button>
+    </div>`;
+  $("fm_del").onclick=async()=>{
+    $("fm_del").textContent="Deleting…";
+    try{ await fetch("/me/face/delete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({owner_hint:sid()})}); }catch(e){}
+    try{ localStorage.setItem("krey_face_consent","0"); }catch(e){}
+    el.innerHTML='🔒 Deleted — Krey no longer remembers your face or tone.';
+  };
+  el.hidden=false;
+}
 const DAY=864e5, TTL=15*DAY;   // keep the last 15 days; older ones are pruned to clear room for new
 
 // prune on read: drop ballots >15 days old so the view stays fresh (and we don't pile up cache)
@@ -121,8 +146,9 @@ async function render(){
     e.preventDefault(); const b=arr[i]; if(b) shareAgain(b.rank_url||(location.origin+"/rank/"+b.set_id));
   });
 }
-$("refresh").onclick=render;
+$("refresh").onclick=()=>{ render(); renderFaceMgr(); };
 render();
+renderFaceMgr();
 </script>
 </body>
 </html>

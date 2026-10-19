@@ -92,6 +92,10 @@
   .coach b{color:var(--gold)}
   .coach .cx{background:none;border:0;color:var(--muted);font-size:1.15rem;cursor:pointer;line-height:1;padding:0 .2rem}
   .reslink{display:inline-block;background:var(--gold);color:#1a1400;font-weight:700;border-radius:999px;padding:.4rem .9rem;font-size:.85rem;text-decoration:none;margin:0 0 1rem}
+  .fconsent{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;background:rgba(217,178,90,.08);border:1px solid var(--gold-dim);border-radius:12px;padding:.6rem .8rem;margin:0 0 1rem;font-size:.85rem}
+  .fconsent span:first-child{flex:1;min-width:180px}
+  .fconsent .fc_btns{display:flex;gap:.4rem}
+  .fconsent .btn{padding:.4rem .8rem}
 </style>
 </head>
 <body>
@@ -111,6 +115,7 @@
   <h1>Your closet ✨</h1>
   <div class="sub" id="sub">Welcome in 💛 Add a photo and watch any look come alive on you. <span id="src" class="src">…</span> · <a href="#" id="howitworks" style="color:var(--gold)">how it works</a></div>
   <a href="#" id="resultslink" class="reslink" hidden>📊 See what your people picked</a>
+  <div id="faceconsent" class="fconsent" hidden></div>
   <a href="/wardrobe" class="wardcard">
     <div class="wc_ico">👗</div>
     <div class="wc_txt"><b>Build your wardrobe</b><span>Snap your own clothes → see them on you → style full fits</span></div>
@@ -192,6 +197,19 @@
 <script>
 const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+// --- "Krey remembers you" consent (one tap): on -> the render learns your face + true tone over time
+function faceConsent(){ try{ return localStorage.getItem("krey_face_consent")==="1"; }catch(e){ return false; } }
+function faceLearn(){ return faceConsent()?"1":""; }
+function renderFaceConsent(){
+  const el=$("faceconsent"); if(!el) return;
+  let asked=false; try{ asked=localStorage.getItem("krey_face_asked")==="1"; }catch(e){}
+  if(asked){ el.hidden=true; return; }
+  el.innerHTML=`<span>🔒 Let Krey remember you so your looks keep getting more like <b>you</b> — same face, your true skin tone. Delete anytime.</span>`
+    +`<span class="fc_btns"><button class="btn primary" id="fc_yes">Yes</button><button class="btn" id="fc_no">Not now</button></span>`;
+  const done=v=>{ try{ localStorage.setItem("krey_face_consent",v?"1":"0"); localStorage.setItem("krey_face_asked","1"); }catch(e){} el.hidden=true; };
+  $("fc_yes").onclick=()=>done(true); $("fc_no").onclick=()=>done(false);
+  el.hidden=false;
+}
 let T="", S="", RENDER_LIVE=false, VIBE_LIVE=false, BANANA_LIVE=false, MODE="catvton", MODE_PICKED=false, ALL=[], ALLOWED=[], PHOTO=null, LOOKS=[];
 const MODE_HINT={
   banana:"AI studio — your face + the real garment composed together. ~15–30s. Recommended.",
@@ -250,7 +268,7 @@ async function analyze(file){
   if(locked.length){ $("unlock").hidden=false; $("unlockmsg").innerHTML = "Locked: "+locked.map(t=>TYPELABEL[t]).join(" · ")+" — add a full-body photo to unlock."; }
   else { $("unlock").hidden=true; }
   buildTypeChips();
-  $("gate").hidden=true; $("shop").hidden=false;
+  $("gate").hidden=true; $("shop").hidden=false; renderFaceConsent();
   load();
 }
 function buildTypeChips(){
@@ -311,7 +329,7 @@ async function onTrend(key,label){
   const g={garment_id:"trend:"+key, name:label};
   logEvent(g,"try","trend");
   showRender("loading",g);
-  const fd=new FormData(); fd.append("trend",key); fd.append("owner_hint",sid()); fd.append("person",PHOTO); fd.append("gender",GENDER);
+  const fd=new FormData(); fd.append("trend",key); fd.append("owner_hint",sid()); fd.append("person",PHOTO); fd.append("gender",GENDER); fd.append("face_learn",faceLearn());
   try{
     const r=await fetch("/closet/trend",{method:"POST",body:fd});
     const j=await r.json();
@@ -364,7 +382,7 @@ async function onTry(g){
   if(!live){ alert("This render style isn't switched on yet."); return; }
   if(!PHOTO){ alert("Add your photo first."); return; }
   showRender("loading",g);
-  const fd=new FormData(); fd.append("garment_id",g.garment_id); fd.append("owner_hint",sid()); fd.append("person",PHOTO); fd.append("mode",MODE);
+  const fd=new FormData(); fd.append("garment_id",g.garment_id); fd.append("owner_hint",sid()); fd.append("person",PHOTO); fd.append("mode",MODE); fd.append("face_learn",faceLearn());
   let job;
   try{
     const r=await fetch("/closet/tryon",{method:"POST",body:fd});

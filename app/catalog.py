@@ -538,8 +538,73 @@ def update_face_profile(owner_hint: str | None, embedding) -> bool:
     }], upsert=True)
 
 
+def get_tone_profile(owner_hint: str | None):
+    """The user's trusted skin tone (Monk + RGB) from earlier good-light selfies, or None."""
+    if not owner_hint:
+        return None
+    rows = _get(f"face_profiles?owner_hint=eq.{urllib.parse.quote(str(owner_hint))}"
+                f"&select=monk,rgb,tone_samples&limit=1")
+    if rows and rows[0].get("monk") is not None and rows[0].get("rgb"):
+        try:
+            return {"monk": float(rows[0]["monk"]), "rgb": [int(x) for x in rows[0]["rgb"]],
+                    "samples": int(rows[0].get("tone_samples") or 0)}
+        except Exception:
+            return None
+    return None
+
+
+def update_tone_profile(owner_hint: str | None, monk, rgb) -> bool:
+    """Fold a GOOD-light tone reading into the user's running-mean skin tone (caller gates on
+    measurement confidence). Upholds the true complexion so a later dark selfie can't override it."""
+    if not owner_hint or monk is None or not rgb:
+        return False
+    import datetime
+    try:
+        m = float(monk)
+        rr = [float(x) for x in rgb][:3]
+        if len(rr) < 3:
+            return False
+    except Exception:
+        return False
+    cur = get_tone_profile(owner_hint)
+    n = cur["samples"] if cur else 0
+    if cur and n > 0:
+        nm = (cur["monk"] * n + m) / (n + 1)
+        nr = [(cur["rgb"][i] * n + rr[i]) / (n + 1) for i in range(3)]
+    else:
+        nm, nr = m, rr
+    return _post("face_profiles", [{
+        "owner_hint": str(owner_hint)[:64], "monk": round(nm, 2),
+        "rgb": [int(round(x)) for x in nr], "tone_samples": n + 1,
+        "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }], upsert=True)
+
+
+def get_measurements(owner_hint: str | None):
+    """The user's stored body measurements (from the capture flow), or None. Used to keep render
+    proportions true wherever available."""
+    if not owner_hint:
+        return None
+    rows = _get(f"face_profiles?owner_hint=eq.{urllib.parse.quote(str(owner_hint))}"
+                f"&select=measurements&limit=1")
+    if rows and rows[0].get("measurements"):
+        return rows[0]["measurements"]
+    return None
+
+
+def set_measurements(owner_hint: str | None, measurements: dict) -> bool:
+    """Store the user's body measurements on their profile (consent-gated upstream)."""
+    if not owner_hint or not measurements:
+        return False
+    import datetime
+    return _post("face_profiles", [{
+        "owner_hint": str(owner_hint)[:64], "measurements": measurements,
+        "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }], upsert=True)
+
+
 def delete_face_profile(owner_hint: str | None) -> bool:
-    """Erase the user's face profile (the delete-anytime promise)."""
+    """Erase the user's entire profile — face, tone and measurements (the delete-anytime promise)."""
     if not owner_hint:
         return False
     return _delete(f"face_profiles?owner_hint=eq.{urllib.parse.quote(str(owner_hint))}")

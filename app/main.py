@@ -244,6 +244,24 @@ def my_fits_page():
         return f.read()
 
 
+@app.get("/me/face/status")
+def me_face_status(owner_hint: str = ""):
+    """Does this user have a remembered face/tone profile, and from how many selfies? (for the
+    consent/manage UI). Backend-only data; never a photo."""
+    from app import catalog as catalog_mod
+    st = catalog_mod.face_profile_status(owner_hint)
+    st["has_tone"] = bool(catalog_mod.get_tone_profile(owner_hint))
+    return st
+
+
+@app.post("/me/face/delete")
+def me_face_delete(payload: dict = Body(...)):
+    """Erase the user's remembered profile — face embedding, tone and measurements (delete anytime)."""
+    from app import catalog as catalog_mod
+    ok = catalog_mod.delete_face_profile(payload.get("owner_hint"))
+    return {"ok": bool(ok)}
+
+
 @app.get("/wardrobe/items")
 def wardrobe_items(owner_hint: str = ""):
     """A user's own wardrobe items (newest first)."""
@@ -288,7 +306,7 @@ async def wardrobe_add(owner_hint: str = Form(...), photo: UploadFile = File(...
 
 @app.post("/wardrobe/fit")
 async def wardrobe_fit(owner_hint: str = Form(...), person: UploadFile = File(...),
-                       occasion: str = Form("")):
+                       occasion: str = Form(""), face_learn: str = Form("")):
     """✨ Make me a fit: an LLM-stylist picks a cohesive outfit from the user's OWN wardrobe, then
     renders those real garments onto their photo in one pass (multi-garment Nano). The result is
     saved as a look so it flows into the same share → ask-your-people loop as every other fit."""
@@ -327,10 +345,12 @@ async def wardrobe_fit(owner_hint: str = Form(...), person: UploadFile = File(..
               "following images, worn together as one complete, well-styled outfit. Fit each garment "
               "naturally to the body and pose. Flattering, photorealistic, clean neutral background. "
               "No text or watermarks. " + _ID_LOCK)
-    prompt += await run_in_threadpool(_skin_tone_clause, person_bytes)
+    _learn = not _is_falsey(face_learn)
+    prompt += await run_in_threadpool(_skin_tone_clause, person_bytes, owner_hint, _learn)
     try:
         png, id_score, id_retried = await _render_with_identity_guard(
-            person_bytes, lambda p: banana_mod.generate_outfit(person_bytes, garbytes, p), prompt)
+            person_bytes, lambda p: banana_mod.generate_outfit(person_bytes, garbytes, p), prompt,
+            owner_hint=owner_hint, learn=_learn)
     except Exception as e:
         raise HTTPException(502, f"render failed: {e}")
     body, ct, ext = _to_jpeg(png)
@@ -348,7 +368,7 @@ async def wardrobe_fit(owner_hint: str = Form(...), person: UploadFile = File(..
 
 @app.post("/wardrobe/tryon")
 async def wardrobe_tryon(owner_hint: str = Form(...), item_id: str = Form(...),
-                         person: UploadFile = File(...)):
+                         person: UploadFile = File(...), face_learn: str = Form("")):
     """See ONE of your own saved garments on you (single-garment render). Mirrors /closet/tryon's
     Nano path but sources the garment from the user's wardrobe, and saves the result as a look so it
     drops into the same looks-tray → ask-your-people loop as every other fit."""
@@ -367,10 +387,12 @@ async def wardrobe_tryon(owner_hint: str = Form(...), item_id: str = Form(...),
     garment_bytes = catalog_mod.fetch_bytes(item.get("image_url"))
     if not garment_bytes:
         raise HTTPException(502, "couldn't load that garment")
-    prompt = _banana_prompt(item, "studio") + await run_in_threadpool(_skin_tone_clause, person_bytes)
+    _learn = not _is_falsey(face_learn)
+    prompt = _banana_prompt(item, "studio") + await run_in_threadpool(_skin_tone_clause, person_bytes, owner_hint, _learn)
     try:
         png, id_score, id_retried = await _render_with_identity_guard(
-            person_bytes, lambda p: banana_mod.generate(person_bytes, garment_bytes, p), prompt)
+            person_bytes, lambda p: banana_mod.generate(person_bytes, garment_bytes, p), prompt,
+            owner_hint=owner_hint, learn=_learn)
     except Exception as e:
         raise HTTPException(502, f"render failed: {e}")
     body, ct, ext = _to_jpeg(png)
@@ -619,29 +641,75 @@ def _normalize_lighting(raw: bytes) -> bytes:
         return raw
 
 
-def _skin_tone_clause(person_bytes: bytes) -> str:
-    """Measure the person's skin tone (Monk scale + RGB) from their (lighting-normalised) photo and
-    return a prompt clause so the render reproduces their TRUE complexion on all skin, under neutral
-    daylight. Always returns a neutral-lighting instruction; adds the measured anchor when readable."""
+def _measure_clause(mm: dict) -> str:
+    """A short prompt phrase from stored body measurements, if any recognisable fields are present."""
+    try:
+        parts = []
+        for k in ("height_cm", "build", "body_type", "shape"):
+            v = mm.get(k)
+            if v:
+                parts.append(f"{k.replace('_', ' ')} {v}")
+        if not parts:
+            return ""
+        return (" Keep the person's body proportions true to them (" + ", ".join(parts[:3])
+                + "); do not slim, enlarge or reshape them.")
+    except Exception:
+        return ""
+
+
+def _skin_tone_clause(person_bytes: bytes, owner_hint: str | None = None, learn: bool = False) -> str:
+    """Build the skin-tone + lighting instruction. Measures the current (lighting-normalised) photo,
+    but UPHOLDS the user's trusted tone from earlier good-light selfies when they have a profile — so
+    a dark/odd selfie can't drag the complexion off. `learn` (consent) refreshes the profile tone
+    from a high-confidence reading. Always asserts true-tone-under-neutral-daylight."""
+    measured = None  # (monk, (r,g,b), good_light)
     try:
         import cv2
         import numpy as np
         from app import monk, skin_tone
         bgr = cv2.imdecode(np.frombuffer(person_bytes, np.uint8), cv2.IMREAD_COLOR)
-        if bgr is None:
-            return _NEUTRAL_LIGHT
-        res = skin_tone.extract_skin_samples(bgr)
-        if not res.get("ok"):
-            return _NEUTRAL_LIGHT
-        rec = monk.classify(res["samples"])
-        r, g, b = rec["rgb"]
-        monkv = rec.get("monk_continuous") or rec.get("value")
-        return (f" Keep the person's natural skin tone consistent on ALL skin, including any newly "
-                f"exposed areas (arms, legs, midriff): approximately Monk scale {monkv}, "
-                f"average RGB ({r},{g},{b}). Do not lighten, darken, or change their complexion."
-                + _NEUTRAL_LIGHT)
+        if bgr is not None:
+            res = skin_tone.extract_skin_samples(bgr)
+            if res.get("ok"):
+                rec = monk.classify(res["samples"])
+                r, g, b = rec["rgb"]
+                monkv = rec.get("monk_continuous") or rec.get("value")
+                measured = (monkv, (int(r), int(g), int(b)), not rec.get("needs_confirm"))
     except Exception:
-        return _NEUTRAL_LIGHT
+        measured = None
+
+    prof = None
+    if owner_hint:
+        try:
+            from app import catalog as _cat
+            # refresh the trusted baseline from a GOOD current reading (consent-gated), then read it
+            if learn and measured and measured[2] and measured[0] is not None:
+                _cat.update_tone_profile(owner_hint, measured[0], measured[1])
+            prof = _cat.get_tone_profile(owner_hint)
+        except Exception:
+            prof = None
+
+    tone = None
+    if prof:                                   # trusted baseline from earlier good selfies — uphold it
+        tone = (round(prof["monk"], 1), tuple(int(x) for x in prof["rgb"]))
+    elif measured:
+        tone = (measured[0], measured[1])
+
+    clause = ""
+    if tone:
+        monkv, (r, g, b) = tone
+        clause = (f" Keep the person's natural skin tone consistent on ALL skin, including any newly "
+                  f"exposed areas (arms, legs, midriff): approximately Monk scale {monkv}, "
+                  f"average RGB ({r},{g},{b}). Do not lighten, darken, or change their complexion.")
+    if owner_hint:
+        try:
+            from app import catalog as _cat
+            mm = _cat.get_measurements(owner_hint)
+            if mm:
+                clause += _measure_clause(mm)
+        except Exception:
+            pass
+    return clause + _NEUTRAL_LIGHT
 
 
 def _biggest_face_embedding(img_bytes: bytes):
@@ -1096,7 +1164,8 @@ def closet_trends():
 
 @app.post("/closet/trend")
 async def closet_trend(trend: str = Form(...), owner_hint: str = Form(...),
-                       person: UploadFile = File(...), gender: str = Form("auto")):
+                       person: UploadFile = File(...), gender: str = Form("auto"),
+                       face_learn: str = Form("")):
     """Render the user's own photo into an iconic style trend via Nano (no garment). Synchronous —
     returns the finished look directly, which the client can add to the ranking tray like any look.
     `gender` (woman|man|neutral|auto) keeps a man from being dressed in womenswear (guardrail)."""
@@ -1111,10 +1180,12 @@ async def closet_trend(trend: str = Form(...), owner_hint: str = Form(...),
     if not person_bytes:
         raise HTTPException(400, "missing person image")
     person_bytes = _normalize_lighting(person_bytes)   # auto-fix a dim/colour-cast selfie (faithful; a well-lit photo is untouched)
-    prompt = _trend_prompt(trend, gender) + await run_in_threadpool(_skin_tone_clause, person_bytes)
+    _learn = not _is_falsey(face_learn)
+    prompt = _trend_prompt(trend, gender) + await run_in_threadpool(_skin_tone_clause, person_bytes, owner_hint, _learn)
     try:
         png, id_score, id_retried = await _render_with_identity_guard(
-            person_bytes, lambda p: banana_mod.generate(person_bytes, None, p), prompt)
+            person_bytes, lambda p: banana_mod.generate(person_bytes, None, p), prompt,
+            owner_hint=owner_hint, learn=_learn)
     except Exception as e:
         raise HTTPException(502, f"render failed: {e}")
     body, ct, ext = _to_jpeg(png)
@@ -1130,7 +1201,8 @@ async def closet_trend(trend: str = Form(...), owner_hint: str = Form(...),
 
 @app.post("/closet/tryon")
 async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
-                       person: UploadFile = File(...), mode: str = Form("catvton")):
+                       person: UploadFile = File(...), mode: str = Form("catvton"),
+                       face_learn: str = Form("")):
     """Fire-and-poll try-on: SPAWN the render on Modal and return a job_id immediately (the request
     stays short — no Railway 5-min timeout). The client then polls /closet/tryon/result.
     mode: 'catvton' (faithful-garment 2D try-on) or 'vibe' (SDXL+InstantID aspirational 80s render)."""
@@ -1154,10 +1226,12 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
             raise HTTPException(503, "nano-banana backend not configured (set GEMINI_API_KEY)")
         style = "eighties" if mode == "banana80s" else "studio"
         garment_bytes = catalog_mod.fetch_bytes(g.get("image_url"))
-        prompt = _banana_prompt(g, style) + await run_in_threadpool(_skin_tone_clause, person_bytes)
+        _learn = not _is_falsey(face_learn)
+        prompt = _banana_prompt(g, style) + await run_in_threadpool(_skin_tone_clause, person_bytes, owner_hint, _learn)
         try:
             png, id_score, id_retried = await _render_with_identity_guard(
-                person_bytes, lambda p: banana_mod.generate(person_bytes, garment_bytes, p), prompt)
+                person_bytes, lambda p: banana_mod.generate(person_bytes, garment_bytes, p), prompt,
+                owner_hint=owner_hint, learn=_learn)
         except Exception as e:
             raise HTTPException(502, f"render failed: {e}")
         body, ct, ext = _to_jpeg(png)
@@ -1174,7 +1248,7 @@ async def closet_tryon(garment_id: str = Form(...), owner_hint: str = Form(...),
         if not render_client.vibe_configured():
             raise HTTPException(503, "vibe render backend not live yet")
         prompt, negative = _vibe_prompt(g)
-        prompt += await run_in_threadpool(_skin_tone_clause, person_bytes)
+        prompt += await run_in_threadpool(_skin_tone_clause, person_bytes, owner_hint, not _is_falsey(face_learn))
         try:
             call_id = await run_in_threadpool(render_client.vibe_spawn, person_bytes, prompt, negative)
         except Exception as e:
