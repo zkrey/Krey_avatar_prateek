@@ -63,11 +63,13 @@
   .coach span{flex:1}
   .coach b{color:var(--gold)}
   .coach .cx{background:none;border:0;color:var(--muted);font-size:1.15rem;cursor:pointer;line-height:1;padding:0 .2rem}
+  .reslink{display:inline-block;background:var(--gold);color:#1a1400;font-weight:700;border-radius:999px;padding:.4rem .9rem;font-size:.85rem;text-decoration:none;margin:0 0 1rem}
 </style>
 </head>
 <body>
   <h1>Your wardrobe 👗</h1>
   <div class="sub">Snap your clothes — we clean them up and catalogue them. Tap any piece to <b>see it on you</b>, or let the stylist build a full fit. <a href="/closet">← back to closet</a></div>
+  <a href="#" id="resultslink" class="reslink" hidden>📊 See what your people picked</a>
 
   <div class="addrow">
     <button class="btn primary" id="add">＋ Add a garment</button>
@@ -222,6 +224,20 @@ function makeFit(){
 }
 $("makefit").onclick=makeFit;
 
+// ---- persistent ballot store (shared with the closet) so the owner never loses their results ----
+function getBallots(){ try{ return JSON.parse(localStorage.getItem("krey_ballots")||"[]"); }catch(e){ return []; } }
+function saveBallot(b){
+  try{ const arr=getBallots().filter(x=>x.set_id!==b.set_id);
+    arr.unshift(Object.assign({ts:Date.now()}, b));
+    localStorage.setItem("krey_ballots", JSON.stringify(arr.slice(0,20))); }catch(e){}
+}
+function updateResultsLink(){
+  const link=$("resultslink"); if(!link) return;
+  const arr=getBallots();
+  if(arr.length && arr[0].results_url){ link.href=arr[0].results_url; link.hidden=false; }
+  else link.hidden=true;
+}
+
 // ---- guided coach: keep handholding past the render, all the way to "sent to friends" ----
 let BALLOTED=false;
 function coachOff(){ try{ return localStorage.getItem("krey_cycle_done")==="1" || localStorage.getItem("krey_coach_x")==="1"; }catch(e){ return false; } }
@@ -265,6 +281,10 @@ async function makeBallot(){
     if(!j.rank_url){ $("traymsg").textContent=(j.detail||"couldn't set it up — try again"); $("rankbtn").disabled=false; return; }
     const url=location.origin+j.rank_url, results=location.origin+"/results/"+encodeURIComponent(j.set_id||""), SET=j.set_id;
     try{ localStorage.setItem("krey_last_results", results); }catch(e){}
+    // persist so the owner can always come back to the results (same store as the closet)
+    saveBallot({set_id:j.set_id, rank_url:url, results_url:results, count:LOOKS.length,
+                thumbs:LOOKS.map(l=>l.image_url).filter(Boolean).slice(0,3)});
+    updateResultsLink();
     // self-first: a gut-check tap (phase=pre), THEN a quiet send to a close circle (no auto-broadcast)
     const scale=[["Not sure 😐",2],["Maybe 🙂",5],["Pretty sure 😎",8],["Love them 🔥",10]];
     $("traymsg").innerHTML=
@@ -323,6 +343,7 @@ async function addGarment(file){
 
 $("add").onclick=()=>pickPhoto(addGarment,false);
 $("snap").onclick=()=>pickPhoto(addGarment,true);
+updateResultsLink();   // surface "see what your people picked" on return, if a ballot exists
 load();
 </script>
 </body>

@@ -91,6 +91,7 @@
   .coach span{flex:1}
   .coach b{color:var(--gold)}
   .coach .cx{background:none;border:0;color:var(--muted);font-size:1.15rem;cursor:pointer;line-height:1;padding:0 .2rem}
+  .reslink{display:inline-block;background:var(--gold);color:#1a1400;font-weight:700;border-radius:999px;padding:.4rem .9rem;font-size:.85rem;text-decoration:none;margin:0 0 1rem}
 </style>
 </head>
 <body>
@@ -109,6 +110,7 @@
 
   <h1>Your closet ✨</h1>
   <div class="sub" id="sub">Welcome in 💛 Add a photo and watch any look come alive on you. <span id="src" class="src">…</span> · <a href="#" id="howitworks" style="color:var(--gold)">how it works</a></div>
+  <a href="#" id="resultslink" class="reslink" hidden>📊 See what your people picked</a>
   <a href="/wardrobe" class="wardcard">
     <div class="wc_ico">👗</div>
     <div class="wc_txt"><b>Build your wardrobe</b><span>Snap your own clothes → see them on you → style full fits</span></div>
@@ -547,7 +549,14 @@ function saveBallot(b){
     localStorage.setItem("krey_ballots", JSON.stringify(arr.slice(0,20)));
   }catch(e){}
 }
+function updateResultsLink(){
+  const link=$("resultslink"); if(!link) return;
+  const arr=getBallots();
+  if(arr.length && arr[0].results_url){ link.href=arr[0].results_url; link.hidden=false; }
+  else link.hidden=true;
+}
 function renderMyBallots(){
+  updateResultsLink();   // keep the prominent "see what your people picked" button in sync
   const box=$("myballots"); if(!box) return;
   const arr=getBallots();
   if(!arr.length){ box.hidden=true; return; }
