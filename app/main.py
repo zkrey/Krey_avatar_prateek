@@ -2142,9 +2142,18 @@ def fit_quick_ep(payload: dict = Body(...)):
     cloth = (payload.get("cloth_type") or "upper").strip().lower()
     body_cm = _estimate_body_cm(h, w, sex)
     gender = "mens" if male else "womens"
-    kind = "bottom" if cloth == "lower" else "top"
+    gk = (payload.get("garment_kind") or "").lower()
+    if any(x in gk for x in ("kurta", "kurti", "sherwani", "ethnic")):
+        candidates = ["unisex_kurta_regular", f"{gender}_top_regular"]
+    elif any(x in gk for x in ("dress", "gown", "frock", "anarkali")):
+        candidates = ["womens_dress_regular", f"{gender}_top_regular"]
+    elif cloth == "lower":
+        candidates = [f"{gender}_bottom_regular", "womens_bottom_regular"]
+    else:
+        candidates = [f"{gender}_top_regular"]
+    candidates += [f"{gender}_top_regular", "mens_top_regular"]
     garment = None
-    for name in (f"{gender}_{kind}_regular", f"{gender}_top_regular", "mens_top_regular"):
+    for name in candidates:
         try:
             garment = fit_score.garment_from_chart(name); chart_name = name; break
         except Exception:

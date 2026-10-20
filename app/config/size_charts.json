@@ -29,6 +29,36 @@
         "L":  {"waist": 84, "hip": 108},
         "XL": {"waist": 90, "hip": 114}
       }
+    },
+    "mens_bottom_regular": {
+      "cut": "regular", "fabric_stretch": "none",
+      "size_chart": {
+        "S":  {"waist": 82, "hip": 100},
+        "M":  {"waist": 88, "hip": 106},
+        "L":  {"waist": 94, "hip": 112},
+        "XL": {"waist": 100, "hip": 118}
+      }
+    },
+    "womens_dress_regular": {
+      "cut": "regular", "fabric_stretch": "low",
+      "size_chart": {
+        "XS": {"chest": 86, "hip": 92},
+        "S":  {"chest": 92, "hip": 98},
+        "M":  {"chest": 98, "hip": 104},
+        "L":  {"chest": 104, "hip": 110},
+        "XL": {"chest": 110, "hip": 116}
+      }
+    },
+    "unisex_kurta_regular": {
+      "_note": "Ethnic kurta — keyed on CHEST only; the straight cut is intentionally loose at the waist, so waist is left out to avoid a false 'size down'. Relaxed cut.",
+      "cut": "relaxed", "fabric_stretch": "low",
+      "size_chart": {
+        "S":   {"chest": 103},
+        "M":   {"chest": 109},
+        "L":   {"chest": 115},
+        "XL":  {"chest": 121},
+        "2XL": {"chest": 127}
+      }
     }
   }
 }
