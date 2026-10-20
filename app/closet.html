@@ -189,6 +189,9 @@
     <div class="filters" id="bgchips"></div>
     <div id="bgtip" class="bgtip" hidden></div>
 
+    <div class="flabel">Pose 🧍 <span class="muted" style="font-weight:400;font-size:.8rem">— strike a pose, or keep your own</span></div>
+    <div class="filters" id="posechips"></div>
+
     <div id="grid" class="grid"></div>
     <div id="empty" class="empty" hidden>No garments for this photo yet.</div>
   </div>
@@ -230,9 +233,17 @@ function showBgTip(){
   const el=$("bgtip"); if(!el) return;
   let seen=false; try{ seen=localStorage.getItem("krey_bg_tip")==="1"; }catch(e){}
   if(seen){ el.hidden=true; return; }
-  el.innerHTML=`✨ <b>New:</b> set a scene for your fit — try <b>🪔 Festive</b> for a kurta or <b>🏖️ Beach</b> for summer. Or tap <b>✨ Surprise me</b> and Krey matches the backdrop to your outfit. <button class="bgtip_x" id="bgtip_x">got it</button>`;
+  el.innerHTML=`✨ <b>New:</b> set a <b>scene</b> and a <b>pose</b> for your fit — try <b>🪔 Festive</b> for a kurta, or tap <b>✨ Surprise me</b> and Krey matches it to your outfit. <button class="bgtip_x" id="bgtip_x">got it</button>`;
   $("bgtip_x").onclick=()=>{ try{ localStorage.setItem("krey_bg_tip","1"); }catch(e){} el.hidden=true; };
   el.hidden=false;
+}
+// poses: optional pose for the render (default 'natural' keeps your own pose)
+const POSES=[["natural","🧍","Natural"],["surprise","✨","Surprise me"],["candid","😌","Candid"],["confident","💪","Confident"],["pockets","🧥","Pockets"],["overshoulder","🔄","Over the shoulder"],["walking","🚶","Walking"],["seated","🪑","Seated"],["twirl","💃","Twirl"]];
+let POSE="natural";
+function renderPoseChips(){
+  const box=$("posechips"); if(!box) return;
+  box.innerHTML=POSES.map(([k,e,l])=>`<button class="chip${k===POSE?' on':''}" data-pose="${k}">${e} ${l}</button>`).join("");
+  box.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ POSE=c.dataset.pose; box.querySelectorAll(".chip").forEach(x=>x.classList.remove("on")); c.classList.add("on"); });
 }
 let T="", S="", RENDER_LIVE=false, VIBE_LIVE=false, BANANA_LIVE=false, MODE="catvton", MODE_PICKED=false, ALL=[], ALLOWED=[], PHOTO=null, LOOKS=[];
 const MODE_HINT={
@@ -292,7 +303,7 @@ async function analyze(file){
   if(locked.length){ $("unlock").hidden=false; $("unlockmsg").innerHTML = "Locked: "+locked.map(t=>TYPELABEL[t]).join(" · ")+" — add a full-body photo to unlock."; }
   else { $("unlock").hidden=true; }
   buildTypeChips();
-  $("gate").hidden=true; $("shop").hidden=false; renderFaceConsent(); renderBgChips();
+  $("gate").hidden=true; $("shop").hidden=false; renderFaceConsent(); renderBgChips(); renderPoseChips();
   load();
 }
 function buildTypeChips(){
@@ -406,7 +417,7 @@ async function onTry(g){
   if(!live){ alert("This render style isn't switched on yet."); return; }
   if(!PHOTO){ alert("Add your photo first."); return; }
   showRender("loading",g);
-  const fd=new FormData(); fd.append("garment_id",g.garment_id); fd.append("owner_hint",sid()); fd.append("person",PHOTO); fd.append("mode",MODE); fd.append("face_learn",faceLearn()); fd.append("background",BG);
+  const fd=new FormData(); fd.append("garment_id",g.garment_id); fd.append("owner_hint",sid()); fd.append("person",PHOTO); fd.append("mode",MODE); fd.append("face_learn",faceLearn()); fd.append("background",BG); fd.append("pose",POSE);
   let job;
   try{
     const r=await fetch("/closet/tryon",{method:"POST",body:fd});
