@@ -68,6 +68,9 @@
   .fconsent span:first-child{flex:1;min-width:180px}
   .fconsent .fc_btns{display:flex;gap:.4rem}
   .fconsent .btn{padding:.4rem .8rem}
+  .bgtip{background:rgba(217,178,90,.08);border:1px solid var(--gold-dim);border-radius:10px;padding:.5rem .7rem;margin:.1rem 0 .3rem;font-size:.8rem;color:var(--muted);line-height:1.4}
+  .bgtip b{color:var(--text)}
+  .bgtip_x{margin-left:.4rem;background:var(--gold);color:#1a1400;border:0;border-radius:999px;padding:.15rem .6rem;font-size:.75rem;font-weight:700;cursor:pointer}
 </style>
 </head>
 <body>
@@ -102,6 +105,7 @@
   <div id="bgwrap" style="margin:0 0 1rem" hidden>
     <div style="font-size:.85rem;color:var(--muted);margin-bottom:.4rem">Backdrop ✨ — set the scene for your fit</div>
     <div class="occ" id="bgchips"></div>
+    <div id="bgtip" class="bgtip" hidden></div>
   </div>
 
   <div id="grid" class="grid"></div>
@@ -160,12 +164,21 @@ function renderFaceConsent(){
 }
 
 // backdrops: set the scene for a wardrobe render (a festive kurta, a beach fit, etc.)
-const BGS=[["plain","⬜","Clean"],["festive","🪔","Festive"],["studio","🎞️","Studio"],["wedding","💍","Wedding"],["garden","🌿","Garden"],["city","🏙️","City"],["cafe","☕","Café"],["beach","🏖️","Beach"],["rooftop","🌆","Rooftop"]];
+const BGS=[["plain","⬜","Clean"],["surprise","✨","Surprise me"],["festive","🪔","Festive"],["studio","🎞️","Studio"],["wedding","💍","Wedding"],["garden","🌿","Garden"],["city","🏙️","City"],["cafe","☕","Café"],["beach","🏖️","Beach"],["rooftop","🌆","Rooftop"]];
 let BG="plain";
 function renderBgChips(){
   const box=$("bgchips"); if(!box) return;
   box.innerHTML=BGS.map(([k,e,l])=>`<button class="chip${k===BG?' on':''}" data-bg="${k}">${e} ${l}</button>`).join("");
   box.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ BG=c.dataset.bg; box.querySelectorAll(".chip").forEach(x=>x.classList.remove("on")); c.classList.add("on"); });
+  showBgTip();
+}
+function showBgTip(){
+  const el=$("bgtip"); if(!el) return;
+  let seen=false; try{ seen=localStorage.getItem("krey_bg_tip")==="1"; }catch(e){}
+  if(seen){ el.hidden=true; return; }
+  el.innerHTML=`✨ <b>New:</b> set a scene for your fit — try <b>🪔 Festive</b> for a kurta or <b>🏖️ Beach</b> for summer. Or tap <b>✨ Surprise me</b> and Krey matches the backdrop to your outfit. <button class="bgtip_x" id="bgtip_x">got it</button>`;
+  $("bgtip_x").onclick=()=>{ try{ localStorage.setItem("krey_bg_tip","1"); }catch(e){} el.hidden=true; };
+  el.hidden=false;
 }
 
 // ---- selfie (asked once, reused for every render this session) ------------

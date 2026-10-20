@@ -927,8 +927,15 @@ _BACKGROUNDS: dict[str, tuple] = {
 
 
 def _bg_clause(bg: str) -> str:
-    """Prompt clause to place the person in a chosen backdrop (empty for 'plain'/unknown)."""
-    scene = (_BACKGROUNDS.get((bg or "").strip().lower()) or (None, None, ""))[2]
+    """Prompt clause to place the person in a chosen backdrop. 'surprise' lets the model pick a
+    backdrop that suits the outfit; 'plain'/unknown = no change."""
+    bg = (bg or "").strip().lower()
+    if bg == "surprise":
+        return (" Set the scene: choose a tasteful, flattering backdrop that best SUITS this outfit "
+                "and its occasion (e.g. a festive setting for ethnic wear, a beach for summer looks, "
+                "a smart city street for formalwear), as a real on-location photo. Keep the person, "
+                "their face and the garment exactly the same — only the background changes.")
+    scene = (_BACKGROUNDS.get(bg) or (None, None, ""))[2]
     if not scene:
         return ""
     return (f" Set the scene: place the person against {scene}, as a real photo naturally taken "
