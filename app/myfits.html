@@ -52,23 +52,30 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function sid(){ try{ let s=localStorage.getItem("krey_sid"); if(!s){ s=Math.random().toString(36).slice(2)+Date.now().toString(36); localStorage.setItem("krey_sid",s);} return s;}catch(e){return "anon";} }
 
-// "Krey remembers you" — show what's stored + a one-tap delete (the delete-anytime promise)
+// "What Krey remembers" — face, true tone, measurements + a one-tap delete (the delete-anytime promise)
+function localBody(){ try{ return JSON.parse(localStorage.getItem("krey_body")||"null"); }catch(e){ return null; } }
 async function renderFaceMgr(){
   const el=$("facemgr"); if(!el) return;
   let st={};
-  try{ const r=await fetch("/me/face/status?owner_hint="+encodeURIComponent(sid())); st=await r.json(); }catch(e){ return; }
+  try{ const r=await fetch("/me/face/status?owner_hint="+encodeURIComponent(sid())); st=await r.json(); }catch(e){ st={}; }
   const on=(()=>{ try{ return localStorage.getItem("krey_face_consent")==="1"; }catch(e){ return false; } })();
-  if(!st.has_profile && !st.has_tone && !on){ el.hidden=true; return; }
-  const bits=[]; if(st.samples) bits.push(st.samples+" selfie"+(st.samples>1?"s":"")); if(st.has_tone) bits.push("your true tone");
-  el.innerHTML=`🔒 <b>Krey remembers you</b>${bits.length?" — "+esc(bits.join(" · ")):""}. This only improves your own looks.
-    <div style="margin-top:.6rem;display:flex;gap:.5rem;flex-wrap:wrap">
-      <button class="btn" id="fm_del">Delete my face data</button>
+  const body=localBody();
+  if(!st.has_profile && !st.has_tone && !st.has_measurements && !body && !on){ el.hidden=true; return; }
+  const row=(ok,label,detail)=>`<div style="display:flex;gap:.5rem;align-items:baseline;margin:.15rem 0"><span style="color:${ok?'var(--gold)':'var(--muted)'}">${ok?'✓':'○'}</span><span><b>${esc(label)}</b>${detail?` <span style="color:var(--muted)">— ${esc(detail)}</span>`:''}</span></div>`;
+  const sizeDetail = body && body.height && body.weight ? `${body.height}cm · ${body.weight}kg` : (st.has_measurements?"saved":"");
+  el.innerHTML=`<div style="font-weight:700;color:var(--text);margin-bottom:.4rem">🔒 What Krey remembers about you</div>
+    ${row(st.has_profile, "Your face", st.samples?`${st.samples} selfie${st.samples>1?'s':''}`:'')}
+    ${row(st.has_tone, "Your true skin tone", '')}
+    ${row(st.has_measurements||!!body, "Your measurements", sizeDetail)}
+    <div style="margin:.5rem 0 0">Only ever used to make <b>your own</b> looks and sizes more like you.</div>
+    <div style="margin-top:.7rem;display:flex;gap:.5rem;flex-wrap:wrap">
+      <button class="btn" id="fm_del">Delete everything</button>
     </div>`;
   $("fm_del").onclick=async()=>{
     $("fm_del").textContent="Deleting…";
     try{ await fetch("/me/face/delete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({owner_hint:sid()})}); }catch(e){}
-    try{ localStorage.setItem("krey_face_consent","0"); }catch(e){}
-    el.innerHTML='🔒 Deleted — Krey no longer remembers your face or tone.';
+    try{ localStorage.removeItem("krey_body"); localStorage.setItem("krey_face_consent","0"); }catch(e){}
+    el.innerHTML='🔒 Deleted — Krey no longer remembers your face, tone or measurements.';
   };
   el.hidden=false;
 }

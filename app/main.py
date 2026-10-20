@@ -246,11 +246,12 @@ def my_fits_page():
 
 @app.get("/me/face/status")
 def me_face_status(owner_hint: str = ""):
-    """Does this user have a remembered face/tone profile, and from how many selfies? (for the
-    consent/manage UI). Backend-only data; never a photo."""
+    """What Krey remembers for this user: face (how many selfies), true tone, measurements — as
+    booleans/counts only (no photo, and no height/weight exposed through this read)."""
     from app import catalog as catalog_mod
     st = catalog_mod.face_profile_status(owner_hint)
     st["has_tone"] = bool(catalog_mod.get_tone_profile(owner_hint))
+    st["has_measurements"] = bool(catalog_mod.get_measurements(owner_hint))
     return st
 
 
