@@ -2090,6 +2090,91 @@ def style_profile_ep(payload: dict = Body(...)):
     return {"style_profile": prof}
 
 
+def _estimate_body_cm(height_cm: float, weight_kg: float, sex: str) -> dict:
+    """Rough chest/waist/hip girths (cm) from height + weight + sex — an ESTIMATE for a size
+    suggestion (girth tracks weight strongly, modulated by height). Clamped to sane ranges. The
+    brand's own chart / a full-body capture refines it later."""
+    h, w = float(height_cm), float(weight_kg)
+    male = str(sex).strip().lower() in ("m", "man", "men", "male")
+    if male:
+        rh, rw, c0, wa0, hp0 = 170, 70, 98, 86, 98
+        kc, kw, kp, dhc, dhw, dhp = 0.55, 0.70, 0.55, 0.25, 0.20, 0.15
+    else:
+        rh, rw, c0, wa0, hp0 = 162, 60, 90, 74, 96
+        kc, kw, kp, dhc, dhw, dhp = 0.55, 0.75, 0.60, 0.22, 0.18, 0.15
+    clamp = lambda x, lo, hi: round(max(lo, min(hi, x)), 1)
+    return {"chest": clamp(c0 + kc * (w - rw) - dhc * (h - rh), 70, 150),
+            "waist": clamp(wa0 + kw * (w - rw) - dhw * (h - rh), 56, 140),
+            "hip":   clamp(hp0 + kp * (w - rw) - dhp * (h - rh), 76, 150)}
+
+
+def _size_message(size, verdict, order) -> str:
+    """Warm, honest size line (doctrine: never names an insecurity)."""
+    if not size:
+        return "Couldn't size this one — check the brand's chart."
+    i = order.index(size) if size in order else None
+    up = order[i + 1] if (i is not None and i + 1 < len(order)) else None
+    dn = order[i - 1] if (i is not None and i > 0) else None
+    if verdict == "fits":
+        return f"You're likely a {size} — should fit you well 💛"
+    if verdict == "snug":
+        return f"A {size} will fit snug" + (f" — size up to {up} if you like room." if up else ".")
+    if verdict == "size_up" and up:
+        return f"Go for a {up} — a {size} would run tight."
+    if verdict == "size_down" and dn:
+        return f"A {dn} should sit cleaner — a {size} may be loose."
+    return f"You're likely a {size}."
+
+
+@app.post("/fit/quick")
+def fit_quick_ep(payload: dict = Body(...)):
+    """Lazy size recommendation: height + weight + sex (+ fit preference) -> estimated girths ->
+    best size from a generic chart for the garment type. Remembers measurements on the profile (with
+    consent) so it's instant next time. GPU-free, no biometric ingestion."""
+    from app import fit_score
+    try:
+        h, w = float(payload.get("height_cm")), float(payload.get("weight_kg"))
+    except Exception:
+        raise HTTPException(400, "need height_cm and weight_kg")
+    sex = (payload.get("sex") or "").strip().lower()
+    male = sex in ("m", "man", "men", "male")
+    fit_pref = (payload.get("fit_preference") or "true").strip().lower()
+    cloth = (payload.get("cloth_type") or "upper").strip().lower()
+    body_cm = _estimate_body_cm(h, w, sex)
+    gender = "mens" if male else "womens"
+    kind = "bottom" if cloth == "lower" else "top"
+    garment = None
+    for name in (f"{gender}_{kind}_regular", f"{gender}_top_regular", "mens_top_regular"):
+        try:
+            garment = fit_score.garment_from_chart(name); chart_name = name; break
+        except Exception:
+            continue
+    if garment is None:
+        raise HTTPException(503, "no size chart available")
+    out = fit_score.recommend_size(body_cm, garment, fit_preference=fit_pref)
+    order = list(garment["size_chart"].keys())
+    size = out.get("best_size")
+    # the size to actually buy (shift for an up/down verdict)
+    buy = size
+    if size in order:
+        i = order.index(size)
+        if out.get("verdict") == "size_up" and i + 1 < len(order):
+            buy = order[i + 1]
+        elif out.get("verdict") == "size_down" and i > 0:
+            buy = order[i - 1]
+    if payload.get("owner_hint") and not _is_falsey(payload.get("face_learn")):
+        try:
+            from app import catalog as _cat
+            _cat.set_measurements(payload["owner_hint"], {
+                "height_cm": h, "weight_kg": w, "sex": "m" if male else "f",
+                "fit_preference": fit_pref, **body_cm})
+        except Exception:
+            pass
+    return {"size": buy, "closest": size, "verdict": out.get("verdict"),
+            "message": _size_message(size, out.get("verdict"), order),
+            "regions": out.get("regions"), "chart": chart_name, "estimate": True}
+
+
 @app.post("/fit/recommend")
 def fit_recommend_ep(payload: dict = Body(...)):
     """

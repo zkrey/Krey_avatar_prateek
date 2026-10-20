@@ -237,8 +237,11 @@ function showLook(f){
            <button class="btn" id="sh">↗ Share this look 💛</button>`}
     </div>
     ${ready?`<div class="why" style="text-align:center;margin:.6rem 0 0">Added to your looks below — one more or ask your circle 💛</div>`:""}
+    <button class="btn" id="sz_btn" style="width:100%;margin-top:.6rem">📏 What's my size?</button>
+    <div id="sizebox" style="margin-top:.5rem"></div>
     <div style="text-align:center;margin-top:.6rem"><a href="#" id="cl">close</a></div>`;
   $("cl").onclick=e=>{e.preventDefault();closeOv();};
+  if($("sz_btn")) $("sz_btn").onclick=()=>sizeFlow("upper","sizebox");
   function sendRF(ans){ try{ fetch("/render/feedback",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({look_id:f.look_id, owner_hint:sid(), looks_like:ans, identity_score:f.identity_score, route:"wardrobe"})}); }catch(e){} }
   if($("rf_yes")) $("rf_yes").onclick=()=>{ sendRF(true); $("isyou").innerHTML='<span style="color:var(--muted)">Love it 💛 thanks!</span>'; };
@@ -282,6 +285,38 @@ function makeFit(){
   });
 }
 $("makefit").onclick=makeFit;
+
+// --- "What's my size?" — ask height+weight once, remember it, then it's instant (lazy) ---
+function getBody(){ try{ return JSON.parse(localStorage.getItem("krey_body")||"null"); }catch(e){ return null; } }
+async function postSize(cloth, b){
+  const r=await fetch("/fit/quick",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({height_cm:b.height,weight_kg:b.weight,sex:b.sex,fit_preference:b.fit||"true",cloth_type:cloth,owner_hint:sid(),face_learn:faceLearn()})});
+  return r.json();
+}
+async function sizeFlow(cloth, boxId){
+  const box=$(boxId); if(!box) return;
+  const b=getBody();
+  if(b && b.height && b.weight){
+    box.innerHTML='<div style="color:var(--muted);font-size:.85rem">Sizing you up…</div>';
+    try{ const d=await postSize(cloth,b);
+      box.innerHTML=`<div style="border:1px solid var(--gold-dim);border-radius:10px;padding:.6rem;font-size:.9rem;text-align:left"><b style="color:var(--gold)">📏 Your size: ${esc(d.size||'?')}</b> — ${esc(d.message||'')}<div style="color:var(--muted);font-size:.72rem;margin-top:.3rem">estimate from your height & weight · check the brand's chart · <a href="#" id="sz_edit">change</a></div></div>`;
+      const e=$("sz_edit"); if(e) e.onclick=ev=>{ ev.preventDefault(); try{ localStorage.removeItem("krey_body"); }catch(x){} sizeFlow(cloth,boxId); };
+    }catch(e){ box.innerHTML='<div style="color:var(--muted);font-size:.85rem">Couldn\'t size that — try again.</div>'; }
+    return;
+  }
+  const inp="flex:1;min-width:0;padding:.5rem;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--text)";
+  box.innerHTML=`<div style="border:1px solid var(--line);border-radius:10px;padding:.6rem;text-align:left">
+    <div style="font-size:.85rem;margin-bottom:.4rem">Tell me once and I'll remember 💛</div>
+    <div style="display:flex;gap:.4rem;margin-bottom:.4rem"><input id="sz_h" type="number" inputmode="numeric" placeholder="Height cm" style="${inp}"><input id="sz_w" type="number" inputmode="numeric" placeholder="Weight kg" style="${inp}"></div>
+    <div style="display:flex;gap:.4rem;margin-bottom:.5rem"><button class="chip on" id="sz_f">Women</button><button class="chip" id="sz_m">Men</button></div>
+    <button class="btn primary" id="sz_go" style="width:100%">Get my size</button></div>`;
+  let SX="f";
+  $("sz_f").onclick=()=>{ SX="f"; $("sz_f").classList.add("on"); $("sz_m").classList.remove("on"); };
+  $("sz_m").onclick=()=>{ SX="m"; $("sz_m").classList.add("on"); $("sz_f").classList.remove("on"); };
+  $("sz_go").onclick=()=>{ const h=+$("sz_h").value, w=+$("sz_w").value; if(!h||!w) return;
+    try{ localStorage.setItem("krey_body", JSON.stringify({height:h,weight:w,sex:SX,fit:"true"})); }catch(e){}
+    sizeFlow(cloth,boxId); };
+}
 
 // ---- persistent ballot store (shared with the closet) so the owner never loses their results ----
 function getBallots(){
