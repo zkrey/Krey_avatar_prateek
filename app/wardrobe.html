@@ -241,7 +241,7 @@ function showLook(f){
     <div id="sizebox" style="margin-top:.5rem"></div>
     <div style="text-align:center;margin-top:.6rem"><a href="#" id="cl">close</a></div>`;
   $("cl").onclick=e=>{e.preventDefault();closeOv();};
-  if($("sz_btn")) $("sz_btn").onclick=()=>sizeFlow("upper",(f&&f.name)||"","sizebox");
+  if($("sz_btn")) $("sz_btn").onclick=()=>sizeFlow("upper",(f&&f.name)||"",(f&&f.size_chart)||null,"sizebox");
   function sendRF(ans){ try{ fetch("/render/feedback",{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({look_id:f.look_id, owner_hint:sid(), looks_like:ans, identity_score:f.identity_score, route:"wardrobe"})}); }catch(e){} }
   if($("rf_yes")) $("rf_yes").onclick=()=>{ sendRF(true); $("isyou").innerHTML='<span style="color:var(--muted)">Love it 💛 thanks!</span>'; };
@@ -288,19 +288,21 @@ $("makefit").onclick=makeFit;
 
 // --- "What's my size?" — ask height+weight once, remember it, then it's instant (lazy) ---
 function getBody(){ try{ return JSON.parse(localStorage.getItem("krey_body")||"null"); }catch(e){ return null; } }
-async function postSize(cloth, kind, b){
-  const r=await fetch("/fit/quick",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({height_cm:b.height,weight_kg:b.weight,sex:b.sex,fit_preference:b.fit||"true",cloth_type:cloth,garment_kind:kind||"",owner_hint:sid(),face_learn:faceLearn()})});
+async function postSize(cloth, kind, chart, b){
+  const body={height_cm:b.height,weight_kg:b.weight,sex:b.sex,fit_preference:b.fit||"true",cloth_type:cloth,garment_kind:kind||"",owner_hint:sid(),face_learn:faceLearn()};
+  if(chart) body.size_chart=chart;
+  const r=await fetch("/fit/quick",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   return r.json();
 }
-async function sizeFlow(cloth, kind, boxId){
+async function sizeFlow(cloth, kind, chart, boxId){
   const box=$(boxId); if(!box) return;
   const b=getBody();
   if(b && b.height && b.weight){
     box.innerHTML='<div style="color:var(--muted);font-size:.85rem">Sizing you up…</div>';
-    try{ const d=await postSize(cloth,kind,b);
-      box.innerHTML=`<div style="border:1px solid var(--gold-dim);border-radius:10px;padding:.6rem;font-size:.9rem;text-align:left"><b style="color:var(--gold)">📏 Your size: ${esc(d.size||'?')}</b> — ${esc(d.message||'')}<div style="color:var(--muted);font-size:.72rem;margin-top:.3rem">estimate from your height & weight · check the brand's chart · <a href="#" id="sz_edit">change</a></div></div>`;
-      const e=$("sz_edit"); if(e) e.onclick=ev=>{ ev.preventDefault(); try{ localStorage.removeItem("krey_body"); }catch(x){} sizeFlow(cloth,kind,boxId); };
+    try{ const d=await postSize(cloth,kind,chart,b);
+      const note=d.source==="brand"?('matched to '+esc(d.chart||'the brand chart')+' ✓'):"estimate from your height & weight · check the brand's chart";
+      box.innerHTML=`<div style="border:1px solid var(--gold-dim);border-radius:10px;padding:.6rem;font-size:.9rem;text-align:left"><b style="color:var(--gold)">📏 Your size: ${esc(d.size||'?')}</b> — ${esc(d.message||'')}<div style="color:var(--muted);font-size:.72rem;margin-top:.3rem">${note} · <a href="#" id="sz_edit">change</a></div></div>`;
+      const e=$("sz_edit"); if(e) e.onclick=ev=>{ ev.preventDefault(); try{ localStorage.removeItem("krey_body"); }catch(x){} sizeFlow(cloth,kind,chart,boxId); };
     }catch(e){ box.innerHTML='<div style="color:var(--muted);font-size:.85rem">Couldn\'t size that — try again.</div>'; }
     return;
   }
@@ -315,7 +317,7 @@ async function sizeFlow(cloth, kind, boxId){
   $("sz_m").onclick=()=>{ SX="m"; $("sz_m").classList.add("on"); $("sz_f").classList.remove("on"); };
   $("sz_go").onclick=()=>{ const h=+$("sz_h").value, w=+$("sz_w").value; if(!h||!w) return;
     try{ localStorage.setItem("krey_body", JSON.stringify({height:h,weight:w,sex:SX,fit:"true"})); }catch(e){}
-    sizeFlow(cloth,kind,boxId); };
+    sizeFlow(cloth,kind,chart,boxId); };
 }
 
 // ---- persistent ballot store (shared with the closet) so the owner never loses their results ----

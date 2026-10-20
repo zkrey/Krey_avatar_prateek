@@ -508,7 +508,7 @@ function showRender(state,g,j){
       body:JSON.stringify({look_id:j.look_id, owner_hint:sid(), looks_like:ans, identity_score:j.identity_score, route:(j.mode||MODE||"closet")})}); }catch(e){} };
     if($("rf_yes")) $("rf_yes").onclick=()=>{ sendRF(true); $("isyou").innerHTML='<span class="muted">Love it 💛 thanks!</span>'; };
     if($("rf_no")) $("rf_no").onclick=()=>{ sendRF(false); $("isyou").innerHTML='<span class="muted">Thanks — noted. A clear, front-on, well-lit photo gives the best likeness.</span>'; };
-    if($("rov_size")) $("rov_size").onclick=()=>sizeFlow((g&&g.cloth_type)||"upper",(g&&(g.name||g.category||g.subsegment))||"","sizebox");
+    if($("rov_size")) $("rov_size").onclick=()=>sizeFlow((g&&g.cloth_type)||"upper",(g&&(g.name||g.category||g.subsegment))||"",(g&&g.size_chart)||null,"sizebox");
   } else {
     clearInterval(window.__rtick);
     ov.innerHTML=`<div style="text-align:center"><div>Render didn't go through — ${esc((j&&j.detail)||"try again in a moment")}.</div><button class="btn" id="rov_close" style="margin-top:.8rem">Close</button></div>`;
@@ -518,19 +518,21 @@ function showRender(state,g,j){
 
 // --- "What's my size?" — ask height+weight once, remember it, then it's instant (lazy) ---
 function getBody(){ try{ return JSON.parse(localStorage.getItem("krey_body")||"null"); }catch(e){ return null; } }
-async function postSize(cloth, kind, b){
-  const r=await fetch("/fit/quick",{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({height_cm:b.height,weight_kg:b.weight,sex:b.sex,fit_preference:b.fit||"true",cloth_type:cloth,garment_kind:kind||"",owner_hint:sid(),face_learn:faceLearn()})});
+async function postSize(cloth, kind, chart, b){
+  const body={height_cm:b.height,weight_kg:b.weight,sex:b.sex,fit_preference:b.fit||"true",cloth_type:cloth,garment_kind:kind||"",owner_hint:sid(),face_learn:faceLearn()};
+  if(chart) body.size_chart=chart;
+  const r=await fetch("/fit/quick",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   return r.json();
 }
-async function sizeFlow(cloth, kind, boxId){
+async function sizeFlow(cloth, kind, chart, boxId){
   const box=$(boxId); if(!box) return;
   const b=getBody();
   if(b && b.height && b.weight){
     box.innerHTML='<div class="muted" style="font-size:.85rem">Sizing you up…</div>';
-    try{ const d=await postSize(cloth,kind,b);
-      box.innerHTML=`<div style="border:1px solid var(--gold-dim);border-radius:10px;padding:.6rem;font-size:.9rem;text-align:left"><b style="color:var(--gold)">📏 Your size: ${esc(d.size||'?')}</b> — ${esc(d.message||'')}<div class="muted" style="font-size:.72rem;margin-top:.3rem">estimate from your height & weight · check the brand's chart · <a href="#" id="sz_edit">change</a></div></div>`;
-      const e=$("sz_edit"); if(e) e.onclick=ev=>{ ev.preventDefault(); try{ localStorage.removeItem("krey_body"); }catch(x){} sizeFlow(cloth,kind,boxId); };
+    try{ const d=await postSize(cloth,kind,chart,b);
+      const note=d.source==="brand"?('matched to '+esc(d.chart||'the brand chart')+' ✓'):"estimate from your height & weight · check the brand's chart";
+      box.innerHTML=`<div style="border:1px solid var(--gold-dim);border-radius:10px;padding:.6rem;font-size:.9rem;text-align:left"><b style="color:var(--gold)">📏 Your size: ${esc(d.size||'?')}</b> — ${esc(d.message||'')}<div class="muted" style="font-size:.72rem;margin-top:.3rem">${note} · <a href="#" id="sz_edit">change</a></div></div>`;
+      const e=$("sz_edit"); if(e) e.onclick=ev=>{ ev.preventDefault(); try{ localStorage.removeItem("krey_body"); }catch(x){} sizeFlow(cloth,kind,chart,boxId); };
     }catch(e){ box.innerHTML='<div class="muted" style="font-size:.85rem">Couldn\'t size that — try again.</div>'; }
     return;
   }
@@ -546,7 +548,7 @@ async function sizeFlow(cloth, kind, boxId){
   try{ if(typeof GENDER!=="undefined" && GENDER==="man") $("sz_m").click(); }catch(e){}
   $("sz_go").onclick=()=>{ const h=+$("sz_h").value, w=+$("sz_w").value; if(!h||!w) return;
     try{ localStorage.setItem("krey_body", JSON.stringify({height:h,weight:w,sex:SX,fit:"true"})); }catch(e){}
-    sizeFlow(cloth,kind,boxId); };
+    sizeFlow(cloth,kind,chart,boxId); };
 }
 
 // --- looks tray -> rank ballot (generative try-ons feed the ranking engine) ---

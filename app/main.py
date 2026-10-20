@@ -2142,22 +2142,33 @@ def fit_quick_ep(payload: dict = Body(...)):
     cloth = (payload.get("cloth_type") or "upper").strip().lower()
     body_cm = _estimate_body_cm(h, w, sex)
     gender = "mens" if male else "womens"
-    gk = (payload.get("garment_kind") or "").lower()
-    if any(x in gk for x in ("kurta", "kurti", "sherwani", "ethnic")):
-        candidates = ["unisex_kurta_regular", f"{gender}_top_regular"]
-    elif any(x in gk for x in ("dress", "gown", "frock", "anarkali")):
-        candidates = ["womens_dress_regular", f"{gender}_top_regular"]
-    elif cloth == "lower":
-        candidates = [f"{gender}_bottom_regular", "womens_bottom_regular"]
-    else:
-        candidates = [f"{gender}_top_regular"]
-    candidates += [f"{gender}_top_regular", "mens_top_regular"]
-    garment = None
-    for name in candidates:
-        try:
-            garment = fit_score.garment_from_chart(name); chart_name = name; break
-        except Exception:
-            continue
+    # BRAND-EXACT path: if a garment carries its own size chart (from catalogue ingest / a tagged
+    # upload), use it verbatim so the recommendation is the brand's real sizing, not a generic chart.
+    garment, chart_name, source = None, None, "estimate"
+    provided = payload.get("size_chart")
+    if isinstance(provided, dict):
+        sc = provided.get("size_chart") if isinstance(provided.get("size_chart"), dict) else provided
+        if isinstance(sc, dict) and sc and all(isinstance(v, dict) for v in sc.values()):
+            garment = {"cut": provided.get("cut", "regular"),
+                       "fabric_stretch": provided.get("fabric_stretch", "low"), "size_chart": sc}
+            chart_name = str(provided.get("source") or "garment chart")[:60]
+            source = "brand"
+    if garment is None:
+        gk = (payload.get("garment_kind") or "").lower()
+        if any(x in gk for x in ("kurta", "kurti", "sherwani", "ethnic")):
+            candidates = ["unisex_kurta_regular", f"{gender}_top_regular"]
+        elif any(x in gk for x in ("dress", "gown", "frock", "anarkali")):
+            candidates = ["womens_dress_regular", f"{gender}_top_regular"]
+        elif cloth == "lower":
+            candidates = [f"{gender}_bottom_regular", "womens_bottom_regular"]
+        else:
+            candidates = [f"{gender}_top_regular"]
+        candidates += [f"{gender}_top_regular", "mens_top_regular"]
+        for name in candidates:
+            try:
+                garment = fit_score.garment_from_chart(name); chart_name = name; break
+            except Exception:
+                continue
     if garment is None:
         raise HTTPException(503, "no size chart available")
     out = fit_score.recommend_size(body_cm, garment, fit_preference=fit_pref)
@@ -2181,7 +2192,8 @@ def fit_quick_ep(payload: dict = Body(...)):
             pass
     return {"size": buy, "closest": size, "verdict": out.get("verdict"),
             "message": _size_message(size, out.get("verdict"), order),
-            "regions": out.get("regions"), "chart": chart_name, "estimate": True}
+            "regions": out.get("regions"), "chart": chart_name,
+            "source": source, "estimate": source != "brand"}
 
 
 @app.post("/fit/recommend")
