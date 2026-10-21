@@ -99,6 +99,14 @@
   .bgtip{background:rgba(217,178,90,.08);border:1px solid var(--gold-dim);border-radius:10px;padding:.5rem .7rem;margin:.1rem 0 .3rem;font-size:.8rem;color:var(--muted);line-height:1.4}
   .bgtip b{color:var(--text)}
   .bgtip_x{margin-left:.4rem;background:var(--gold);color:#1a1400;border:0;border-radius:999px;padding:.15rem .6rem;font-size:.75rem;font-weight:700;cursor:pointer}
+  /* home: two equal feature cards */
+  .home2{display:grid;grid-template-columns:1fr 1fr;gap:.7rem;margin:.3rem 0 1rem}
+  .homecard{display:flex;flex-direction:column;gap:.35rem;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:1rem .9rem;text-decoration:none;color:var(--text);min-height:148px}
+  .homecard:active{border-color:var(--gold)}
+  .homecard .hc_ico{font-size:1.9rem;line-height:1}
+  .homecard b{font-size:1.02rem}
+  .homecard span{color:var(--muted);font-size:.82rem;line-height:1.35}
+  @media (max-width:340px){ .home2{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
@@ -115,15 +123,24 @@
     <button class="skip" id="in_skip">skip</button>
   </div></div>
 
-  <h1>Your closet ✨</h1>
-  <div class="sub" id="sub">Welcome in 💛 Add a photo and watch any look come alive on you. <span id="src" class="src">…</span> · <a href="#" id="howitworks" style="color:var(--gold)">how it works</a></div>
+  <h1>Krey ✨</h1>
+  <div class="sub" id="sub">Welcome in 💛 Two ways to play — pick one. <span id="src" class="src">…</span> · <a href="#" id="howitworks" style="color:var(--gold)">how it works</a></div>
   <a href="#" id="resultslink" class="reslink" hidden>📊 See what your people picked</a>
   <div id="faceconsent" class="fconsent" hidden></div>
-  <a href="/wardrobe" class="wardcard">
-    <div class="wc_ico">👗</div>
-    <div class="wc_txt"><b>Build your wardrobe</b><span>Snap your own clothes → see them on you → style full fits</span></div>
-    <div class="wc_go">→</div>
-  </a>
+
+  <!-- two equal entry points -->
+  <div class="home2" id="home2">
+    <a href="#" class="homecard" id="card_tryon">
+      <div class="hc_ico">✨</div>
+      <b>Try on a look</b>
+      <span>Add a photo and see any outfit, trend or fit on you — in seconds.</span>
+    </a>
+    <a href="/wardrobe" class="homecard">
+      <div class="hc_ico">👗</div>
+      <b>Build your wardrobe</b>
+      <span>Snap the clothes you own and style fresh fits from them.</span>
+    </a>
+  </div>
 
   <!-- guided coach: render -> make another -> ask your people -> send to friends -->
   <div id="coach" class="coach" hidden></div>
@@ -131,9 +148,10 @@
   <!-- returning owner: your created ballots + their results (persists across visits) -->
   <div id="myballots" hidden style="margin:.6rem 0"></div>
 
-  <!-- photo gate: shown until a photo is added -->
-  <div class="gate" id="gate">
-    <h2>See how good you look ✨</h2>
+  <!-- photo gate: revealed when "Try on a look" is chosen, until a photo is added -->
+  <div class="gate" id="gate" hidden>
+    <div style="text-align:left;margin:-.3rem 0 .4rem"><a href="#" id="gate_back" style="color:var(--gold);font-size:.85rem;text-decoration:none">← back</a></div>
+    <h2>Add your photo to try looks on ✨</h2>
     <span class="muted">Match this framing for the best result — head &amp; chest in view, arms down.</span>
     <div class="tmpl">
       <div class="tmplframe">
@@ -303,7 +321,7 @@ async function analyze(file){
   if(locked.length){ $("unlock").hidden=false; $("unlockmsg").innerHTML = "Locked: "+locked.map(t=>TYPELABEL[t]).join(" · ")+" — add a full-body photo to unlock."; }
   else { $("unlock").hidden=true; }
   buildTypeChips();
-  $("gate").hidden=true; $("shop").hidden=false; renderFaceConsent(); renderBgChips(); renderPoseChips();
+  $("home2").hidden=true; $("gate").hidden=true; $("shop").hidden=false; renderFaceConsent(); renderBgChips(); renderPoseChips();
   load();
 }
 function buildTypeChips(){
@@ -685,6 +703,10 @@ async function thumbFromUrls(urls){
 }
 $("rankbtn").onclick=makeBallot;
 
+// home: "Try on a look" reveals the photo gate; "← back" returns to the two cards
+function startTryon(){ const h=$("home2"); if(h) h.hidden=true; const g=$("gate"); if(g) g.hidden=false; }
+$("card_tryon").onclick=e=>{ e.preventDefault(); startTryon(); };
+$("gate_back").onclick=e=>{ e.preventDefault(); const g=$("gate"); if(g) g.hidden=true; const h=$("home2"); if(h) h.hidden=false; };
 $("addphoto").onclick=()=>pickPhoto(analyze);
 $("selfie").onclick=()=>selfieCapture(analyze);
 $("changephoto").onclick=()=>pickPhoto(analyze);
@@ -730,7 +752,7 @@ function closeIntro(seen){
 }
 $("in_next").onclick=()=>{
   if(IN_I<INTRO.length-1){ IN_I++; renderIntro(); }
-  else { closeIntro(true); const a=$("addphoto"); if(a) a.click(); }   // end -> straight into adding a photo
+  else { closeIntro(true); startTryon(); const a=$("addphoto"); if(a) a.click(); }   // end -> reveal the gate + add a photo
 };
 $("in_back").onclick=()=>{ if(IN_I>0){ IN_I--; renderIntro(); } };
 $("in_skip").onclick=()=>closeIntro(true);
