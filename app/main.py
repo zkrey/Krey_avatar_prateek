@@ -758,17 +758,23 @@ _ID_FLOOR_CACHE = {"v": None, "ts": 0.0}
 
 
 def _id_threshold() -> float:
-    """Render identity-retention floor (ArcFace cosine). Doctrine bar is
-    bench/render_eval.RECOGNISABLE_COSINE = 0.50 ("recognisably the same person").
+    """Render identity-retention floor (ArcFace cosine).
+
+    Two different bars: bench/render_eval.RECOGNISABLE_COSINE = 0.50 is the bare "recognisably the
+    same person" line. But early 'is this you?' feedback showed testers stop *relating* to the face
+    well above that (a YES at 0.737, a NO at 0.649) — at ~0.50 we were silently serving faces people
+    don't accept as themselves. So the SERVING floor sits higher (default 0.60) than the bare
+    recognisability benchmark: a render below it is retried / flagged rather than shipped quietly.
 
     SELF-TUNING: the 'is this you?' judgements auto-recalibrate this — once enough testers have
     answered, the gate adopts the floor that best separates their YES/NO (catalog.learned_id_floor),
-    cached ~10 min and clamped to [0.30, 0.70]. The loop closes with no manual step. Override:
-    set KREY_ID_MIN_COSINE to pin a value; set KREY_ID_AUTOTUNE=off to freeze at the default."""
+    cached ~10 min and clamped to [0.30, 0.78] (upper raised so the learned floor can reach the
+    ~0.74 the early data implies). The loop closes with no manual step. Override: set
+    KREY_ID_MIN_COSINE to pin a value; set KREY_ID_AUTOTUNE=off to freeze at the default."""
     try:
-        base = float(os.environ.get("KREY_ID_MIN_COSINE", "0.50"))
+        base = float(os.environ.get("KREY_ID_MIN_COSINE", "0.60"))
     except Exception:
-        base = 0.50
+        base = 0.60
     # explicit pin or autotune disabled -> use the fixed value
     if os.environ.get("KREY_ID_MIN_COSINE") or _is_falsey(os.environ.get("KREY_ID_AUTOTUNE", "on")):
         return base
@@ -783,7 +789,7 @@ def _id_threshold() -> float:
     except Exception:
         learned = None
     if learned is not None:
-        return max(0.30, min(0.70, float(learned)))
+        return max(0.30, min(0.78, float(learned)))
     return base
 
 
@@ -824,19 +830,28 @@ async def _render_with_identity_guard(person_bytes: bytes, make_png, base_prompt
                 ref = prof
         except Exception:
             pass
+    thr = _id_threshold()
+    try:
+        max_retries = max(0, int(os.environ.get("KREY_ID_RETRIES", "2")))
+    except Exception:
+        max_retries = 2
     png = await run_in_threadpool(make_png, base_prompt)
     score = await run_in_threadpool(_cos_to_ref, ref, png)
-    thr = _id_threshold()
-    retried = False
-    if score is not None and score < thr:
-        retried = True
+    # Keep re-rendering with a stronger face-lock while the likeness is below the floor, and keep
+    # whichever attempt scored HIGHEST. Only sub-floor renders pay for a retry; one that clears the
+    # floor on the first try costs a single render, and we stop the moment an attempt clears it.
+    # (KREY_ID_RETRIES caps the extra attempts — a GPU-cost lever, see docs/UNIT_ECONOMICS.md.)
+    retries = 0
+    while score is not None and score < thr and retries < max_retries:
+        retries += 1
         try:
-            png2 = await run_in_threadpool(make_png, base_prompt + _ID_RETRY)
-            score2 = await run_in_threadpool(_cos_to_ref, ref, png2)
-            if score2 is not None and score2 > score:
-                png, score = png2, score2
+            png_r = await run_in_threadpool(make_png, base_prompt + _ID_RETRY)
+            score_r = await run_in_threadpool(_cos_to_ref, ref, png_r)
+            if score_r is not None and score_r > score:
+                png, score = png_r, score_r
         except Exception:
-            pass
+            break
+    retried = retries > 0
     if learn and owner_hint and person_emb is not None:
         try:
             from app import catalog as _cat
@@ -897,17 +912,20 @@ _GENDER_GUARD = (
 # our recognition benchmark so testers couldn't recognise themselves. This CRITICAL clause is added
 # to EVERY render prompt; the ArcFace gate below measures whether it held and retries if it didn't.
 _ID_LOCK = (
-    "CRITICAL — preserve the person's exact facial identity. Reproduce the SAME face: identical "
-    "face shape, bone structure, jawline, eyes, nose, mouth, eyebrows, hairline and complexion, so "
-    "they are unmistakably the same individual and a close friend would recognise them instantly. "
-    "Do NOT beautify, slim, smooth, reshape, de-age or swap the face — change only clothing, "
-    "styling and background, never the face. "
+    "CRITICAL — this is a specific real person; preserve their exact facial identity. COPY the face "
+    "directly from the source photo — do NOT invent, idealise, average or prettify it. Reproduce the "
+    "SAME face: identical face shape, bone structure, jawline, eyes, nose, mouth, eyebrows, hairline, "
+    "complexion and skin texture, keeping every distinctive feature, asymmetry and mark, so they are "
+    "unmistakably the same individual and a close friend would recognise them instantly. Do NOT "
+    "beautify, slim, smooth, reshape, de-age or swap the face — change only clothing, styling and "
+    "background, never the face. "
 )
 # Appended on the retry render when the first attempt drifted past the benchmark.
 _ID_RETRY = (
-    " The previous attempt altered the face too much. Keep the face REGION as close to the source "
-    "photo as possible — same features and proportions, pixel-faithful where you can — and restyle "
-    "only the body/clothing."
+    " The previous attempt changed the face too much — it no longer reads as the same person. Treat "
+    "the source photo's face as fixed reference: keep the face REGION pixel-faithful to it — same "
+    "features, proportions, asymmetries and expression — and restyle ONLY the body, clothing and "
+    "background."
 )
 
 # --- Backdrops: optional scene to place the person in (a boring selfie wall -> a festive setting
