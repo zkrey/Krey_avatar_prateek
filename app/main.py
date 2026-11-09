@@ -1583,22 +1583,22 @@ def _admin_authed(token: Optional[str]) -> bool:
 
 
 @app.get("/admin", response_class=HTMLResponse)
-def admin_page(token: Optional[str] = None):
-    """Private analytics: Glicko-2 leaderboard, K-factor, confidence lift, share funnel.
-    Gated by ?token=... matching KREY_ADMIN_TOKEN (set it on Railway)."""
+def admin_page():
+    """Private analytics shell: Glicko-2 leaderboard, K-factor, confidence lift, share funnel.
+    The shell carries no data; the page prompts for the admin token and sends it to /admin/data
+    in an X-Admin-Token header, so the token never appears in a URL or request log."""
     if not os.environ.get("KREY_ADMIN_TOKEN"):
         raise HTTPException(503, "set KREY_ADMIN_TOKEN on the server to enable /admin")
-    if not _admin_authed(token):
-        raise HTTPException(401, "add ?token=YOUR_ADMIN_TOKEN")
     return _render_template(_ADMIN, title="Krey · Admin", og_title="Krey Admin",
-                            og_image="", data={"token": token})
+                            og_image="", data={})
 
 
 @app.get("/admin/data")
-def admin_data(token: Optional[str] = None):
-    """JSON snapshot for the admin dashboard (same token gate)."""
+def admin_data(x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token")):
+    """JSON snapshot for the admin dashboard. Auth via the X-Admin-Token header (never a URL
+    query), so the admin token stays out of access logs."""
     from app import catalog as catalog_mod
-    if not _admin_authed(token):
+    if not _admin_authed(x_admin_token):
         raise HTTPException(401, "bad token")
     return catalog_mod.admin_snapshot()
 
@@ -1740,16 +1740,18 @@ def health():
 
 
 @app.get("/health/cycle")
-def health_cycle(token: Optional[str] = None):
+def health_cycle(token: Optional[str] = None,
+                 x_admin_token: Optional[str] = Header(None, alias="X-Admin-Token")):
     """One-URL probe of the whole share→rank→referral loop, so the cycle can be verified without
-    opening Supabase. Admin-gated (?token=KREY_ADMIN_TOKEN). Does a real rank_votes round-trip
-    (insert then read-back under a throwaway set_id) to DEFINITIVELY detect the 'public read votes'
-    RLS policy — the one gap that makes voting record fine but results read 0."""
+    opening Supabase. Admin-gated — prefer the X-Admin-Token header (a ?token= query still works
+    but lands in logs). Does a real rank_votes round-trip (insert then read-back under a throwaway
+    set_id) to DEFINITIVELY detect the 'public read votes' RLS policy — the one gap that makes
+    voting record fine but results read 0."""
     from app import catalog as catalog_mod
     from render import client as render_client
     from render import banana as banana_mod
-    if not _admin_authed(token):
-        raise HTTPException(401, "add ?token=YOUR_ADMIN_TOKEN")
+    if not _admin_authed(x_admin_token or token):
+        raise HTTPException(401, "send the X-Admin-Token header")
 
     out: dict = {"supabase_configured": catalog_mod.catalog_configured(),
                  "render": {"catvton": render_client.render_configured(),

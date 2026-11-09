@@ -87,9 +87,15 @@
   </div>
 
 <script>
-const DATA=__DATA__;   // {token}
+const DATA=__DATA__;
 const $=id=>document.getElementById(id);
-const t=DATA.token||new URLSearchParams(location.search).get("token")||"";
+// Admin token is entered once per browser session and sent ONLY as an X-Admin-Token header,
+// so it never lands in a URL / request log. (Rotated server-side — old ?token= links won't work.)
+function adminToken(){
+  let v=""; try{ v=sessionStorage.getItem("krey_admin_token")||""; }catch(e){}
+  if(!v){ v=(prompt("Enter the Krey admin token")||"").trim(); if(v){ try{ sessionStorage.setItem("krey_admin_token",v); }catch(e){} } }
+  return v;
+}
 
 function rows(tbl, obj){
   const body=$(tbl).querySelector("tbody")||$(tbl);
@@ -99,8 +105,13 @@ function rows(tbl, obj){
 }
 
 async function load(){
+  const t=adminToken(); if(!t){ $("asof").textContent="enter the admin token, then tap ↻ Refresh"; return; }
   let d={};
-  try{ const r=await fetch("/admin/data?token="+encodeURIComponent(t)); d=await r.json(); }catch(e){ return; }
+  try{
+    const r=await fetch("/admin/data",{headers:{"X-Admin-Token":t}});
+    if(r.status===401){ try{ sessionStorage.removeItem("krey_admin_token"); }catch(e){} $("asof").textContent="bad token — tap ↻ Refresh to re-enter"; return; }
+    d=await r.json();
+  }catch(e){ return; }
   const T=d.totals||{}, N=d.network||{}, C=d.confidence||{}, CV=d.convergence||{};
   // theses
   $("k_lift").textContent = (C.avg_lift==null)?"–":((C.avg_lift>0?"+":"")+C.avg_lift);
